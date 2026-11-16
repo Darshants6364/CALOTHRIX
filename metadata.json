@@ -1,0 +1,6 @@
+{
+  "name": "MacroLog",
+  "description": "Eat Smart. Track Progress. Build Better. Personal nutrition, macro, and body weight tracking platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
