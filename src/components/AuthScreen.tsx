@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
-import { ArrowRight, CheckCircle2, Mail, Moon, Sun } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowLeft, ArrowRight, CheckCircle2, ClipboardCheck, Mail, Moon, Shield, Sun, Users } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { AccountRole } from '../types';
 import { CalothrixLogo } from './CalothrixLogo';
 
 type EmailMode = 'signin' | 'signup' | 'magic';
 
-export const AuthScreen: React.FC = () => {
+const PENDING_AUTH_ROLE_KEY = 'calothrix_pending_auth_role';
+
+interface AuthScreenProps {
+  initialPortal?: AccountRole;
+  onBackToHome?: () => void;
+}
+
+export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToHome }) => {
   const {
     resolvedTheme,
     toggleTheme,
@@ -14,6 +22,33 @@ export const AuthScreen: React.FC = () => {
     signUpWithEmail,
     signInWithMagicLink,
   } = useMacroLogStore();
+
+  const [portalRole, setPortalRole] = useState<AccountRole>(() => {
+    if (initialPortal === 'trainer' || initialPortal === 'individual') return initialPortal;
+    if (typeof window === 'undefined') return 'individual';
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('role') === 'trainer' || params.get('portal') === 'trainer' || window.location.pathname.startsWith('/trainer')) {
+      return 'trainer';
+    }
+    return 'individual';
+  });
+  const [roleExplicitlyToggled, setRoleExplicitlyToggled] = useState<boolean>(() => {
+    if (initialPortal === 'trainer' || initialPortal === 'individual') return true;
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return (
+      params.get('role') === 'trainer' ||
+      params.get('portal') === 'trainer' ||
+      window.location.pathname.startsWith('/trainer')
+    );
+  });
+
+  useEffect(() => {
+    if (initialPortal === 'trainer' || initialPortal === 'individual') {
+      setPortalRole(initialPortal);
+      setRoleExplicitlyToggled(true);
+    }
+  }, [initialPortal]);
 
   const [emailMode, setEmailMode] = useState<EmailMode>('signin');
   const [name, setName] = useState('');
@@ -24,9 +59,28 @@ export const AuthScreen: React.FC = () => {
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
 
+  const persistPendingAuthRole = () => {
+    if (typeof window === 'undefined') return;
+    if (portalRole === 'trainer') {
+      localStorage.setItem(PENDING_AUTH_ROLE_KEY, 'trainer');
+    } else if (roleExplicitlyToggled) {
+      localStorage.setItem(PENDING_AUTH_ROLE_KEY, 'individual');
+    } else {
+      localStorage.removeItem(PENDING_AUTH_ROLE_KEY);
+    }
+  };
+
+  const handleSelectPortal = (role: AccountRole) => {
+    setPortalRole(role);
+    setRoleExplicitlyToggled(true);
+    setError('');
+    setInfoMessage('');
+  };
+
   const handleGoogleClick = async () => {
     setError('');
     setInfoMessage('');
+    persistPendingAuthRole();
     setGoogleLoading(true);
     const res = await signInWithGoogle();
     setGoogleLoading(false);
@@ -45,6 +99,7 @@ export const AuthScreen: React.FC = () => {
       return;
     }
 
+    persistPendingAuthRole();
     setSubmitting(true);
     try {
       if (emailMode === 'magic') {
@@ -65,7 +120,7 @@ export const AuthScreen: React.FC = () => {
           setSubmitting(false);
           return;
         }
-        const res = await signUpWithEmail(name, email, password);
+        const res = await signUpWithEmail(name, email, password, portalRole);
         if (res.error) {
           setError(res.error);
         } else if (res.needsEmailConfirmation) {
@@ -89,11 +144,25 @@ export const AuthScreen: React.FC = () => {
     }
   };
 
+  const isTrainerPortal = portalRole === 'trainer';
+
   return (
     <div className="min-h-screen flex flex-col justify-between bg-[#F8F8F6] dark:bg-[#0B0F14] text-[#14181F] dark:text-[#F3F4F6] px-4 py-6 sm:px-6">
       {/* Top Bar */}
-      <div className="max-w-5xl w-full mx-auto flex items-center justify-between">
-        <CalothrixLogo size="md" />
+      <div className="max-w-5xl w-full mx-auto flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <CalothrixLogo size="md" />
+          {onBackToHome && (
+            <button
+              type="button"
+              onClick={onBackToHome}
+              className="min-h-[36px] px-3 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Home</span>
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={toggleTheme}
@@ -116,13 +185,91 @@ export const AuthScreen: React.FC = () => {
 
       {/* Main Centered Auth Card */}
       <div className="w-full max-w-md mx-auto my-8 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm">
+        {/* Account Type / Portal Switcher */}
+        <div className="mb-5">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 text-center mb-2">
+            Select Sign-In Portal
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => handleSelectPortal('individual')}
+              className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-2.5 ${
+                !isTrainerPortal
+                  ? 'border-lime-500 bg-lime-50/70 dark:bg-lime-950/30 ring-1 ring-lime-500'
+                  : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+              }`}
+            >
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                  !isTrainerPortal
+                    ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950'
+                    : 'bg-stone-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                <ClipboardCheck className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                  Normal User
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                  Personal tracker
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectPortal('trainer')}
+              className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-2.5 ${
+                isTrainerPortal
+                  ? 'border-lime-500 bg-lime-50/70 dark:bg-lime-950/30 ring-1 ring-lime-500'
+                  : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+              }`}
+            >
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                  isTrainerPortal
+                    ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950'
+                    : 'bg-stone-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                  Fitness Trainer
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                  Client progress
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Sign in to CALOTHRIX
+            {isTrainerPortal
+              ? emailMode === 'signup'
+                ? 'Create Trainer Account'
+                : 'Trainer Portal Sign-In'
+              : emailMode === 'signup'
+              ? 'Create CALOTHRIX Account'
+              : 'Sign in to CALOTHRIX'}
           </h1>
           <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-            Every account stores its own food logs, goals, and weight history privately in the database.
+            {isTrainerPortal
+              ? 'Access your separate Coaching Dashboard to invite clients, monitor nutrition adherence, and track client progress.'
+              : 'Every account stores its own food logs, goals, and weight history privately in the database.'}
           </p>
+          {isTrainerPortal && (
+            <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-lime-50 dark:bg-lime-950/40 border border-lime-200 dark:border-lime-900/60 text-[11px] font-medium text-lime-800 dark:text-lime-300">
+              <Shield className="w-3.5 h-3.5" />
+              <span>Opens Dedicated Fitness Trainer Dashboard</span>
+            </div>
+          )}
         </div>
 
         {/* 1-Click Primary Google Sign-In */}
@@ -130,7 +277,7 @@ export const AuthScreen: React.FC = () => {
           type="button"
           onClick={handleGoogleClick}
           disabled={googleLoading}
-          className="mt-6 w-full min-h-[48px] px-4 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 text-sm font-semibold hover:opacity-92 transition-opacity inline-flex items-center justify-center gap-3 disabled:opacity-60"
+          className="mt-5 w-full min-h-[48px] px-4 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 text-sm font-semibold hover:opacity-92 transition-opacity inline-flex items-center justify-center gap-3 disabled:opacity-60"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -150,7 +297,13 @@ export const AuthScreen: React.FC = () => {
               d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.91 6.72-4.91z"
             />
           </svg>
-          <span>{googleLoading ? 'Opening Google Sign-In...' : 'Continue with Google'}</span>
+          <span>
+            {googleLoading
+              ? 'Opening Google Sign-In...'
+              : isTrainerPortal
+              ? 'Continue with Google (Trainer)'
+              : 'Continue with Google'}
+          </span>
         </button>
 
         {/* Divider */}

@@ -122,9 +122,11 @@ export function createZeroUserState(
       workoutFrequencyPerWeek: 3,
       workoutIntensity: 'moderate',
       fitnessGoal: 'maintenance',
+      goalSpeed: 'moderate',
       dietaryPreference: 'omnivore',
       foodRestrictions: [],
       accountRole: 'individual',
+      roleSelected: false,
       isDemoProfile: false,
     },
     settings: {
@@ -237,6 +239,13 @@ export async function loadUserStateFromSupabase(
   const gRow = goalsRes.data;
   const wgRow = weightGoalRes.data;
 
+  const hasExistingUserActivity = Boolean(
+    (pRow && (Number(pRow.age || 0) > 0 || Number(pRow.height_cm || 0) > 0)) ||
+      (gRow && Number(gRow.calories || 0) > 0) ||
+      (foodEntriesRes.data && foodEntriesRes.data.length > 0) ||
+      (weightEntriesRes.data && weightEntriesRes.data.length > 0)
+  );
+
   const profile: UserProfile = pRow
     ? {
         id: user.id,
@@ -253,11 +262,16 @@ export async function loadUserStateFromSupabase(
         workoutFrequencyPerWeek: Number(pRow.workout_frequency ?? 3),
         workoutIntensity: (pRow.workout_intensity as WorkoutIntensity) || 'moderate',
         fitnessGoal: pRow.fitness_goal || 'maintenance',
+        goalSpeed: pRow.goal_speed || 'moderate',
         dietaryPreference: (pRow.dietary_preference as DietaryPreference) || 'omnivore',
         foodRestrictions: Array.isArray(pRow.food_restrictions)
           ? (pRow.food_restrictions as FoodRestriction[])
           : [],
         accountRole: (pRow.account_role as AccountRole) || 'individual',
+        roleSelected:
+          typeof pRow.role_selected === 'boolean'
+            ? pRow.role_selected || hasExistingUserActivity
+            : hasExistingUserActivity,
         isDemoProfile: false,
       }
     : baseZero.profile;
@@ -287,6 +301,10 @@ export async function loadUserStateFromSupabase(
           gRow.estimated_bmr != null ? Number(gRow.estimated_bmr) : undefined,
         estimatedTdee:
           gRow.estimated_tdee != null ? Number(gRow.estimated_tdee) : undefined,
+        bmi: gRow.bmi != null ? Number(gRow.bmi) : undefined,
+        goalSpeed: gRow.goal_speed || undefined,
+        estimatedWeeks:
+          gRow.estimated_weeks != null ? Number(gRow.estimated_weeks) : undefined,
         updatedAt: gRow.updated_at || baseZero.goals.updatedAt,
       }
     : baseZero.goals;
@@ -402,9 +420,11 @@ export async function upsertProfileAndSettings(
     daily_average_steps: profile.dailyAverageSteps,
     workout_frequency: profile.workoutFrequencyPerWeek,
     workout_intensity: profile.workoutIntensity,
+    goal_speed: profile.goalSpeed || 'moderate',
     dietary_preference: profile.dietaryPreference,
     food_restrictions: profile.foodRestrictions,
     account_role: profile.accountRole || 'individual',
+    role_selected: Boolean(profile.roleSelected),
   };
 
   const { error } = await supabase.from('profiles').upsert(extendedPayload);
@@ -435,6 +455,9 @@ export async function upsertNutritionGoals(
     ...corePayload,
     estimated_bmr: goals.estimatedBmr ?? null,
     estimated_tdee: goals.estimatedTdee ?? null,
+    bmi: goals.bmi ?? null,
+    goal_speed: goals.goalSpeed ?? null,
+    estimated_weeks: goals.estimatedWeeks ?? null,
   };
 
   const { error } = await supabase.from('nutrition_goals').upsert(extendedPayload);

@@ -32,19 +32,33 @@ import {
   upsertWeightGoal,
 } from '../services/supabaseDataService';
 import {
+  fetchClientActiveCoachPlans,
+  fetchClientTargetRecommendations,
+  fetchMyPendingInvitations,
+  fetchTrainerProfile,
+  respondToTargetRecommendation,
+  upsertTrainerProfile,
+} from '../services/trainerService';
+import {
+  AccountRole,
+  AnalyzedMealItem,
   AppSettings,
+  ClientInvitation,
   FoodItem,
   FoodLogEntry,
   MacroLogPersistedState,
   MealCategory,
   NavTab,
   NutritionGoals,
+  TargetRecommendation,
   ToastMessage,
+  TrainerClientPlan,
+  TrainerNavTab,
   UserProfile,
   WeightEntry,
   WeightGoal,
 } from '../types';
-import { getTodayDateKey } from '../utils/dateUtils';
+import { addDaysToDateKey, getTodayDateKey } from '../utils/dateUtils';
 import {
   calculateScaledNutrition,
   getEntriesForDate,
@@ -66,6 +80,19 @@ interface FoodModalState {
 interface WeightModalState {
   isOpen: boolean;
   editingEntry?: WeightEntry;
+}
+
+interface MealScannerModalState {
+  isOpen: boolean;
+  initialMode: 'photo' | 'voice' | 'text';
+  initialMeal: MealCategory;
+  targetDate: string;
+}
+
+interface BarcodeScannerModalState {
+  isOpen: boolean;
+  initialMeal: MealCategory;
+  targetDate: string;
 }
 
 interface MacroLogContextValue {
@@ -95,7 +122,8 @@ interface MacroLogContextValue {
   signUpWithEmail: (
     name: string,
     email: string,
-    password: string
+    password: string,
+    intendedRole?: AccountRole
   ) => Promise<{ error?: string; needsEmailConfirmation?: boolean }>;
   signInWithMagicLink: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
@@ -110,6 +138,24 @@ interface MacroLogContextValue {
   }) => void;
   openEditFoodModal: (entry: FoodLogEntry) => void;
   closeFoodModal: () => void;
+  // AI Meal Photo / Voice Scanner Controls
+  mealScannerModal: MealScannerModalState;
+  openMealScannerModal: (options?: {
+    mode?: 'photo' | 'voice' | 'text';
+    meal?: MealCategory;
+    date?: string;
+  }) => void;
+  closeMealScannerModal: () => void;
+  logAnalyzedMealItems: (params: {
+    items: AnalyzedMealItem[];
+    mealType: MealCategory;
+    date: string;
+    sourceLabel?: string;
+  }) => number;
+  // Barcode Scanner Modal Controls
+  barcodeScannerModal: BarcodeScannerModalState;
+  openBarcodeScannerModal: (options?: { meal?: MealCategory; date?: string }) => void;
+  closeBarcodeScannerModal: () => void;
   // Weight Modal Controls
   weightModal: WeightModalState;
   openWeightModal: (editingEntry?: WeightEntry) => void;
@@ -151,6 +197,34 @@ interface MacroLogContextValue {
   updateProfile: (updates: Partial<UserProfile>) => void;
   updateSettings: (updates: Partial<AppSettings>) => void;
   exportData: (format: 'json' | 'csv') => void;
+  // Role Selection, Trainer Workspace & Coaching
+  selectAccountRole: (
+    role: AccountRole,
+    trainerOnboarding?: {
+      displayName: string;
+      bio: string;
+      specialties: string[];
+      certifications: string[];
+    }
+  ) => Promise<boolean>;
+  trainerTab: TrainerNavTab;
+  setTrainerTab: (tab: TrainerNavTab) => void;
+  selectedTrainerClientId: string | null;
+  openTrainerClientDetail: (clientId: string) => void;
+  pendingInviteToken: string | null;
+  clearPendingInviteToken: () => void;
+  pendingInvitations: ClientInvitation[];
+  pendingRecommendations: TargetRecommendation[];
+  coachPlans: TrainerClientPlan[];
+  refreshCoachingAlerts: () => Promise<void>;
+  approveTargetRecommendation: (rec: TargetRecommendation) => Promise<boolean>;
+  declineTargetRecommendation: (recId: string) => Promise<boolean>;
+  // Daily Hydration & Quick Meal Copy
+  waterIntakeMlByDate: Record<string, number>;
+  dailyWaterGoalMl: number;
+  addWaterMl: (dateKey: string, deltaMl: number) => void;
+  setDailyWaterGoalMl: (goalMl: number) => void;
+  copyMealFromPreviousDay: (mealType: MealCategory, targetDate: string) => number;
 }
 
 const MacroLogContext = createContext<MacroLogContextValue | null>(null);
@@ -175,6 +249,23 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   const [activeTab, setActiveTab] = useState<NavTab>('home');
+  const [trainerTab, setTrainerTab] = useState<TrainerNavTab>('overview');
+  const [selectedTrainerClientId, setSelectedTrainerClientId] = useState<string | null>(null);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const match = window.location.pathname.match(/^\/invite\/([A-Za-z0-9_-]+)/);
+    const paramToken = new URLSearchParams(window.location.search).get('invite');
+    const found = match?.[1] || paramToken || sessionStorage.getItem('calothrix_pending_invite');
+    if (found) {
+      sessionStorage.setItem('calothrix_pending_invite', found);
+    }
+    return found || null;
+  });
+  const [pendingInvitations, setPendingInvitations] = useState<ClientInvitation[]>([]);
+  const [pendingRecommendations, setPendingRecommendations] = useState<TargetRecommendation[]>([]);
+  const [coachPlans, setCoachPlans] = useState<TrainerClientPlan[]>([]);
+  const [waterIntakeMlByDate, setWaterIntakeMlByDate] = useState<Record<string, number>>({});
+  const [dailyWaterGoalMl, setDailyWaterGoalMlState] = useState<number>(2500);
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateKey());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -186,6 +277,19 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [foodModal, setFoodModal] = useState<FoodModalState>({
     isOpen: false,
     initialMeal: 'breakfast',
+    targetDate: getTodayDateKey(),
+  });
+
+  const [mealScannerModal, setMealScannerModal] = useState<MealScannerModalState>({
+    isOpen: false,
+    initialMode: 'photo',
+    initialMeal: 'lunch',
+    targetDate: getTodayDateKey(),
+  });
+
+  const [barcodeScannerModal, setBarcodeScannerModal] = useState<BarcodeScannerModalState>({
+    isOpen: false,
+    initialMeal: 'lunch',
     targetDate: getTodayDateKey(),
   });
 
@@ -247,24 +351,131 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [notify]
   );
 
-  const hydrateForUser = useCallback(async (user: User) => {
-    setAuthUser(user);
-    const savedTheme =
-      (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
-    setSyncingDb(true);
+  const refreshCoachingAlertsForUser = useCallback(async (userId: string) => {
     try {
-      const result = await loadUserStateFromSupabase(user, savedTheme);
-      setState(result.state);
-      setNeedsSchemaSetup(result.needsSchemaSetup);
-      setAuthMode('authenticated');
+      const [invRes, recRes, planRes] = await Promise.all([
+        fetchMyPendingInvitations(),
+        fetchClientTargetRecommendations(userId),
+        fetchClientActiveCoachPlans(userId),
+      ]);
+      if (invRes.ok && invRes.data) {
+        setPendingInvitations(invRes.data);
+      }
+      if (recRes.ok && recRes.data) {
+        setPendingRecommendations(recRes.data.filter((r) => r.status === 'pending'));
+      }
+      if (planRes.ok && planRes.data) {
+        setCoachPlans(planRes.data);
+      }
     } catch {
-      setState(createZeroUserState(user, savedTheme));
-      setNeedsSchemaSetup(true);
-      setAuthMode('authenticated');
-    } finally {
-      setSyncingDb(false);
+      // Ignore pre-migration errors silently
     }
   }, []);
+
+  const hydrateForUser = useCallback(
+    async (user: User) => {
+      setAuthUser(user);
+      const savedTheme =
+        (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
+      const pendingAuthRole =
+        typeof window !== 'undefined'
+          ? (localStorage.getItem('calothrix_pending_auth_role') as AccountRole | null)
+          : null;
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('calothrix_pending_auth_role');
+      }
+
+      setSyncingDb(true);
+      try {
+        const result = await loadUserStateFromSupabase(user, savedTheme);
+        let nextState = result.state;
+
+        const metaRole =
+          user.user_metadata?.intended_role === 'trainer' ||
+          user.user_metadata?.intended_role === 'individual'
+            ? (user.user_metadata.intended_role as AccountRole)
+            : null;
+        const desiredRole: AccountRole | null =
+          pendingAuthRole || (!nextState.profile.roleSelected ? metaRole : null);
+
+        if (desiredRole === 'trainer' && !result.needsSchemaSetup) {
+          const existingTrainer = await fetchTrainerProfile(user.id);
+          if (existingTrainer.ok && !existingTrainer.data) {
+            const authInfo = extractAuthDetails(user);
+            await upsertTrainerProfile({
+              userId: user.id,
+              displayName: authInfo.name || nextState.profile.name || 'Coach',
+              bio: '',
+              specialties: ['Fat Loss', 'Macro Coaching'],
+              certifications: [],
+              acceptingClients: true,
+              subscriptionTier: 'free',
+            });
+          }
+          if (nextState.profile.accountRole !== 'trainer' || !nextState.profile.roleSelected) {
+            const updatedProfile: UserProfile = {
+              ...nextState.profile,
+              accountRole: 'trainer',
+              roleSelected: true,
+            };
+            nextState = { ...nextState, profile: updatedProfile };
+            void upsertProfileAndSettings(user.id, updatedProfile, nextState.settings);
+          }
+          setTrainerTab('overview');
+        } else if (desiredRole === 'individual' && !result.needsSchemaSetup) {
+          if (nextState.profile.accountRole !== 'individual' || !nextState.profile.roleSelected) {
+            const updatedProfile: UserProfile = {
+              ...nextState.profile,
+              accountRole: 'individual',
+              roleSelected: true,
+            };
+            nextState = { ...nextState, profile: updatedProfile };
+            void upsertProfileAndSettings(user.id, updatedProfile, nextState.settings);
+          }
+        }
+
+        setState(nextState);
+        setNeedsSchemaSetup(result.needsSchemaSetup);
+        setAuthMode('authenticated');
+
+        // Hydrate water intake from Supabase user_metadata + localStorage cache
+        try {
+          const storageKey = `calothrix_water_${user.id}`;
+          const cachedRaw = localStorage.getItem(storageKey);
+          const cached = cachedRaw
+            ? (JSON.parse(cachedRaw) as { logs?: Record<string, number>; goalMl?: number })
+            : {};
+          const metaLogs =
+            (user.user_metadata?.water_logs as Record<string, number> | undefined) || {};
+          const mergedLogs = { ...metaLogs, ...(cached.logs || {}) };
+          const defaultWater = Math.min(
+            4500,
+            Math.max(
+              2000,
+              Math.round(((nextState.profile.currentWeightKg || 70) * 35 + 250) / 250) * 250
+            )
+          );
+          const metaGoal = Number(user.user_metadata?.daily_water_goal_ml || 0);
+          setWaterIntakeMlByDate(mergedLogs);
+          setDailyWaterGoalMlState(cached.goalMl || metaGoal || defaultWater);
+        } catch {
+          setWaterIntakeMlByDate({});
+          setDailyWaterGoalMlState(2500);
+        }
+
+        if (!result.needsSchemaSetup) {
+          void refreshCoachingAlertsForUser(user.id);
+        }
+      } catch {
+        setState(createZeroUserState(user, savedTheme));
+        setNeedsSchemaSetup(true);
+        setAuthMode('authenticated');
+      } finally {
+        setSyncingDb(false);
+      }
+    },
+    [refreshCoachingAlertsForUser]
+  );
 
   // Initialize Supabase Auth & Popup OAuth listener
   useEffect(() => {
@@ -298,6 +509,9 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (event === 'SIGNED_OUT') {
         setAuthUser(null);
         setNeedsSchemaSetup(false);
+        setPendingInvitations([]);
+        setPendingRecommendations([]);
+        setCoachPlans([]);
         const savedTheme =
           (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
         setState(createEmptyState(savedTheme));
@@ -435,7 +649,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     async (
       name: string,
       email: string,
-      password: string
+      password: string,
+      intendedRole?: AccountRole
     ): Promise<{ error?: string; needsEmailConfirmation?: boolean }> => {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
@@ -443,6 +658,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         options: {
           data: {
             full_name: name.trim(),
+            ...(intendedRole ? { intended_role: intendedRole } : {}),
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
@@ -476,6 +692,9 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await supabase.auth.signOut();
     setAuthUser(null);
     setNeedsSchemaSetup(false);
+    setPendingInvitations([]);
+    setPendingRecommendations([]);
+    setCoachPlans([]);
     const savedTheme =
       (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
     setState(createEmptyState(savedTheme));
@@ -559,6 +778,90 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       preselectedFood: undefined,
     }));
   }, []);
+
+  const openMealScannerModal = useCallback(
+    (options?: { mode?: 'photo' | 'voice' | 'text'; meal?: MealCategory; date?: string }) => {
+      setMealScannerModal({
+        isOpen: true,
+        initialMode: options?.mode ?? 'photo',
+        initialMeal: options?.meal ?? 'lunch',
+        targetDate: options?.date ?? selectedDate,
+      });
+    },
+    [selectedDate]
+  );
+
+  const closeMealScannerModal = useCallback(() => {
+    setMealScannerModal((prev) => ({ ...prev, isOpen: false }));
+  }, []);
+
+  const openBarcodeScannerModal = useCallback(
+    (options?: { meal?: MealCategory; date?: string }) => {
+      setBarcodeScannerModal({
+        isOpen: true,
+        initialMeal: options?.meal ?? 'lunch',
+        targetDate: options?.date ?? selectedDate,
+      });
+    },
+    [selectedDate]
+  );
+
+  const closeBarcodeScannerModal = useCallback(() => {
+    setBarcodeScannerModal((prev) => ({ ...prev, isOpen: false }));
+  }, []);
+
+  const logAnalyzedMealItems = useCallback(
+    ({
+      items,
+      mealType,
+      date,
+      sourceLabel = 'AI Meal Scan',
+    }: {
+      items: AnalyzedMealItem[];
+      mealType: MealCategory;
+      date: string;
+      sourceLabel?: string;
+    }): number => {
+      const user = authUserRef.current;
+      if (!user || items.length === 0) return 0;
+
+      const now = new Date().toISOString();
+      const newEntries: FoodLogEntry[] = items.map((item) => ({
+        id: makeId('entry'),
+        userId: user.id,
+        date,
+        mealType,
+        foodId: makeId('ai-food'),
+        foodName: item.name.trim() || 'Meal Item',
+        quantityGrams: Math.max(1, Math.round((item.estimatedGrams || 100) * 10) / 10),
+        servingsCount: 1,
+        servingName: item.estimatedQuantityDescription?.trim() || `${Math.round(item.estimatedGrams || 100)} g`,
+        sourceName: sourceLabel,
+        sourceType: 'community',
+        calories: Math.max(0, Math.round(item.calories)),
+        protein: Math.max(0, Math.round(item.protein * 10) / 10),
+        carbs: Math.max(0, Math.round(item.carbs * 10) / 10),
+        fat: Math.max(0, Math.round(item.fat * 10) / 10),
+        fibre: Math.max(0, Math.round(item.fibre * 10) / 10),
+        createdAt: now,
+        updatedAt: now,
+      }));
+
+      setState((prev) => ({
+        ...prev,
+        foodEntries: [...newEntries, ...prev.foodEntries],
+      }));
+
+      newEntries.forEach((entry) => {
+        void insertFoodEntryDb(entry).then(handleDbResult);
+      });
+
+      const totalKcal = newEntries.reduce((sum, e) => sum + e.calories, 0);
+      notify(`Logged ${newEntries.length} ${newEntries.length === 1 ? 'item' : 'items'} (${totalKcal} kcal)`);
+      return newEntries.length;
+    },
+    [handleDbResult, notify]
+  );
 
   const openWeightModal = useCallback((editingEntry?: WeightEntry) => {
     setWeightModal({ isOpen: true, editingEntry });
@@ -1019,6 +1322,236 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   }, [resolvedTheme]);
 
+  const selectAccountRole = useCallback(
+    async (
+      role: AccountRole,
+      trainerOnboarding?: {
+        displayName: string;
+        bio: string;
+        specialties: string[];
+        certifications: string[];
+      }
+    ): Promise<boolean> => {
+      const user = authUserRef.current;
+      if (!user) return false;
+
+      if (role === 'trainer') {
+        const existing = await fetchTrainerProfile(user.id);
+        if (!existing.ok) {
+          notify(
+            existing.error || 'Could not verify trainer profile. Please verify SQL migration.',
+            'error'
+          );
+          return false;
+        }
+        if (!existing.data || trainerOnboarding?.bio || (trainerOnboarding?.certifications?.length ?? 0) > 0) {
+          const res = await upsertTrainerProfile({
+            userId: user.id,
+            displayName:
+              existing.data?.displayName ||
+              trainerOnboarding?.displayName ||
+              stateRef.current.profile.name ||
+              'Coach',
+            bio: trainerOnboarding?.bio ?? existing.data?.bio ?? '',
+            specialties:
+              existing.data?.specialties && existing.data.specialties.length > 0
+                ? existing.data.specialties
+                : trainerOnboarding?.specialties || ['Fat Loss', 'Macro Coaching'],
+            certifications:
+              existing.data?.certifications && existing.data.certifications.length > 0
+                ? existing.data.certifications
+                : trainerOnboarding?.certifications || [],
+            acceptingClients: existing.data?.acceptingClients ?? true,
+            subscriptionTier: existing.data?.subscriptionTier ?? 'free',
+          });
+          if (!res.ok) {
+            notify(
+              res.error || 'Could not initialize trainer profile. Please verify SQL migration.',
+              'error'
+            );
+            return false;
+          }
+        }
+      }
+
+      const nextProfile: UserProfile = {
+        ...stateRef.current.profile,
+        accountRole: role,
+        roleSelected: true,
+      };
+      setState((prev) => ({ ...prev, profile: nextProfile }));
+      const dbRes = await upsertProfileAndSettings(user.id, nextProfile, stateRef.current.settings);
+      handleDbResult(dbRes);
+
+      if (role === 'trainer') {
+        setTrainerTab('overview');
+        notify('Trainer Dashboard ready');
+      } else {
+        if (stateRef.current.goals.calories === 0) {
+          setActiveTab('goals');
+        } else {
+          setActiveTab('home');
+        }
+        notify('Personal workspace ready');
+      }
+      return true;
+    },
+    [handleDbResult, notify]
+  );
+
+  const openTrainerClientDetail = useCallback((clientId: string) => {
+    setSelectedTrainerClientId(clientId);
+    setTrainerTab('client-detail');
+  }, []);
+
+  const clearPendingInviteToken = useCallback(() => {
+    setPendingInviteToken(null);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('calothrix_pending_invite');
+      if (window.location.pathname.startsWith('/invite/') || window.location.search.includes('invite=')) {
+        window.history.replaceState({}, '', '/');
+      }
+    }
+  }, []);
+
+  const refreshCoachingAlerts = useCallback(async () => {
+    const user = authUserRef.current;
+    if (!user) return;
+    await refreshCoachingAlertsForUser(user.id);
+  }, [refreshCoachingAlertsForUser]);
+
+  const approveTargetRecommendation = useCallback(
+    async (rec: TargetRecommendation): Promise<boolean> => {
+      const user = authUserRef.current;
+      if (!user) return false;
+      const res = await respondToTargetRecommendation(user.id, rec.id, true);
+      if (!res.ok) {
+        notify(res.error || 'Could not approve recommendation', 'error');
+        return false;
+      }
+
+      updateGoals({
+        preset: stateRef.current.goals.preset,
+        calories: rec.recommendedCalories,
+        protein: rec.recommendedProtein,
+        carbs: rec.recommendedCarbs,
+        fat: rec.recommendedFat,
+        fibre: rec.recommendedFibre,
+        targetWeightKg: rec.recommendedTargetWeightKg ?? stateRef.current.goals.targetWeightKg,
+        estimatedBmr: stateRef.current.goals.estimatedBmr,
+        estimatedTdee: stateRef.current.goals.estimatedTdee,
+        bmi: stateRef.current.goals.bmi,
+        goalSpeed: stateRef.current.goals.goalSpeed,
+        estimatedWeeks: stateRef.current.goals.estimatedWeeks,
+      });
+
+      setPendingRecommendations((prev) => prev.filter((item) => item.id !== rec.id));
+      notify('Trainer target recommendation approved & applied');
+      return true;
+    },
+    [notify, updateGoals]
+  );
+
+  const syncWaterMeta = useCallback(
+    (userId: string, logs: Record<string, number>, goalMl: number) => {
+      // Keep last 45 logged dates so metadata remains compact
+      const trimmedKeys = Object.keys(logs).sort().slice(-45);
+      const compactLogs: Record<string, number> = {};
+      for (const k of trimmedKeys) {
+        if ((logs[k] ?? 0) > 0) compactLogs[k] = logs[k];
+      }
+      try {
+        localStorage.setItem(
+          `calothrix_water_${userId}`,
+          JSON.stringify({ logs: compactLogs, goalMl })
+        );
+      } catch {
+        // Ignore storage errors
+      }
+      void supabase.auth.updateUser({
+        data: { water_logs: compactLogs, daily_water_goal_ml: goalMl },
+      });
+    },
+    []
+  );
+
+  const addWaterMl = useCallback(
+    (dateKey: string, deltaMl: number) => {
+      const user = authUserRef.current;
+      setWaterIntakeMlByDate((prev) => {
+        const nextVal = Math.max(0, Math.min(8000, (prev[dateKey] || 0) + deltaMl));
+        const nextLogs = { ...prev, [dateKey]: nextVal };
+        if (user) {
+          syncWaterMeta(user.id, nextLogs, dailyWaterGoalMl);
+        }
+        return nextLogs;
+      });
+    },
+    [dailyWaterGoalMl, syncWaterMeta]
+  );
+
+  const setDailyWaterGoalMl = useCallback(
+    (goalMl: number) => {
+      const clamped = Math.max(1000, Math.min(6000, Math.round(goalMl / 250) * 250));
+      setDailyWaterGoalMlState(clamped);
+      const user = authUserRef.current;
+      if (user) {
+        syncWaterMeta(user.id, waterIntakeMlByDate, clamped);
+      }
+      notify(`Daily water target set to ${(clamped / 1000).toFixed(2).replace(/\.?0+$/, '')} L`);
+    },
+    [notify, syncWaterMeta, waterIntakeMlByDate]
+  );
+
+  const copyMealFromPreviousDay = useCallback(
+    (mealType: MealCategory, targetDate: string): number => {
+      const user = authUserRef.current;
+      if (!user) return 0;
+      const yesterdayKey = addDaysToDateKey(targetDate, -1);
+      const sourceEntries = stateRef.current.foodEntries.filter(
+        (e) => e.date === yesterdayKey && e.mealType === mealType
+      );
+      if (sourceEntries.length === 0) return 0;
+      const now = new Date().toISOString();
+      const clones: FoodLogEntry[] = sourceEntries.map((entry) => ({
+        ...entry,
+        id: makeId('entry'),
+        userId: user.id,
+        date: targetDate,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      setState((prev) => ({
+        ...prev,
+        foodEntries: [...clones, ...prev.foodEntries],
+      }));
+      clones.forEach((clone) => {
+        void insertFoodEntryDb(clone).then(handleDbResult);
+      });
+      notify(
+        `Copied ${clones.length} ${clones.length === 1 ? 'item' : 'items'} from yesterday`
+      );
+      return clones.length;
+    },
+    [handleDbResult, notify]
+  );
+
+  const declineTargetRecommendation = useCallback(
+    async (recId: string): Promise<boolean> => {
+      const user = authUserRef.current;
+      if (!user) return false;
+      const res = await respondToTargetRecommendation(user.id, recId, false);
+      if (!res.ok) {
+        notify(res.error || 'Could not decline recommendation', 'error');
+        return false;
+      }
+      setPendingRecommendations((prev) => prev.filter((item) => item.id !== recId));
+      notify('Target recommendation declined', 'info');
+      return true;
+    },
+    [notify]
+  );
+
   const value: MacroLogContextValue = {
     state,
     authMode,
@@ -1050,6 +1583,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     openAddFoodModal,
     openEditFoodModal,
     closeFoodModal,
+    mealScannerModal,
+    openMealScannerModal,
+    closeMealScannerModal,
+    logAnalyzedMealItems,
+    barcodeScannerModal,
+    openBarcodeScannerModal,
+    closeBarcodeScannerModal,
     weightModal,
     openWeightModal,
     closeWeightModal,
@@ -1069,6 +1609,24 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     updateProfile,
     updateSettings,
     exportData,
+    selectAccountRole,
+    trainerTab,
+    setTrainerTab,
+    selectedTrainerClientId,
+    openTrainerClientDetail,
+    pendingInviteToken,
+    clearPendingInviteToken,
+    pendingInvitations,
+    pendingRecommendations,
+    coachPlans,
+    refreshCoachingAlerts,
+    approveTargetRecommendation,
+    declineTargetRecommendation,
+    waterIntakeMlByDate,
+    dailyWaterGoalMl,
+    addWaterMl,
+    setDailyWaterGoalMl,
+    copyMealFromPreviousDay,
   };
 
   return <MacroLogContext.Provider value={value}>{children}</MacroLogContext.Provider>;

@@ -14,6 +14,7 @@ import {
   ExternalSourceStatus,
   fetchExternalSourceStatus,
 } from '../services/globalFoodApiService';
+import { ClientCoachingSection } from '../components/ClientCoachingSection';
 import {
   ActivityLevel,
   BiologicalSex,
@@ -21,6 +22,7 @@ import {
   ENABLE_TRAINER_PORTAL,
   FitnessGoalType,
   FoodRestriction,
+  GoalSpeed,
   WorkoutIntensity,
 } from '../types';
 import { convertDisplayWeightToKg, convertWeightToDisplay } from '../utils/nutritionUtils';
@@ -40,6 +42,7 @@ export const ProfileSettingsPage: React.FC = () => {
     updateSettings,
     exportData,
     signOut,
+    selectAccountRole,
   } = useMacroLogStore();
 
   const { profile, settings } = state;
@@ -65,6 +68,7 @@ export const ProfileSettingsPage: React.FC = () => {
   );
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>(profile.activityLevel);
   const [fitnessGoal, setFitnessGoal] = useState<FitnessGoalType>(profile.fitnessGoal);
+  const [goalSpeed, setGoalSpeed] = useState<GoalSpeed>(profile.goalSpeed || 'moderate');
   const [dietaryPreference, setDietaryPreference] = useState<DietaryPreference>(
     profile.dietaryPreference || 'omnivore'
   );
@@ -90,6 +94,7 @@ export const ProfileSettingsPage: React.FC = () => {
     setWorkoutIntensity(profile.workoutIntensity || 'moderate');
     setActivityLevel(profile.activityLevel);
     setFitnessGoal(profile.fitnessGoal);
+    setGoalSpeed(profile.goalSpeed || 'moderate');
     setDietaryPreference(profile.dietaryPreference || 'omnivore');
     setFoodRestrictions(profile.foodRestrictions || []);
   }, [profile, settings.weightUnit]);
@@ -145,6 +150,7 @@ export const ProfileSettingsPage: React.FC = () => {
       workoutIntensity,
       activityLevel,
       fitnessGoal,
+      goalSpeed,
       dietaryPreference,
       foodRestrictions,
     });
@@ -232,10 +238,27 @@ export const ProfileSettingsPage: React.FC = () => {
             </div>
             <div>
               <span className="text-slate-400 block">Account Role</span>
-              <span className="font-semibold capitalize text-slate-800 dark:text-slate-200">
-                {profile.accountRole || 'individual'}
-                {!ENABLE_TRAINER_PORTAL ? ' (Personal Mode)' : ''}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold capitalize text-slate-800 dark:text-slate-200">
+                  {profile.accountRole || 'individual'}
+                </span>
+                {ENABLE_TRAINER_PORTAL && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void selectAccountRole('trainer', {
+                        displayName: authDetails?.name || profile.name || 'Coach',
+                        bio: '',
+                        specialties: ['Fat Loss', 'Macro Coaching'],
+                        certifications: [],
+                      })
+                    }
+                    className="text-[11px] font-semibold text-lime-700 dark:text-lime-400 hover:underline"
+                  >
+                    Open Trainer Dashboard →
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <span className="text-slate-400 block">Saved Food Entries</span>
@@ -252,6 +275,9 @@ export const ProfileSettingsPage: React.FC = () => {
           </div>
         )}
       </section>
+
+      {/* Coaching Connections, Invitations, Privacy & Target Proposals */}
+      {ENABLE_TRAINER_PORTAL && <ClientCoachingSection />}
 
       {/* Profile Form */}
       <form
@@ -277,7 +303,7 @@ export const ProfileSettingsPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-              Biological Sex (BMR Calculation)
+              Biological Sex
             </label>
             <select
               value={biologicalSex}
@@ -418,6 +444,21 @@ export const ProfileSettingsPage: React.FC = () => {
               <option value="maintenance">Maintenance</option>
               <option value="muscle_gain">Muscle Gain</option>
               <option value="recomposition">Body Recomposition</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Preferred Goal Speed
+            </label>
+            <select
+              value={goalSpeed}
+              onChange={(e) => setGoalSpeed(e.target.value as GoalSpeed)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+            >
+              <option value="slow">Slow & Sustainable</option>
+              <option value="moderate">Moderate</option>
+              <option value="aggressive">Aggressive</option>
             </select>
           </div>
 

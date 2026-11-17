@@ -198,9 +198,11 @@ export function createDemoState(): MacroLogPersistedState {
       workoutFrequencyPerWeek: 4,
       workoutIntensity: 'moderate',
       fitnessGoal: 'recomposition',
+      goalSpeed: 'moderate',
       dietaryPreference: 'omnivore',
       foodRestrictions: [],
       accountRole: 'individual',
+      roleSelected: true,
       isDemoProfile: true,
     },
     settings: {
@@ -267,9 +269,11 @@ export function createEmptyState(
       workoutFrequencyPerWeek: 3,
       workoutIntensity: 'moderate',
       fitnessGoal: 'maintenance',
+      goalSpeed: 'moderate',
       dietaryPreference: 'omnivore',
       foodRestrictions: [],
       accountRole: 'individual',
+      roleSelected: false,
       isDemoProfile: false,
     },
     settings: {

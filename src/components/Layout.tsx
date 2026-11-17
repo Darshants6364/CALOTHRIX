@@ -11,9 +11,10 @@ import {
   Settings,
   Sun,
   Target,
+  Users,
 } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
-import { NavTab } from '../types';
+import { ENABLE_TRAINER_PORTAL, NavTab } from '../types';
 import { CalothrixLogo } from './CalothrixLogo';
 import { SchemaSetupBanner } from './SchemaSetupBanner';
 
@@ -45,6 +46,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     activeTab,
     setActiveTab,
     openAddFoodModal,
+    selectAccountRole,
     signOut,
   } = useMacroLogStore();
 
@@ -159,6 +161,17 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </div>
             </div>
           </button>
+
+          {ENABLE_TRAINER_PORTAL && (
+            <button
+              type="button"
+              onClick={() => void selectAccountRole('trainer')}
+              className="w-full min-h-[38px] px-3 rounded-xl border border-lime-300/70 dark:border-lime-800/70 bg-lime-50/70 dark:bg-lime-950/30 text-xs font-semibold text-lime-800 dark:text-lime-300 hover:bg-lime-100/80 dark:hover:bg-lime-950/50 transition-colors inline-flex items-center justify-center gap-2"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Trainer Dashboard</span>
+            </button>
+          )}
 
           <button
             type="button"

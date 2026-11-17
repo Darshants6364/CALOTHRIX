@@ -59,7 +59,7 @@ export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
 
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {!hasGoal ? 'Goal not set' : isOver ? 'Over target' : 'Remaining'}
+            {!hasGoal ? 'No goal set' : isOver ? 'Over daily goal' : 'Remaining'}
           </span>
           <span className="mt-0.5 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-50 font-mono-nums">
             {hasGoal ? Math.abs(remaining).toLocaleString() : consumed.toLocaleString()}
@@ -69,7 +69,7 @@ export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
           </span>
           <div className="mt-2 flex items-center gap-1 text-xs font-medium">
             {!hasGoal ? (
-              <span className="text-slate-500 dark:text-slate-400">Set your goal</span>
+              <span className="text-slate-500 dark:text-slate-400">Set your daily goal</span>
             ) : isOver ? (
               <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
                 <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
@@ -78,52 +78,64 @@ export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
             ) : isComplete ? (
               <span className="inline-flex items-center gap-1 text-lime-700 dark:text-lime-400">
                 <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                {Math.round(rawPct)}% reached
+                {Math.round(rawPct)}% on track
               </span>
             ) : (
               <span className="text-slate-600 dark:text-slate-300 tabular-nums">
-                {Math.round(rawPct)}% of goal
+                {Math.round(rawPct)}% consumed
               </span>
             )}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-1 gap-4 w-full sm:w-auto sm:min-w-[170px] border-t sm:border-t-0 sm:border-l border-stone-200 dark:border-slate-800 pt-4 sm:pt-0 sm:pl-7">
-        <div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">Daily Goal</div>
-          <div className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100 font-mono-nums">
-            {goal.toLocaleString()} <span className="text-xs font-normal text-slate-500">kcal</span>
+      <div className="flex-1 w-full border-t sm:border-t-0 sm:border-l border-stone-200 dark:border-slate-800 pt-4 sm:pt-0 sm:pl-7 space-y-4">
+        <div className="grid grid-cols-3 sm:grid-cols-1 gap-3.5">
+          <div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">Base Goal</div>
+            <div className="mt-0.5 text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100 font-mono-nums">
+              {hasGoal ? goal.toLocaleString() : '—'}{' '}
+              {hasGoal && <span className="text-xs font-normal text-slate-500">kcal</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">Food Logged</div>
+            <div className="mt-0.5 text-lg sm:text-xl font-semibold text-lime-700 dark:text-lime-400 font-mono-nums">
+              {consumed.toLocaleString()} <span className="text-xs font-normal text-slate-500">kcal</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              {isOver ? 'Over By' : 'Remaining'}
+            </div>
+            <div
+              className={`mt-0.5 text-lg sm:text-xl font-semibold font-mono-nums ${
+                isOver
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-slate-900 dark:text-slate-100'
+              }`}
+            >
+              {!hasGoal ? (
+                <span className="text-slate-500 dark:text-slate-400">—</span>
+              ) : (
+                <>
+                  {isOver ? '+' : ''}
+                  {Math.abs(remaining).toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-slate-500">kcal</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
-        <div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">Consumed</div>
-          <div className="mt-0.5 text-lg sm:text-xl font-semibold text-lime-700 dark:text-lime-400 font-mono-nums">
-            {consumed.toLocaleString()} <span className="text-xs font-normal text-slate-500">kcal</span>
+
+        {hasGoal && (
+          <div className="pt-3 border-t border-stone-100 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
+            {goal.toLocaleString()} Goal − {consumed.toLocaleString()} Food ={' '}
+            <span className="font-semibold text-slate-800 dark:text-slate-200">
+              {remaining >= 0 ? `${remaining.toLocaleString()} left` : `${Math.abs(remaining).toLocaleString()} over`}
+            </span>
           </div>
-        </div>
-        <div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            {isOver ? 'Exceeded by' : 'Remaining'}
-          </div>
-          <div
-            className={`mt-0.5 text-lg sm:text-xl font-semibold font-mono-nums ${
-              isOver
-                ? 'text-amber-600 dark:text-amber-400'
-                : 'text-slate-900 dark:text-slate-100'
-            }`}
-          >
-            {!hasGoal ? (
-              <span className="text-slate-500 dark:text-slate-400">0 kcal</span>
-            ) : (
-              <>
-                {isOver ? '+' : ''}
-                {Math.abs(remaining).toLocaleString()}{' '}
-                <span className="text-xs font-normal text-slate-500">kcal</span>
-              </>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

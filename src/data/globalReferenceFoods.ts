@@ -1,4 +1,5 @@
 import type { FoodItem } from '../types/index.ts';
+import { INDIAN_FOODS_CATALOG } from './indianFoods.ts';
 
 /**
  * Verified Reference Food Composition Dataset:
@@ -9,6 +10,7 @@ import type { FoodItem } from '../types/index.ts';
  * and available micronutrients without inventing missing fields.
  */
 export const GLOBAL_REFERENCE_FOODS: FoodItem[] = [
+  ...INDIAN_FOODS_CATALOG,
   // === INDIAN FOODS (ICMR-NIN IFCT 2017 & Standardized Indian Portions) ===
   {
     id: 'food-rice-cooked',

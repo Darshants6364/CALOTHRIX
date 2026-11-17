@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Globe, Plus, Search, Star, X } from 'lucide-react';
+import { ArrowLeft, Barcode, Camera, Check, Globe, Mic, Plus, Search, Star, X } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { lookupBarcodeApi, searchGlobalFoodsApi } from '../services/globalFoodApiService';
 import {
@@ -38,6 +38,8 @@ export const FoodEntryModal: React.FC = () => {
     allFoods,
     foodModal,
     closeFoodModal,
+    openMealScannerModal,
+    openBarcodeScannerModal,
     addFoodEntry,
     updateFoodEntry,
     addCustomFood,
@@ -46,7 +48,7 @@ export const FoodEntryModal: React.FC = () => {
   const editing = foodModal.editingEntry;
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterTab, setFilterTab] = useState<'all' | 'recent' | 'favorites' | 'custom'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'india' | 'recent' | 'favorites' | 'custom'>('all');
   const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
   const [inputMode, setInputMode] = useState<'grams' | 'servings'>('grams');
   const [quantityGrams, setQuantityGrams] = useState<string>('100');
@@ -147,11 +149,11 @@ export const FoodEntryModal: React.FC = () => {
     allFoods,
   ]);
 
-  // Trigger debounced global search when query >= 2 chars on 'all' tab
+  // Trigger debounced global search when query >= 2 chars on 'all' or 'india' tab
   useEffect(() => {
     if (!foodModal.isOpen || selectedFood || creatingCustom) return;
     const q = searchQuery.trim();
-    if (q.length < 2 || filterTab !== 'all') {
+    if (q.length < 2 || (filterTab !== 'all' && filterTab !== 'india')) {
       setRemoteFoods([]);
       setRemoteSearching(false);
       return;
@@ -169,7 +171,10 @@ export const FoodEntryModal: React.FC = () => {
             return;
           }
         }
-        const res = await searchGlobalFoodsApi({ query: q });
+        const res = await searchGlobalFoodsApi({
+          query: q,
+          country: filterTab === 'india' ? 'India' : undefined,
+        });
         if (!cancelled) {
           const localIds = new Set(allFoods.map((f) => f.id));
           setRemoteFoods(res.items.filter((item) => !localIds.has(item.id)));
@@ -199,6 +204,7 @@ export const FoodEntryModal: React.FC = () => {
         (f.ingredientsText || '').toLowerCase().includes(q) ||
         f.category.toLowerCase().includes(q);
       if (!matchesQ) return false;
+      if (filterTab === 'india') return (f.country || '').toLowerCase().includes('india');
       if (filterTab === 'favorites') return state.favoriteFoodIds.includes(f.id);
       if (filterTab === 'recent') return state.recentFoodIds.includes(f.id);
       if (filterTab === 'custom') return f.isCustom;
@@ -207,7 +213,7 @@ export const FoodEntryModal: React.FC = () => {
   }, [allFoods, filterTab, searchQuery, state.favoriteFoodIds, state.recentFoodIds]);
 
   const combinedFoods = useMemo(() => {
-    if (filterTab !== 'all') return filteredLocalFoods;
+    if (filterTab !== 'all' && filterTab !== 'india') return filteredLocalFoods;
     const seen = new Set(filteredLocalFoods.map((f) => f.id));
     return [...filteredLocalFoods, ...remoteFoods.filter((r) => !seen.has(r.id))];
   }, [filterTab, filteredLocalFoods, remoteFoods]);
@@ -560,32 +566,70 @@ export const FoodEntryModal: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-slate-900 rounded-xl overflow-x-auto no-scrollbar">
-                  {(['all', 'recent', 'favorites', 'custom'] as const).map((tab) => (
+                  {(['all', 'india', 'recent', 'favorites', 'custom'] as const).map((tab) => (
                     <button
                       key={tab}
                       type="button"
                       onClick={() => setFilterTab(tab)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize whitespace-nowrap transition-colors ${
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-medium capitalize whitespace-nowrap transition-colors ${
                         filterTab === tab
                           ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                       }`}
                     >
-                      {tab === 'custom' ? 'My Foods' : tab}
+                      {tab === 'custom' ? 'My Foods' : tab === 'india' ? 'India' : tab}
                     </button>
                   ))}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setCreatingCustom(true)}
-                  className="min-h-[36px] px-3 rounded-xl text-xs font-semibold text-lime-700 dark:text-lime-400 hover:bg-lime-50 dark:hover:bg-lime-950/40 inline-flex items-center gap-1 whitespace-nowrap shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Custom
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeFoodModal();
+                      openBarcodeScannerModal({ meal: mealType, date });
+                    }}
+                    title="Scan packaged food barcode"
+                    className="min-h-[36px] px-2.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <Barcode className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+                    <span>Scan</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeFoodModal();
+                      openMealScannerModal({ mode: 'photo', meal: mealType, date });
+                    }}
+                    title="Scan meal photo with AI"
+                    className="min-h-[36px] px-2.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+                    <span>Photo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeFoodModal();
+                      openMealScannerModal({ mode: 'voice', meal: mealType, date });
+                    }}
+                    title="Log meal by voice"
+                    className="min-h-[36px] px-2.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <Mic className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+                    <span>Voice</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreatingCustom(true)}
+                    className="min-h-[36px] px-2.5 rounded-xl text-xs font-semibold text-lime-700 dark:text-lime-400 hover:bg-lime-50 dark:hover:bg-lime-950/40 inline-flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Custom
+                  </button>
+                </div>
               </div>
             </div>
 

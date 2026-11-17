@@ -4,7 +4,8 @@ import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { SUPABASE_PROJECT_ID } from '../lib/supabaseClient';
 
 const SQL_SETUP_SNIPPET = `-- Run in Supabase SQL Editor for project ${SUPABASE_PROJECT_ID}
--- Full migration script is also saved at /supabase/schema.sql
+-- Complete idempotent migration script (safe for existing databases)
+create extension if not exists pgcrypto;
 create extension if not exists vector;
 
 create table if not exists public.profiles (
@@ -22,9 +23,11 @@ create table if not exists public.profiles (
   workout_frequency integer not null default 3,
   workout_intensity text not null default 'moderate',
   fitness_goal text not null default 'maintenance',
+  goal_speed text not null default 'moderate',
   dietary_preference text not null default 'omnivore',
   food_restrictions text[] not null default '{}',
   account_role text not null default 'individual',
+  role_selected boolean not null default false,
   theme text not null default 'dark',
   weight_unit text not null default 'kg',
   food_unit text not null default 'g',
@@ -34,9 +37,11 @@ alter table public.profiles add column if not exists biological_sex text not nul
 alter table public.profiles add column if not exists daily_average_steps integer not null default 7000;
 alter table public.profiles add column if not exists workout_frequency integer not null default 3;
 alter table public.profiles add column if not exists workout_intensity text not null default 'moderate';
+alter table public.profiles add column if not exists goal_speed text not null default 'moderate';
 alter table public.profiles add column if not exists dietary_preference text not null default 'omnivore';
 alter table public.profiles add column if not exists food_restrictions text[] not null default '{}';
 alter table public.profiles add column if not exists account_role text not null default 'individual';
+alter table public.profiles add column if not exists role_selected boolean not null default false;
 
 create table if not exists public.nutrition_goals (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -49,10 +54,16 @@ create table if not exists public.nutrition_goals (
   target_weight_kg numeric,
   estimated_bmr integer,
   estimated_tdee integer,
+  bmi numeric,
+  goal_speed text,
+  estimated_weeks integer,
   updated_at timestamptz not null default now()
 );
 alter table public.nutrition_goals add column if not exists estimated_bmr integer;
 alter table public.nutrition_goals add column if not exists estimated_tdee integer;
+alter table public.nutrition_goals add column if not exists bmi numeric;
+alter table public.nutrition_goals add column if not exists goal_speed text;
+alter table public.nutrition_goals add column if not exists estimated_weeks integer;
 
 create table if not exists public.weight_goals (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -131,32 +142,114 @@ create table if not exists public.ai_usage_logs (
   created_at timestamptz not null default now()
 );
 
-alter table public.profiles enable row level security;
-alter table public.nutrition_goals enable row level security;
-alter table public.weight_goals enable row level security;
-alter table public.custom_foods enable row level security;
-alter table public.food_entries enable row level security;
-alter table public.weight_entries enable row level security;
-alter table public.user_food_preferences enable row level security;
-alter table public.ai_usage_logs enable row level security;
+create table if not exists public.weekly_analytics (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  week_start text not null,
+  avg_calories integer not null default 0,
+  avg_protein numeric not null default 0,
+  avg_carbs numeric not null default 0,
+  avg_fat numeric not null default 0,
+  avg_fibre numeric not null default 0,
+  avg_weight_kg numeric,
+  goal_completion_pct integer not null default 0,
+  summary_text text,
+  updated_at timestamptz not null default now(),
+  unique(user_id, week_start)
+);
 
-drop policy if exists "Users manage own profile" on public.profiles;
-create policy "Users manage own profile" on public.profiles for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-drop policy if exists "Users manage own nutrition goals" on public.nutrition_goals;
-create policy "Users manage own nutrition goals" on public.nutrition_goals for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-drop policy if exists "Users manage own weight goals" on public.weight_goals;
-create policy "Users manage own weight goals" on public.weight_goals for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-drop policy if exists "Users manage own custom foods" on public.custom_foods;
-create policy "Users manage own custom foods" on public.custom_foods for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-drop policy if exists "Users manage own food entries" on public.food_entries;
-create policy "Users manage own food entries" on public.food_entries for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-drop policy if exists "Users manage own weight entries" on public.weight_entries;
-create policy "Users manage own weight entries" on public.weight_entries for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-drop policy if exists "Users manage own food preferences" on public.user_food_preferences;
-create policy "Users manage own food preferences" on public.user_food_preferences for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-drop policy if exists "Users manage own ai logs" on public.ai_usage_logs;
-create policy "Users manage own ai logs" on public.ai_usage_logs for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create table if not exists public.trainer_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null,
+  bio text not null default '',
+  specialties text[] not null default '{}',
+  certifications text[] not null default '{}',
+  accepting_clients boolean not null default true,
+  subscription_tier text not null default 'free' check (subscription_tier in ('free', 'pro', 'premium')),
+  max_clients integer not null default 5,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.trainer_profiles add column if not exists subscription_tier text not null default 'free';
+alter table public.trainer_profiles add column if not exists max_clients integer not null default 5;
 
+create table if not exists public.trainer_clients (
+  id uuid primary key default gen_random_uuid(),
+  trainer_id uuid not null references auth.users(id) on delete cascade,
+  client_id uuid not null references auth.users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'active', 'revoked')),
+  can_view_profile boolean not null default true,
+  can_view_nutrition boolean not null default true,
+  can_view_weight boolean not null default true,
+  can_view_goals boolean not null default true,
+  can_add_notes boolean not null default true,
+  is_archived boolean not null default false,
+  authorized_at timestamptz,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique(trainer_id, client_id)
+);
+alter table public.trainer_clients add column if not exists can_view_profile boolean not null default true;
+alter table public.trainer_clients add column if not exists is_archived boolean not null default false;
+alter table public.trainer_clients add column if not exists updated_at timestamptz not null default now();
+
+create table if not exists public.client_invitations (
+  id uuid primary key default gen_random_uuid(),
+  trainer_id uuid not null references auth.users(id) on delete cascade,
+  client_email text not null default '',
+  client_name text,
+  invite_token text unique not null default encode(gen_random_bytes(16), 'hex'),
+  message text,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined', 'expired')),
+  expires_at timestamptz not null default (now() + interval '14 days'),
+  created_at timestamptz not null default now()
+);
+alter table public.client_invitations add column if not exists client_name text;
+alter table public.client_invitations add column if not exists invite_token text;
+alter table public.client_invitations add column if not exists message text;
+update public.client_invitations set invite_token = encode(gen_random_bytes(16), 'hex') where invite_token is null;
+alter table public.client_invitations alter column invite_token set default encode(gen_random_bytes(16), 'hex');
+
+create table if not exists public.trainer_notes (
+  id uuid primary key default gen_random_uuid(),
+  trainer_id uuid not null references auth.users(id) on delete cascade,
+  client_id uuid not null references auth.users(id) on delete cascade,
+  category text not null default 'general',
+  note text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.weekly_client_checkins (
+  id uuid primary key default gen_random_uuid(),
+  client_id uuid not null references auth.users(id) on delete cascade,
+  trainer_id uuid not null references auth.users(id) on delete cascade,
+  week_start_date text not null,
+  avg_calories integer not null default 0,
+  avg_protein numeric not null default 0,
+  avg_weight_kg numeric,
+  client_notes text,
+  trainer_feedback text,
+  status text not null default 'submitted' check (status in ('submitted', 'reviewed')),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.target_recommendations (
+  id uuid primary key default gen_random_uuid(),
+  trainer_id uuid not null references auth.users(id) on delete cascade,
+  client_id uuid not null references auth.users(id) on delete cascade,
+  recommended_calories integer not null,
+  recommended_protein numeric not null,
+  recommended_carbs numeric not null,
+  recommended_fat numeric not null,
+  recommended_fibre numeric not null default 28,
+  recommended_target_weight_kg numeric,
+  rationale text not null default '',
+  status text not null default 'pending' check (status in ('pending', 'approved', 'declined')),
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+-- See /supabase/schema.sql for the complete RLS policies and invitation RPC functions.
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;`;
 

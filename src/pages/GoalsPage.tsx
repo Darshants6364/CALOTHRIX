@@ -1,19 +1,75 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calculator, Check, Info, Sparkles } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  Calculator,
+  CalendarClock,
+  Check,
+  Droplets,
+  Flame,
+  Loader2,
+  Scale,
+  Sparkles,
+} from 'lucide-react';
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import {
   ActivityLevel,
   BiologicalSex,
   FitnessGoalType,
   GoalPreset,
-  WorkoutIntensity,
+  GoalSpeed,
 } from '../types';
 import {
   ACTIVITY_MULTIPLIERS,
   calculateSmartFitnessTargets,
-  suggestActivityLevel,
+  FitnessCalculationResult,
+  GOAL_SPEED_CONFIG,
 } from '../utils/fitnessCalculator';
-import { convertDisplayWeightToKg, convertWeightToDisplay } from '../utils/nutritionUtils';
+import {
+  convertDisplayWeightToKg,
+  convertWeightToDisplay,
+  formatWeight,
+} from '../utils/nutritionUtils';
+
+type MacroStyleId = 'high_protein' | 'balanced' | 'lower_carb' | 'athletic';
+
+const MACRO_STYLES: {
+  id: MacroStyleId;
+  label: string;
+  subtitle: string;
+  proteinPerKg: number;
+  fatCaloriesPct: number;
+}[] = [
+  {
+    id: 'high_protein',
+    label: 'High Protein',
+    subtitle: 'Preserves lean muscle & keeps you full longer',
+    proteinPerKg: 2.0,
+    fatCaloriesPct: 25,
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced Everyday',
+    subtitle: 'Steady blend of protein, carbs, and healthy fats',
+    proteinPerKg: 1.7,
+    fatCaloriesPct: 27,
+  },
+  {
+    id: 'lower_carb',
+    label: 'Lower Carb Cut',
+    subtitle: 'Higher protein & fat with controlled carbs',
+    proteinPerKg: 2.1,
+    fatCaloriesPct: 30,
+  },
+  {
+    id: 'athletic',
+    label: 'Performance / High Carb',
+    subtitle: 'Extra carbohydrate energy for frequent workouts',
+    proteinPerKg: 1.8,
+    fatCaloriesPct: 22,
+  },
+];
 
 const GOAL_PRESETS: {
   id: GoalPreset;
@@ -24,20 +80,20 @@ const GOAL_PRESETS: {
   {
     id: 'fat_loss',
     label: 'Fat Loss',
-    description: 'High protein, moderate deficit (~1,950 kcal)',
-    targets: { calories: 1950, protein: 155, carbs: 195, fat: 58, fibre: 32 },
+    description: 'High protein, steady deficit (~1,950 kcal)',
+    targets: { calories: 1950, protein: 155, carbs: 195, fat: 58, fibre: 30 },
   },
   {
     id: 'maintenance',
     label: 'Maintenance',
-    description: 'Balanced daily energy & steady recovery (~2,500 kcal)',
-    targets: { calories: 2500, protein: 140, carbs: 320, fat: 70, fibre: 30 },
+    description: 'Balanced daily energy (~2,500 kcal)',
+    targets: { calories: 2500, protein: 145, carbs: 315, fat: 70, fibre: 32 },
   },
   {
     id: 'muscle_gain',
     label: 'Muscle Gain',
-    description: 'Lean surplus for strength & hypertrophy (~2,900 kcal)',
-    targets: { calories: 2900, protein: 175, carbs: 380, fat: 75, fibre: 35 },
+    description: 'Lean surplus for strength (~2,900 kcal)',
+    targets: { calories: 2900, protein: 175, carbs: 380, fat: 75, fibre: 36 },
   },
   {
     id: 'recomposition',
@@ -47,21 +103,34 @@ const GOAL_PRESETS: {
   },
   {
     id: 'custom',
-    label: 'Custom',
-    description: 'Set every nutrition target manually',
+    label: 'Custom Split',
+    description: 'Customize calories and macro percentages',
   },
 ];
 
+const MACRO_COLORS = {
+  protein: '#84cc16', // lime-500
+  carbs: '#f59e0b', // amber-500
+  fat: '#6366f1', // indigo-500
+};
+
 export const GoalsPage: React.FC = () => {
-  const { state, updateGoals, updateProfile } = useMacroLogStore();
+  const {
+    state,
+    dailyWaterGoalMl,
+    setDailyWaterGoalMl,
+    updateGoals,
+    updateProfile,
+    updateWeightGoal,
+    notify,
+  } = useMacroLogStore();
   const unit = state.settings.weightUnit;
   const { profile } = state;
 
-  // Smart Fitness Calculator state (Module 2)
-  const [showCalculator, setShowCalculator] = useState(state.goals.calories === 0);
+  // Personalized Fitness Goal & Macro Calculator (9 standardized inputs + Macro Style)
   const [calcAge, setCalcAge] = useState(profile.age > 0 ? String(profile.age) : '26');
-  const [calcSex, setCalcSex] = useState<BiologicalSex>(profile.biologicalSex || 'male');
-  const [calcHeight, setCalcHeight] = useState(
+  const [calcGender, setCalcGender] = useState<BiologicalSex>(profile.biologicalSex || 'male');
+  const [calcHeightCm, setCalcHeightCm] = useState(
     profile.heightCm > 0 ? String(profile.heightCm) : '173'
   );
   const [calcCurrentWeight, setCalcCurrentWeight] = useState(
@@ -74,33 +143,46 @@ export const GoalsPage: React.FC = () => {
       ? String(convertWeightToDisplay(profile.targetWeightKg, unit))
       : String(convertWeightToDisplay(66, unit))
   );
-  const [calcSteps, setCalcSteps] = useState(String(profile.dailyAverageSteps || 7500));
-  const [calcWorkouts, setCalcWorkouts] = useState(
-    String(profile.workoutFrequencyPerWeek ?? 3)
-  );
-  const [calcIntensity, setCalcIntensity] = useState<WorkoutIntensity>(
-    profile.workoutIntensity || 'moderate'
-  );
   const [calcActivity, setCalcActivity] = useState<ActivityLevel>(
     profile.activityLevel || 'moderate'
   );
-  const [calcGoal, setCalcGoal] = useState<FitnessGoalType>(
-    profile.fitnessGoal || 'maintenance'
+  const [calcWorkoutsPerWeek, setCalcWorkoutsPerWeek] = useState(
+    String(profile.workoutFrequencyPerWeek ?? 4)
   );
-  const [calcAdjustmentPct, setCalcAdjustmentPct] = useState(
-    profile.fitnessGoal === 'muscle_gain' ? '7.5' : '15'
+  const [calcFitnessGoal, setCalcFitnessGoal] = useState<FitnessGoalType>(
+    profile.fitnessGoal || 'fat_loss'
   );
-  const [calcProteinPerKg, setCalcProteinPerKg] = useState('1.9');
-  const [calcFatPct, setCalcFatPct] = useState('26');
-  const [showConfirmationCard, setShowConfirmationCard] = useState(false);
+  const [calcGoalSpeed, setCalcGoalSpeed] = useState<GoalSpeed>(
+    profile.goalSpeed || 'moderate'
+  );
+  const [macroStyle, setMacroStyle] = useState<MacroStyleId>('high_protein');
 
-  // Editable Nutrition Goal Targets state
+  const [calculating, setCalculating] = useState(false);
+  const [calcError, setCalcError] = useState('');
+  const [calcResult, setCalcResult] = useState<FitnessCalculationResult | null>(() => {
+    if (profile.age > 0 && profile.heightCm > 0 && profile.currentWeightKg > 0) {
+      return calculateSmartFitnessTargets({
+        age: profile.age,
+        biologicalSex: profile.biologicalSex || 'male',
+        heightCm: profile.heightCm,
+        currentWeightKg: profile.currentWeightKg,
+        targetWeightKg: profile.targetWeightKg || profile.currentWeightKg,
+        activityLevel: profile.activityLevel || 'moderate',
+        workoutFrequencyPerWeek: profile.workoutFrequencyPerWeek ?? 3,
+        fitnessGoal: profile.fitnessGoal || 'maintenance',
+        goalSpeed: profile.goalSpeed || 'moderate',
+      });
+    }
+    return null;
+  });
+
+  // Editable Targets & Interactive % Ratio Builder (MFP-inspired)
   const [preset, setPreset] = useState<GoalPreset>(state.goals.preset);
-  const [calories, setCalories] = useState(String(state.goals.calories));
-  const [protein, setProtein] = useState(String(state.goals.protein));
-  const [carbs, setCarbs] = useState(String(state.goals.carbs));
-  const [fat, setFat] = useState(String(state.goals.fat));
-  const [fibre, setFibre] = useState(String(state.goals.fibre));
+  const [calories, setCalories] = useState(String(state.goals.calories || 2200));
+  const [protein, setProtein] = useState(String(state.goals.protein || 140));
+  const [carbs, setCarbs] = useState(String(state.goals.carbs || 245));
+  const [fat, setFat] = useState(String(state.goals.fat || 73));
+  const [fibre, setFibre] = useState(String(state.goals.fibre || 30));
   const [targetWeight, setTargetWeight] = useState(
     state.goals.targetWeightKg !== undefined
       ? String(convertWeightToDisplay(state.goals.targetWeightKg, unit))
@@ -112,15 +194,17 @@ export const GoalsPage: React.FC = () => {
   const [estimatedTdeeMeta, setEstimatedTdeeMeta] = useState<number | undefined>(
     state.goals.estimatedTdee
   );
-  const [error, setError] = useState('');
+  const [manualError, setManualError] = useState('');
 
   useEffect(() => {
     setPreset(state.goals.preset);
-    setCalories(String(state.goals.calories));
-    setProtein(String(state.goals.protein));
-    setCarbs(String(state.goals.carbs));
-    setFat(String(state.goals.fat));
-    setFibre(String(state.goals.fibre));
+    if (state.goals.calories > 0) {
+      setCalories(String(state.goals.calories));
+      setProtein(String(state.goals.protein));
+      setCarbs(String(state.goals.carbs));
+      setFat(String(state.goals.fat));
+      setFibre(String(state.goals.fibre));
+    }
     setTargetWeight(
       state.goals.targetWeightKg !== undefined
         ? String(convertWeightToDisplay(state.goals.targetWeightKg, unit))
@@ -132,72 +216,174 @@ export const GoalsPage: React.FC = () => {
 
   const parsedCurrentWeightKg = useMemo(() => {
     const val = parseFloat(calcCurrentWeight);
-    return Number.isFinite(val) && val > 0 ? convertDisplayWeightToKg(val, unit) : 70;
+    return Number.isFinite(val) && val > 0 ? convertDisplayWeightToKg(val, unit) : 0;
   }, [calcCurrentWeight, unit]);
 
   const parsedTargetWeightKg = useMemo(() => {
     const val = parseFloat(calcTargetWeight);
-    return Number.isFinite(val) && val > 0 ? convertDisplayWeightToKg(val, unit) : parsedCurrentWeightKg;
-  }, [calcTargetWeight, parsedCurrentWeightKg, unit]);
+    return Number.isFinite(val) && val > 0 ? convertDisplayWeightToKg(val, unit) : 0;
+  }, [calcTargetWeight, unit]);
 
-  const suggestedTier = useMemo(
-    () =>
-      suggestActivityLevel(
-        parseInt(calcSteps, 10) || 7000,
-        parseInt(calcWorkouts, 10) || 0,
-        calcIntensity
-      ),
-    [calcIntensity, calcSteps, calcWorkouts]
-  );
+  // Compute current % shares of manual editor inputs
+  const editorMacroPcts = useMemo(() => {
+    const pCal = (parseFloat(protein) || 0) * 4;
+    const cCal = (parseFloat(carbs) || 0) * 4;
+    const fCal = (parseFloat(fat) || 0) * 9;
+    const total = pCal + cCal + fCal;
+    if (total <= 0) return { proteinPct: 30, carbsPct: 45, fatPct: 25 };
+    const pPct = Math.round((pCal / total) * 100);
+    const fPct = Math.round((fCal / total) * 100);
+    const cPct = Math.max(0, 100 - pPct - fPct);
+    return { proteinPct: pPct, carbsPct: cPct, fatPct: fPct };
+  }, [carbs, fat, protein]);
 
-  const calculationResult = useMemo(
-    () =>
-      calculateSmartFitnessTargets({
-        age: parseInt(calcAge, 10) || 26,
-        biologicalSex: calcSex,
-        heightCm: parseFloat(calcHeight) || 170,
-        currentWeightKg: parsedCurrentWeightKg,
-        targetWeightKg: parsedTargetWeightKg,
-        dailyAverageSteps: parseInt(calcSteps, 10) || 7000,
-        activityLevel: calcActivity,
-        workoutFrequencyPerWeek: parseInt(calcWorkouts, 10) || 0,
-        workoutIntensity: calcIntensity,
-        fitnessGoal: calcGoal,
-        goalAdjustmentPct: parseFloat(calcAdjustmentPct) || undefined,
-        proteinPerKg: parseFloat(calcProteinPerKg) || 1.9,
-        fatCaloriesPct: parseFloat(calcFatPct) || 26,
-      }),
-    [
-      calcActivity,
-      calcAdjustmentPct,
-      calcAge,
-      calcFatPct,
-      calcGoal,
-      calcHeight,
-      calcIntensity,
-      calcProteinPerKg,
-      calcSex,
-      calcSteps,
-      calcWorkouts,
-      parsedCurrentWeightKg,
-      parsedTargetWeightKg,
-    ]
-  );
+  const applyMacroRatios = (nextCal: number, pPct: number, fPct: number) => {
+    const clampedP = Math.min(50, Math.max(15, pPct));
+    const clampedF = Math.min(45, Math.max(15, fPct));
+    const cPct = Math.max(10, 100 - clampedP - clampedF);
+    const totalPct = clampedP + clampedF + cPct;
+    const normP = clampedP / totalPct;
+    const normF = clampedF / totalPct;
+    const normC = cPct / totalPct;
 
-  const applyCalculatorToEditor = () => {
-    setPreset(calcGoal);
-    setCalories(String(calculationResult.recommendedCalories));
-    setProtein(String(calculationResult.proteinGrams));
-    setCarbs(String(calculationResult.carbsGrams));
-    setFat(String(calculationResult.fatGrams));
-    setFibre(String(calculationResult.fibreGrams));
-    setTargetWeight(
-      String(convertWeightToDisplay(calculationResult.recommendedTargetWeightKg, unit))
-    );
-    setEstimatedBmrMeta(calculationResult.bmr);
-    setEstimatedTdeeMeta(calculationResult.estimatedTdee);
-    setShowConfirmationCard(true);
-    setError('');
+    setCalories(String(nextCal));
+    setProtein(String(Math.round((nextCal * normP) / 4)));
+    setCarbs(String(Math.round((nextCal * normC) / 4)));
+    setFat(String(Math.round((nextCal * normF) / 9)));
+    setFibre(String(Math.max(20, Math.round((nextCal / 1000) * 14))));
+    setPreset('custom');
+  };
+
+  const handleCalculateGoals = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCalcError('');
+
+    const ageNum = parseInt(calcAge, 10);
+    const heightNum = parseFloat(calcHeightCm);
+    const workoutsNum = parseInt(calcWorkoutsPerWeek, 10);
+
+    if (!Number.isFinite(ageNum) || ageNum < 14 || ageNum > 100) {
+      setCalcError('Please enter a valid age between 14 and 100.');
+      return;
+    }
+    if (!Number.isFinite(heightNum) || heightNum < 120 || heightNum > 240) {
+      setCalcError('Please enter a valid height between 120 cm and 240 cm.');
+      return;
+    }
+    if (parsedCurrentWeightKg < 30 || parsedCurrentWeightKg > 300) {
+      setCalcError(
+        `Please enter a valid current weight (${unit === 'kg' ? '30–300 kg' : '66–660 lbs'}).`
+      );
+      return;
+    }
+    if (parsedTargetWeightKg < 30 || parsedTargetWeightKg > 300) {
+      setCalcError(
+        `Please enter a valid target weight (${unit === 'kg' ? '30–300 kg' : '66–660 lbs'}).`
+      );
+      return;
+    }
+    if (!Number.isFinite(workoutsNum) || workoutsNum < 0 || workoutsNum > 14) {
+      setCalcError('Workouts per week must be between 0 and 14.');
+      return;
+    }
+
+    const chosenStyle = MACRO_STYLES.find((s) => s.id === macroStyle) || MACRO_STYLES[0];
+
+    const payload = {
+      age: ageNum,
+      biologicalSex: calcGender,
+      heightCm: heightNum,
+      currentWeightKg: parsedCurrentWeightKg,
+      targetWeightKg: parsedTargetWeightKg,
+      activityLevel: calcActivity,
+      workoutFrequencyPerWeek: workoutsNum,
+      fitnessGoal: calcFitnessGoal,
+      goalSpeed: calcGoalSpeed,
+      proteinPerKg: chosenStyle.proteinPerKg,
+      fatCaloriesPct: chosenStyle.fatCaloriesPct,
+    };
+
+    setCalculating(true);
+    try {
+      const response = await fetch('/api/goals/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setCalcError(data?.error || 'Could not calculate targets with those inputs.');
+        return;
+      }
+
+      const result = data as FitnessCalculationResult;
+      setCalcResult(result);
+
+      setPreset(calcFitnessGoal);
+      setCalories(String(result.recommendedCalories));
+      setProtein(String(result.proteinGrams));
+      setCarbs(String(result.carbsGrams));
+      setFat(String(result.fatGrams));
+      setFibre(String(result.fibreGrams));
+      setTargetWeight(String(convertWeightToDisplay(result.recommendedTargetWeightKg, unit)));
+      setEstimatedBmrMeta(result.bmr);
+      setEstimatedTdeeMeta(result.estimatedTdee);
+    } catch {
+      setCalcError('Failed to reach calculation service. Please check your connection and try again.');
+    } finally {
+      setCalculating(false);
+    }
+  };
+
+  const handleSaveCalculatedGoals = () => {
+    if (!calcResult) return;
+
+    const goalDirection: 'loss' | 'gain' | 'maintain' =
+      calcResult.recommendedTargetWeightKg < parsedCurrentWeightKg - 0.2
+        ? 'loss'
+        : calcResult.recommendedTargetWeightKg > parsedCurrentWeightKg + 0.2
+        ? 'gain'
+        : 'maintain';
+
+    updateProfile({
+      age: parseInt(calcAge, 10) || profile.age,
+      biologicalSex: calcGender,
+      heightCm: parseFloat(calcHeightCm) || profile.heightCm,
+      currentWeightKg: parsedCurrentWeightKg,
+      targetWeightKg: calcResult.recommendedTargetWeightKg,
+      activityLevel: calcActivity,
+      workoutFrequencyPerWeek: parseInt(calcWorkoutsPerWeek, 10) || 0,
+      fitnessGoal: calcFitnessGoal,
+      goalSpeed: calcGoalSpeed,
+    });
+
+    updateWeightGoal({
+      startingWeightKg:
+        state.weightGoal.startingWeightKg > 0
+          ? state.weightGoal.startingWeightKg
+          : parsedCurrentWeightKg,
+      targetWeightKg: calcResult.recommendedTargetWeightKg,
+      goalDirection,
+    });
+
+    updateGoals({
+      preset: calcFitnessGoal,
+      calories: calcResult.recommendedCalories,
+      protein: calcResult.proteinGrams,
+      carbs: calcResult.carbsGrams,
+      fat: calcResult.fatGrams,
+      fibre: calcResult.fibreGrams,
+      targetWeightKg: calcResult.recommendedTargetWeightKg,
+      estimatedBmr: calcResult.bmr,
+      estimatedTdee: calcResult.estimatedTdee,
+      bmi: calcResult.bmi,
+      goalSpeed: calcResult.goalSpeed,
+      estimatedWeeks: calcResult.estimatedWeeks,
+    });
+
+    setDailyWaterGoalMl(calcResult.recommendedWaterMl);
+    notify('Personalized goals saved & dashboard updated');
   };
 
   const applyPreset = (id: GoalPreset) => {
@@ -217,7 +403,7 @@ export const GoalsPage: React.FC = () => {
     (parseFloat(carbs) || 0) * 4 +
     (parseFloat(fat) || 0) * 9;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleManualSave = (e: React.FormEvent) => {
     e.preventDefault();
     const cal = Math.round(parseFloat(calories));
     const pro = Math.round(parseFloat(protein));
@@ -226,7 +412,7 @@ export const GoalsPage: React.FC = () => {
     const fib = Math.round(parseFloat(fibre));
 
     if ([cal, pro, carb, f, fib].some((v) => !Number.isFinite(v) || v <= 0)) {
-      setError('All calorie and macro targets must be positive numbers.');
+      setManualError('All calorie and macro targets must be positive numbers.');
       return;
     }
 
@@ -234,30 +420,13 @@ export const GoalsPage: React.FC = () => {
     if (targetWeight.trim() !== '') {
       const tw = parseFloat(targetWeight);
       if (!Number.isFinite(tw) || tw <= 0) {
-        setError('Target weight must be a positive number.');
+        setManualError('Target weight must be a positive number.');
         return;
       }
       targetWeightKg = convertDisplayWeightToKg(tw, unit);
     }
 
-    setError('');
-
-    // If user used the Smart Calculator, also persist body/activity profile metadata
-    if (showConfirmationCard) {
-      updateProfile({
-        age: parseInt(calcAge, 10) || profile.age,
-        biologicalSex: calcSex,
-        heightCm: parseFloat(calcHeight) || profile.heightCm,
-        currentWeightKg: parsedCurrentWeightKg,
-        targetWeightKg: targetWeightKg ?? parsedTargetWeightKg,
-        dailyAverageSteps: parseInt(calcSteps, 10) || profile.dailyAverageSteps,
-        activityLevel: calcActivity,
-        workoutFrequencyPerWeek: parseInt(calcWorkouts, 10) || 0,
-        workoutIntensity: calcIntensity,
-        fitnessGoal: calcGoal,
-      });
-    }
-
+    setManualError('');
     updateGoals({
       preset,
       calories: cal,
@@ -268,371 +437,647 @@ export const GoalsPage: React.FC = () => {
       targetWeightKg,
       estimatedBmr: estimatedBmrMeta,
       estimatedTdee: estimatedTdeeMeta,
+      bmi: state.goals.bmi,
+      goalSpeed: state.goals.goalSpeed,
+      estimatedWeeks: state.goals.estimatedWeeks,
     });
   };
 
+  const macroChartData = calcResult
+    ? [
+        {
+          name: 'Protein',
+          grams: calcResult.proteinGrams,
+          value: calcResult.proteinCalories,
+          color: MACRO_COLORS.protein,
+        },
+        {
+          name: 'Carbs',
+          grams: calcResult.carbsGrams,
+          value: calcResult.carbsCalories,
+          color: MACRO_COLORS.carbs,
+        },
+        {
+          name: 'Fat',
+          grams: calcResult.fatGrams,
+          value: calcResult.fatCalories,
+          color: MACRO_COLORS.fat,
+        },
+      ]
+    : [];
+
   return (
-    <div className="space-y-6 max-w-4xl">
-      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 max-w-5xl">
+      {/* Header */}
+      <section className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Mifflin-St Jeor target calculator & customizable daily nutrition goals
+            Personalized daily calorie, macro, meal-budget, and hydration plan
           </p>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Nutrition Goals
+            Fitness Goals & Macro Planner
           </h1>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setShowCalculator((v) => !v)}
-          className={`min-h-[44px] px-4 rounded-xl border text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors ${
-            showCalculator
-              ? 'bg-lime-50 dark:bg-lime-950/50 border-lime-500 text-lime-800 dark:text-lime-300'
-              : 'bg-white dark:bg-[#121821] border-stone-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Calculator className="w-4 h-4" />
-          {showCalculator ? 'Hide Smart Calculator' : 'Smart Fitness Calculator'}
-        </button>
       </section>
 
-      {/* MODULE 2: SMART FITNESS GOAL CALCULATOR */}
-      {showCalculator && (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400" />
-                Smart Fitness Goal Calculator
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Calculates Mifflin-St Jeor BMR, estimated maintenance TDEE, and balanced 4/4/9 macro targets.
-              </p>
+      {/* Active Saved Goal Overview Banner (when user already has active goals) */}
+      {state.goals.calories > 0 && (
+        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">Active Calorie Goal</div>
+            <div className="mt-1 text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
+              {state.goals.calories.toLocaleString()}{' '}
+              <span className="text-xs font-normal text-slate-500">kcal/day</span>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Age (years)
-              </label>
-              <input
-                type="number"
-                min="14"
-                max="100"
-                value={calcAge}
-                onChange={(e) => setCalcAge(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-              />
+          <div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">Daily Macro Targets</div>
+            <div className="mt-1 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100">
+              P {state.goals.protein}g · C {state.goals.carbs}g · F {state.goals.fat}g
             </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Biological Sex (BMR formula)
-              </label>
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-stone-100 dark:bg-slate-900 h-11">
-                {(['male', 'female'] as const).map((sex) => (
-                  <button
-                    key={sex}
-                    type="button"
-                    onClick={() => setCalcSex(sex)}
-                    className={`rounded-lg text-xs font-semibold capitalize transition-colors ${
-                      calcSex === sex
-                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
-                        : 'text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    {sex}
-                  </button>
-                ))}
+            <div className="text-[11px] text-slate-400 tabular-nums mt-0.5">
+              Fibre {state.goals.fibre}g/day
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">Weight Goal</div>
+            <div className="mt-1 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100">
+              {profile.currentWeightKg > 0
+                ? formatWeight(profile.currentWeightKg, unit)
+                : '—'}{' '}
+              →{' '}
+              {state.goals.targetWeightKg
+                ? formatWeight(state.goals.targetWeightKg, unit)
+                : profile.targetWeightKg > 0
+                ? formatWeight(profile.targetWeightKg, unit)
+                : '—'}
+            </div>
+            {state.goals.estimatedWeeks && (
+              <div className="text-[11px] text-slate-400 tabular-nums mt-0.5">
+                Est. ~{state.goals.estimatedWeeks} weeks
               </div>
+            )}
+          </div>
+          <div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">Daily Water Goal</div>
+            <div className="mt-1 text-sm font-semibold font-mono-nums text-sky-600 dark:text-sky-400">
+              {dailyWaterGoalMl.toLocaleString()} ml
             </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Height (cm)
-              </label>
-              <input
-                type="number"
-                min="120"
-                max="240"
-                value={calcHeight}
-                onChange={(e) => setCalcHeight(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-              />
+            <div className="text-[11px] text-slate-400 tabular-nums mt-0.5">
+              {Math.round(dailyWaterGoalMl / 250)} glasses/day
             </div>
+          </div>
+        </section>
+      )}
 
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Current Weight ({unit})
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="25"
-                value={calcCurrentWeight}
-                onChange={(e) => setCalcCurrentWeight(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-              />
-            </div>
+      {/* USER INPUT FORM */}
+      <form
+        onSubmit={handleCalculateGoals}
+        className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
+      >
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Calculator className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+            Tell Us About Yourself
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Fill in your stats, routine, and desired pace to build a sustainable calorie and macro plan.
+          </p>
+        </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Target Weight ({unit})
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="25"
-                value={calcTargetWeight}
-                onChange={(e) => setCalcTargetWeight(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-              />
-            </div>
+        {calcError && (
+          <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/60 text-xs font-medium text-red-700 dark:text-red-300">
+            {calcError}
+          </div>
+        )}
 
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Daily Average Steps
-              </label>
-              <input
-                type="number"
-                min="500"
-                max="40000"
-                step="500"
-                value={calcSteps}
-                onChange={(e) => setCalcSteps(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-              />
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* 1. Age */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Age (years)
+            </label>
+            <input
+              type="number"
+              min="14"
+              max="100"
+              required
+              value={calcAge}
+              onChange={(e) => setCalcAge(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+            />
+          </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Workouts / Week (0–7)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="14"
-                value={calcWorkouts}
-                onChange={(e) => setCalcWorkouts(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Workout Intensity
-              </label>
-              <select
-                value={calcIntensity}
-                onChange={(e) => setCalcIntensity(e.target.value as WorkoutIntensity)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
-              >
-                <option value="light">Light (walking, mobility)</option>
-                <option value="moderate">Moderate (hypertrophy, steady cardio)</option>
-                <option value="vigorous">Vigorous (heavy lifting, HIIT, sport)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Fitness Goal
-              </label>
-              <select
-                value={calcGoal}
-                onChange={(e) => {
-                  const next = e.target.value as FitnessGoalType;
-                  setCalcGoal(next);
-                  if (next === 'fat_loss') setCalcAdjustmentPct('15');
-                  else if (next === 'muscle_gain') setCalcAdjustmentPct('7.5');
-                }}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
-              >
-                <option value="fat_loss">Lose Fat (10–20% deficit)</option>
-                <option value="maintenance">Maintain Weight</option>
-                <option value="muscle_gain">Build Muscle (5–10% surplus)</option>
-                <option value="recomposition">Body Recomposition</option>
-              </select>
+          {/* 2. Gender */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Biological Sex
+            </label>
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-stone-100 dark:bg-slate-900 h-11">
+              {(['male', 'female'] as const).map((sex) => (
+                <button
+                  key={sex}
+                  type="button"
+                  onClick={() => setCalcGender(sex)}
+                  className={`rounded-lg text-xs font-semibold capitalize transition-colors ${
+                    calcGender === sex
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {sex}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Activity Level Helper */}
-          <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/70 p-4 space-y-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                Lifestyle Activity Multiplier (includes workouts — no double-counting)
-              </label>
-              {suggestedTier !== calcActivity && (
-                <button
-                  type="button"
-                  onClick={() => setCalcActivity(suggestedTier)}
-                  className="text-xs font-semibold text-lime-700 dark:text-lime-400 hover:underline"
-                >
-                  Apply suggested: {ACTIVITY_MULTIPLIERS[suggestedTier].label}
-                </button>
-              )}
-            </div>
+          {/* 3. Height (cm) */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Height (cm)
+            </label>
+            <input
+              type="number"
+              min="120"
+              max="240"
+              step="0.5"
+              required
+              value={calcHeightCm}
+              onChange={(e) => setCalcHeightCm(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+            />
+          </div>
+
+          {/* 4. Current Weight */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Current Weight ({unit})
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              min="30"
+              required
+              value={calcCurrentWeight}
+              onChange={(e) => setCalcCurrentWeight(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+            />
+          </div>
+
+          {/* 5. Target Weight */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Target Weight ({unit})
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              min="30"
+              required
+              value={calcTargetWeight}
+              onChange={(e) => setCalcTargetWeight(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+            />
+          </div>
+
+          {/* 6. Workout Frequency / Week */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Workouts per Week
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="14"
+              required
+              value={calcWorkoutsPerWeek}
+              onChange={(e) => setCalcWorkoutsPerWeek(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+            />
+          </div>
+
+          {/* 7. Activity Level */}
+          <div className="sm:col-span-2 lg:col-span-1">
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Daily Activity Level
+            </label>
             <select
               value={calcActivity}
               onChange={(e) => setCalcActivity(e.target.value as ActivityLevel)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             >
               {(Object.keys(ACTIVITY_MULTIPLIERS) as ActivityLevel[]).map((tier) => (
                 <option key={tier} value={tier}>
-                  {ACTIVITY_MULTIPLIERS[tier].label} — {ACTIVITY_MULTIPLIERS[tier].summary}
+                  {ACTIVITY_MULTIPLIERS[tier].label}
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Based on {parseInt(calcSteps, 10) || 0} daily steps and {calcWorkouts} workouts/week, we suggest{' '}
-              <span className="font-semibold text-slate-700 dark:text-slate-200">
-                {ACTIVITY_MULTIPLIERS[suggestedTier].label}
-              </span>
-              . Avoid adding extra workout calories on top of TDEE to prevent double-counting.
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              {ACTIVITY_MULTIPLIERS[calcActivity].summary}
             </p>
           </div>
 
-          {/* Fine-tune ratios */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(calcGoal === 'fat_loss' || calcGoal === 'muscle_gain') && (
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                  {calcGoal === 'fat_loss' ? 'Deficit % (10–20%)' : 'Surplus % (5–10%)'}
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min={calcGoal === 'fat_loss' ? 10 : 5}
-                  max={calcGoal === 'fat_loss' ? 20 : 10}
-                  value={calcAdjustmentPct}
-                  onChange={(e) => setCalcAdjustmentPct(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-                />
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Protein Target (1.6–2.2 g/kg)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="1.6"
-                max="2.2"
-                value={calcProteinPerKg}
-                onChange={(e) => setCalcProteinPerKg(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                Fat Energy Share (20–35%)
-              </label>
-              <input
-                type="number"
-                step="1"
-                min="20"
-                max="35"
-                value={calcFatPct}
-                onChange={(e) => setCalcFatPct(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-              />
-            </div>
+          {/* 8. Primary Fitness Goal */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Primary Fitness Goal
+            </label>
+            <select
+              value={calcFitnessGoal}
+              onChange={(e) => setCalcFitnessGoal(e.target.value as FitnessGoalType)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+            >
+              <option value="fat_loss">Lose Fat</option>
+              <option value="muscle_gain">Build Muscle</option>
+              <option value="recomposition">Body Recomposition</option>
+              <option value="maintenance">Maintain Weight</option>
+            </select>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-              Live Preview: BMR{' '}
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {calculationResult.bmr.toLocaleString()} kcal
-              </span>{' '}
-              · TDEE{' '}
-              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                {calculationResult.estimatedTdee.toLocaleString()} kcal
-              </span>{' '}
-              · Recommended{' '}
-              <span className="font-semibold text-lime-700 dark:text-lime-400">
-                {calculationResult.recommendedCalories.toLocaleString()} kcal
+          {/* 9. Preferred Goal Pace */}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Preferred Goal Pace
+            </label>
+            <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-stone-100 dark:bg-slate-900 h-11">
+              {(['slow', 'moderate', 'aggressive'] as GoalSpeed[]).map((spd) => (
+                <button
+                  key={spd}
+                  type="button"
+                  onClick={() => setCalcGoalSpeed(spd)}
+                  className={`rounded-lg text-xs font-semibold capitalize transition-colors ${
+                    calcGoalSpeed === spd
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
+                      : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {spd === 'slow' ? 'Steady' : spd === 'moderate' ? 'Moderate' : 'Fast'}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              {GOAL_SPEED_CONFIG[calcGoalSpeed].description}
+            </p>
+          </div>
+        </div>
+
+        {/* Nutrition / Macro Focus Style */}
+        <div className="pt-2 border-t border-stone-100 dark:border-slate-800">
+          <span className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+            Macro Focus Style
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {MACRO_STYLES.map((style) => {
+              const active = macroStyle === style.id;
+              return (
+                <button
+                  key={style.id}
+                  type="button"
+                  onClick={() => setMacroStyle(style.id)}
+                  className={`p-3 rounded-xl border text-left transition-colors ${
+                    active
+                      ? 'border-lime-500 bg-lime-50/70 dark:bg-lime-950/30'
+                      : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                    {style.label}
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                    {style.subtitle}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Includes safe minimum calorie & protein safeguards automatically.
+          </p>
+          <button
+            type="submit"
+            disabled={calculating}
+            className="min-h-[46px] px-6 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-2 disabled:opacity-60 whitespace-nowrap"
+          >
+            {calculating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Calculating...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>Calculate My Goals</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+
+      {/* RESULTS DASHBOARD */}
+      {calcResult && (
+        <section className="bg-white dark:bg-[#121821] border border-lime-500/50 dark:border-lime-500/40 rounded-2xl p-5 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-stone-100 dark:border-slate-800 pb-4">
+            <div>
+              <span className="text-xs font-semibold text-lime-700 dark:text-lime-400">
+                Your Personalized Plan
               </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mt-0.5">
+                Daily Calorie, Macro & Timeline Targets
+              </h2>
             </div>
 
             <button
               type="button"
-              onClick={applyCalculatorToEditor}
-              className="min-h-[44px] px-5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-semibold hover:opacity-90 transition-opacity"
+              onClick={handleSaveCalculatedGoals}
+              className="min-h-[46px] px-6 rounded-xl bg-lime-500 hover:bg-lime-400 text-slate-950 text-sm font-bold transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
             >
-              Calculate & Review Targets
+              <Check className="w-4 h-4" />
+              Save My Goals
             </button>
           </div>
 
-          {/* Goal Confirmation Results Screen */}
-          {showConfirmationCard && (
-            <div className="rounded-2xl border border-lime-500/60 bg-lime-50/50 dark:bg-lime-950/20 p-5 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Goal Confirmation Summary (Editable Below)
-                </h3>
-                {calculationResult.estimatedWeeks && (
-                  <span className="text-xs font-medium text-lime-700 dark:text-lime-400 tabular-nums">
-                    Estimated timeline: ~{calculationResult.estimatedWeeks} weeks ({calculationResult.weeklyRateKg > 0 ? '+' : ''}
-                    {convertWeightToDisplay(calculationResult.weeklyRateKg, unit)} {unit}/wk)
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800 p-3">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">Estimated BMR</div>
-                  <div className="text-base font-bold font-mono-nums text-slate-900 dark:text-slate-100 mt-0.5">
-                    {calculationResult.bmr.toLocaleString()} kcal
-                  </div>
-                </div>
-                <div className="rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800 p-3">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">Maintenance TDEE</div>
-                  <div className="text-base font-bold font-mono-nums text-slate-900 dark:text-slate-100 mt-0.5">
-                    {calculationResult.estimatedTdee.toLocaleString()} kcal
-                  </div>
-                </div>
-                <div className="rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800 p-3">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">Daily Target</div>
-                  <div className="text-base font-bold font-mono-nums text-lime-700 dark:text-lime-400 mt-0.5">
-                    {calculationResult.recommendedCalories.toLocaleString()} kcal
-                  </div>
-                </div>
-                <div className="rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800 p-3">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">Macro Split</div>
-                  <div className="text-xs font-bold font-mono-nums text-slate-900 dark:text-slate-100 mt-1">
-                    P {calculationResult.proteinGrams}g · C {calculationResult.carbsGrams}g · F {calculationResult.fatGrams}g · Fib {calculationResult.fibreGrams}g
-                  </div>
-                </div>
-              </div>
-
-              {calculationResult.safetyNote && (
-                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs flex items-start gap-2">
-                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{calculationResult.safetyNote}</span>
-                </div>
-              )}
-
-              <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                {calculationResult.explanation.map((line, i) => (
-                  <li key={i}>• {line}</li>
-                ))}
-              </ul>
+          {calcResult.safetyNote && (
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5 leading-relaxed">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <span>{calcResult.safetyNote}</span>
             </div>
           )}
+
+          {/* Top Energy & Body Metrics — User-friendly labels, zero multiplier jargon */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="rounded-xl border border-lime-400/60 dark:border-lime-500/50 bg-lime-50/70 dark:bg-lime-950/30 p-3.5">
+              <div className="text-[11px] font-semibold text-lime-800 dark:text-lime-300">
+                Daily Calorie Target
+              </div>
+              <div className="mt-1 text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
+                {calcResult.recommendedCalories.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-lime-800/80 dark:text-lime-300/80 mt-0.5 tabular-nums">
+                {calcResult.calorieDelta < -25
+                  ? `${Math.abs(calcResult.calorieDelta)} kcal daily deficit`
+                  : calcResult.calorieDelta > 25
+                  ? `+${calcResult.calorieDelta} kcal daily surplus`
+                  : 'Maintenance pace'}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-3.5">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Flame className="w-3.5 h-3.5" />
+                Daily Maintenance
+              </div>
+              <div className="mt-1 text-xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                {calcResult.estimatedTdee.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                kcal burned per day
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-3.5">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5" />
+                Resting Burn
+              </div>
+              <div className="mt-1 text-xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                {calcResult.bmr.toLocaleString()}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                kcal at rest
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-3.5">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Scale className="w-3.5 h-3.5" />
+                Body Mass Score
+              </div>
+              <div className="mt-1 text-xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                {calcResult.bmi}
+              </div>
+              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                {calcResult.bmiCategory} range
+              </div>
+            </div>
+
+            <div className="col-span-2 sm:col-span-1 rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-3.5">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <CalendarClock className="w-3.5 h-3.5" />
+                Target Timeline
+              </div>
+              <div className="mt-1 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                {calcResult.projectedTargetDate || (calcResult.estimatedWeeks ? `~${calcResult.estimatedWeeks} wks` : 'Steady')}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                {calcResult.estimatedWeeks && calcResult.weeklyRateKg !== 0
+                  ? `~${calcResult.estimatedWeeks} wks · ${calcResult.weeklyRateKg > 0 ? '+' : ''}${convertWeightToDisplay(calcResult.weeklyRateKg, unit)} ${unit}/wk`
+                  : 'Maintain current weight'}
+              </div>
+            </div>
+          </div>
+
+          {/* Macro Breakdown Chart + Macro Targets */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+            <div className="lg:col-span-5 h-56 flex items-center justify-center rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/50 dark:bg-slate-900/40 p-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={macroChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={80}
+                    paddingAngle={3}
+                    strokeWidth={0}
+                  >
+                    {macroChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(
+                      val: unknown,
+                      _name: unknown,
+                      props: { payload?: { name: string; grams: number } }
+                    ) => [
+                      `${props.payload?.grams ?? 0}g (${Number(val).toLocaleString()} kcal)`,
+                      props.payload?.name || '',
+                    ]}
+                    contentStyle={{
+                      backgroundColor: '#121821',
+                      border: '1px solid #1e293b',
+                      borderRadius: '10px',
+                      color: '#f3f4f6',
+                      fontSize: '12px',
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Daily Protein
+                  </span>
+                  <span className="text-xs font-mono-nums text-lime-700 dark:text-lime-400 font-semibold">
+                    {calcResult.proteinPct}%
+                  </span>
+                </div>
+                <div className="text-2xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                  {calcResult.proteinGrams}g
+                </div>
+                <div className="h-2 rounded-full bg-stone-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-lime-500"
+                    style={{ width: `${Math.min(100, calcResult.proteinPct)}%` }}
+                  />
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  {calcResult.proteinCalories} kcal/day · lean muscle & fullness
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Daily Carbohydrates
+                  </span>
+                  <span className="text-xs font-mono-nums text-amber-600 dark:text-amber-400 font-semibold">
+                    {calcResult.carbsPct}%
+                  </span>
+                </div>
+                <div className="text-2xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                  {calcResult.carbsGrams}g
+                </div>
+                <div className="h-2 rounded-full bg-stone-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-amber-500"
+                    style={{ width: `${Math.min(100, calcResult.carbsPct)}%` }}
+                  />
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  {calcResult.carbsCalories} kcal/day · workouts & daily energy
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Daily Healthy Fat
+                  </span>
+                  <span className="text-xs font-mono-nums text-indigo-600 dark:text-indigo-400 font-semibold">
+                    {calcResult.fatPct}%
+                  </span>
+                </div>
+                <div className="text-2xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                  {calcResult.fatGrams}g
+                </div>
+                <div className="h-2 rounded-full bg-stone-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-indigo-500"
+                    style={{ width: `${Math.min(100, calcResult.fatPct)}%` }}
+                  />
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  {calcResult.fatCalories} kcal/day · hormones & nutrient absorption
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Daily Fibre & Water
+                  </span>
+                  <span className="text-xs font-mono-nums text-sky-600 dark:text-sky-400 font-semibold inline-flex items-center gap-1">
+                    <Droplets className="w-3 h-3" />
+                    {(calcResult.recommendedWaterMl / 1000).toFixed(2).replace(/\.?0+$/, '')} L
+                  </span>
+                </div>
+                <div className="text-2xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                  {calcResult.fibreGrams}g{' '}
+                  <span className="text-xs font-normal text-slate-500">fibre</span>
+                </div>
+                <div className="h-2 rounded-full bg-stone-100 dark:bg-slate-800 overflow-hidden">
+                  <div className="h-full rounded-full bg-teal-500" style={{ width: '75%' }} />
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                  {calcResult.recommendedWaterMl.toLocaleString()} ml water (
+                  {Math.round(calcResult.recommendedWaterMl / 250)} glasses/day)
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Suggested Daily Meal Distribution (HealthifyMe-style) */}
+          <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                Suggested Meal Calorie Guide
+              </h3>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Balanced across 4 daily meals
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              {[
+                { label: 'Breakfast (25%)', share: 0.25 },
+                { label: 'Lunch (35%)', share: 0.35 },
+                { label: 'Snacks (15%)', share: 0.15 },
+                { label: 'Dinner (25%)', share: 0.25 },
+              ].map((slot) => (
+                <div
+                  key={slot.label}
+                  className="p-2.5 rounded-lg bg-stone-50 dark:bg-slate-900/60 border border-stone-200/60 dark:border-slate-800"
+                >
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">{slot.label}</div>
+                  <div className="mt-0.5 text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-100">
+                    ~{Math.round(calcResult.recommendedCalories * slot.share).toLocaleString()} kcal
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <ul className="rounded-xl bg-stone-50/80 dark:bg-slate-900/70 border border-stone-200/70 dark:border-slate-800 p-4 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+            {calcResult.explanation.map((line, idx) => (
+              <li key={idx} className="leading-relaxed">
+                • {line}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
-      {/* Presets */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Quick Goal Presets
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      {/* Custom Macro Ratio & Target Editor (MyFitnessPal-Inspired) */}
+      <form
+        onSubmit={handleManualSave}
+        className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Customize Calorie & Macro Split
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Pick a quick preset, adjust macro percentages, or enter exact daily gram targets
+            </p>
+          </div>
+          {estimatedBmrMeta && estimatedTdeeMeta && (
+            <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+              Maintenance burn ~{estimatedTdeeMeta.toLocaleString()} kcal/day
+            </span>
+          )}
+        </div>
+
+        {/* Presets */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
           {GOAL_PRESETS.map((p) => {
             const active = preset === p.id;
             return (
@@ -640,47 +1085,89 @@ export const GoalsPage: React.FC = () => {
                 key={p.id}
                 type="button"
                 onClick={() => applyPreset(p.id)}
-                className={`p-4 rounded-2xl border text-left transition-colors ${
+                className={`p-3.5 rounded-xl border text-left transition-colors ${
                   active
-                    ? 'bg-lime-50 dark:bg-lime-950/40 border-lime-500 dark:border-lime-500'
-                    : 'bg-white dark:bg-[#121821] border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                    ? 'bg-lime-50 dark:bg-lime-950/40 border-lime-500'
+                    : 'bg-stone-50/50 dark:bg-slate-900/40 border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
                 }`}
               >
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
                   {p.label}
                 </div>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                   {p.description}
                 </p>
               </button>
             );
           })}
         </div>
-      </section>
 
-      {/* Editable Target Form */}
-      <form
-        onSubmit={handleSave}
-        className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Daily Calorie & Macro Targets
-          </h2>
-          {estimatedBmrMeta && estimatedTdeeMeta && (
-            <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-              Saved BMR {estimatedBmrMeta.toLocaleString()} kcal · Maintenance ~{estimatedTdeeMeta.toLocaleString()} kcal
+        {/* Interactive Macro % Quick Sliders (MFP Style) */}
+        <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/60 dark:bg-slate-900/40 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-semibold text-slate-800 dark:text-slate-200">
+              Interactive Macro % Ratio (Auto-scales grams to Calories)
             </span>
-          )}
+            <span className="font-mono-nums text-slate-600 dark:text-slate-300">
+              {editorMacroPcts.proteinPct}% Protein · {editorMacroPcts.carbsPct}% Carbs ·{' '}
+              {editorMacroPcts.fatPct}% Fat
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 mb-1">
+                <span>Protein Share</span>
+                <span className="font-mono-nums font-semibold">{editorMacroPcts.proteinPct}%</span>
+              </div>
+              <input
+                type="range"
+                min="15"
+                max="50"
+                step="5"
+                value={Math.min(50, Math.max(15, Math.round(editorMacroPcts.proteinPct / 5) * 5))}
+                onChange={(e) =>
+                  applyMacroRatios(
+                    Math.max(1200, parseInt(calories, 10) || 2200),
+                    Number(e.target.value),
+                    editorMacroPcts.fatPct
+                  )
+                }
+                className="w-full accent-lime-500"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 mb-1">
+                <span>Fat Share</span>
+                <span className="font-mono-nums font-semibold">{editorMacroPcts.fatPct}%</span>
+              </div>
+              <input
+                type="range"
+                min="15"
+                max="45"
+                step="5"
+                value={Math.min(45, Math.max(15, Math.round(editorMacroPcts.fatPct / 5) * 5))}
+                onChange={(e) =>
+                  applyMacroRatios(
+                    Math.max(1200, parseInt(calories, 10) || 2200),
+                    editorMacroPcts.proteinPct,
+                    Number(e.target.value)
+                  )
+                }
+                className="w-full accent-indigo-500"
+              />
+            </div>
+          </div>
         </div>
 
-        {error && (
+        {manualError && (
           <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-xs font-medium">
-            {error}
+            {manualError}
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
               Daily Calorie Target (kcal)
@@ -694,21 +1181,7 @@ export const GoalsPage: React.FC = () => {
                 setCalories(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-              Target Body Weight ({unit}, optional)
-            </label>
-            <input
-              type="number"
-              step="0.05"
-              value={targetWeight}
-              onChange={(e) => setTargetWeight(e.target.value)}
-              placeholder={`e.g. ${unit === 'kg' ? '64.0' : '141.0'}`}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -724,7 +1197,7 @@ export const GoalsPage: React.FC = () => {
                 setProtein(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -740,7 +1213,7 @@ export const GoalsPage: React.FC = () => {
                 setCarbs(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -756,7 +1229,7 @@ export const GoalsPage: React.FC = () => {
                 setFat(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -772,26 +1245,41 @@ export const GoalsPage: React.FC = () => {
                 setFibre(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Target Body Weight ({unit}, optional)
+            </label>
+            <input
+              type="number"
+              step="0.05"
+              value={targetWeight}
+              onChange={(e) => setTargetWeight(e.target.value)}
+              placeholder={`e.g. ${unit === 'kg' ? '64.0' : '141.0'}`}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
         </div>
 
         <div className="pt-2 border-t border-stone-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-            Macro energy estimate:{' '}
+            Macro calorie total:{' '}
             <span className="font-semibold text-slate-800 dark:text-slate-200">
               {Math.round(estimatedMacroCalories).toLocaleString()} kcal
             </span>{' '}
-            (4 kcal/g protein & carbs · 9 kcal/g fat)
+            · P {editorMacroPcts.proteinPct}% / C {editorMacroPcts.carbsPct}% / F{' '}
+            {editorMacroPcts.fatPct}%
           </div>
 
           <button
             type="submit"
-            className="min-h-[46px] px-6 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap"
+            className="min-h-[44px] px-6 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap"
           >
             <Check className="w-4 h-4" />
-            {showConfirmationCard ? 'Confirm & Save Goals' : 'Save Goals'}
+            Save Custom Targets
           </button>
         </div>
       </form>

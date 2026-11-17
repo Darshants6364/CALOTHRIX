@@ -1,0 +1,249 @@
+import React, { useEffect, useState } from 'react';
+import { Check, Layers, Shield, UserCheck } from 'lucide-react';
+import { useMacroLogStore } from '../../hooks/useMacroLogStore';
+import { useTrainerDashboard } from '../../hooks/useTrainerDashboard';
+import { upsertTrainerProfile } from '../../services/trainerService';
+import { TRAINER_SUBSCRIPTION_PLANS, TrainerSubscriptionTier } from '../../types';
+
+export const TrainerSettingsPage: React.FC = () => {
+  const { authUser, selectAccountRole, notify } = useMacroLogStore();
+  const { trainerProfile, clients, refreshAll } = useTrainerDashboard();
+
+  const [displayName, setDisplayName] = useState(trainerProfile?.displayName || '');
+  const [bio, setBio] = useState(trainerProfile?.bio || '');
+  const [specialtiesStr, setSpecialtiesStr] = useState(
+    (trainerProfile?.specialties || []).join(', ')
+  );
+  const [certificationsStr, setCertificationsStr] = useState(
+    (trainerProfile?.certifications || []).join(', ')
+  );
+  const [acceptingClients, setAcceptingClients] = useState(
+    trainerProfile?.acceptingClients ?? true
+  );
+  const [selectedTier, setSelectedTier] = useState<TrainerSubscriptionTier>(
+    trainerProfile?.subscriptionTier || 'free'
+  );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!trainerProfile) return;
+    setDisplayName(trainerProfile.displayName);
+    setBio(trainerProfile.bio);
+    setSpecialtiesStr(trainerProfile.specialties.join(', '));
+    setCertificationsStr(trainerProfile.certifications.join(', '));
+    setAcceptingClients(trainerProfile.acceptingClients);
+    setSelectedTier(trainerProfile.subscriptionTier);
+  }, [trainerProfile]);
+
+  const activeClientsCount = clients.filter(
+    (c) => c.relationship.status === 'active' && !c.relationship.isArchived
+  ).length;
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authUser) return;
+    setSaving(true);
+    try {
+      const res = await upsertTrainerProfile({
+        userId: authUser.id,
+        displayName,
+        bio,
+        specialties: specialtiesStr
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        certifications: certificationsStr
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        acceptingClients,
+        subscriptionTier: selectedTier,
+      });
+      if (!res.ok) {
+        notify(res.error || 'Could not update trainer profile', 'error');
+        return;
+      }
+      await refreshAll();
+      notify('Trainer profile & plan settings saved');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <section>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Coach profile details, client capacity tiers, and workspace mode
+        </p>
+        <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          Coach Profile & Subscription Architecture
+        </h1>
+      </section>
+
+      <form
+        onSubmit={handleSave}
+        className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
+      >
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <UserCheck className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+          Trainer Profile
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Coach Display Name
+            </label>
+            <input
+              type="text"
+              required
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Specialties (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={specialtiesStr}
+              onChange={(e) => setSpecialtiesStr(e.target.value)}
+              placeholder="Fat Loss, Body Recomposition, Indian Macros"
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+            Coaching Bio (shown on client invitations)
+          </label>
+          <textarea
+            rows={3}
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="Describe your coaching philosophy and weekly check-in cadence..."
+            className="w-full p-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Certifications (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={certificationsStr}
+              onChange={(e) => setCertificationsStr(e.target.value)}
+              placeholder="CSCS, Precision Nutrition L1"
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          <label className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/60 dark:bg-slate-900 cursor-pointer mt-4 sm:mt-0">
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+              Accepting New Client Invitations
+            </span>
+            <input
+              type="checkbox"
+              checked={acceptingClients}
+              onChange={(e) => setAcceptingClients(e.target.checked)}
+              className="w-4 h-4 accent-lime-500"
+            />
+          </label>
+        </div>
+
+        {/* Subscription Architecture (No payment processing yet) */}
+        <div className="pt-4 border-t border-stone-100 dark:border-slate-800 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+                Trainer Subscription Tier Architecture
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Enforces client capacity ({activeClientsCount} active) and analytics history. Billing checkout is deferred for future release.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {(['free', 'pro', 'premium'] as TrainerSubscriptionTier[]).map((tierKey) => {
+              const plan = TRAINER_SUBSCRIPTION_PLANS[tierKey];
+              const active = selectedTier === tierKey;
+              return (
+                <button
+                  key={tierKey}
+                  type="button"
+                  onClick={() => setSelectedTier(tierKey)}
+                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-3 ${
+                    active
+                      ? 'border-lime-500 bg-lime-50/60 dark:bg-lime-950/20 ring-1 ring-lime-500'
+                      : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {plan.name}
+                      </span>
+                      {active && <Check className="w-4 h-4 text-lime-600 dark:text-lime-400" />}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      {plan.tagline}
+                    </p>
+                  </div>
+
+                  <ul className="space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+                    {plan.features.map((feat, i) => (
+                      <li key={i}>• {feat}</li>
+                    ))}
+                  </ul>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={saving}
+            className="min-h-[44px] px-6 rounded-xl bg-lime-500 hover:bg-lime-400 text-slate-950 text-sm font-bold inline-flex items-center gap-2 disabled:opacity-60"
+          >
+            <Check className="w-4 h-4" />
+            {saving ? 'Saving...' : 'Save Coach Settings'}
+          </button>
+        </div>
+      </form>
+
+      {/* Role Switcher */}
+      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Shield className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Switch to Personal User Tracker
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Switch this account back to the Normal User meal-logging and personal goal dashboard anytime. Your trainer roster remains saved in the database.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void selectAccountRole('individual')}
+          className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 whitespace-nowrap shrink-0"
+        >
+          Switch to Normal User
+        </button>
+      </section>
+    </div>
+  );
+};

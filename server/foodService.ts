@@ -221,9 +221,13 @@ async function searchOpenFoodFacts(query: string, country?: string): Promise<{
   error?: string;
 }> {
   try {
-    const url = new URL('https://world.openfoodfacts.org/api/v2/search');
+    const isIndia = country?.toLowerCase() === 'india';
+    const baseDomain = isIndia
+      ? 'https://in.openfoodfacts.org/api/v2/search'
+      : 'https://world.openfoodfacts.org/api/v2/search';
+    const url = new URL(baseDomain);
     url.searchParams.set('search_terms', query);
-    url.searchParams.set('page_size', '12');
+    url.searchParams.set('page_size', '14');
     url.searchParams.set(
       'fields',
       'code,product_name,product_name_en,brands,countries,categories,ingredients_text,ingredients_text_en,serving_size,serving_quantity,nutriments'
@@ -247,7 +251,12 @@ async function searchOpenFoodFacts(query: string, country?: string): Promise<{
     const products = Array.isArray(json.products) ? json.products : [];
     const normalized = products
       .map(normalizeOpenFoodFactsProduct)
-      .filter((x): x is FoodItem => x !== null);
+      .filter((x): x is FoodItem => x !== null)
+      .map((item) =>
+        isIndia && (!item.country || item.country === 'International')
+          ? { ...item, country: 'India', sourceName: 'Open Food Facts India' }
+          : item
+      );
     return { items: normalized };
   } catch (err) {
     return {
@@ -255,6 +264,35 @@ async function searchOpenFoodFacts(query: string, country?: string): Promise<{
       error: err instanceof Error ? err.message : 'Open Food Facts request timed out',
     };
   }
+}
+
+async function fetchOpenFoodFactsProductFromHost(
+  host: string,
+  cleanCode: string
+): Promise<{ item: FoodItem | null; error?: string }> {
+  const url = `${host}/api/v2/product/${encodeURIComponent(cleanCode)}.json?fields=code,product_name,product_name_en,brands,countries,categories,ingredients_text,ingredients_text_en,serving_size,serving_quantity,nutriments`;
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'CALOTHRIX-MacroLog/1.0 (nutrition-tracker)',
+      Accept: 'application/json',
+    },
+    signal: AbortSignal.timeout(5500),
+  });
+  if (!res.ok) {
+    return { item: null, error: `Open Food Facts barcode lookup failed (${res.status})` };
+  }
+  const json = (await res.json()) as { status?: number; product?: Record<string, unknown> };
+  if (json.status !== 1 || !json.product) {
+    return { item: null };
+  }
+  const normalized = normalizeOpenFoodFactsProduct(json.product);
+  if (normalized && host.includes('in.openfoodfacts.org')) {
+    normalized.sourceName = 'Open Food Facts India';
+    if (!normalized.country || normalized.country === 'International') {
+      normalized.country = 'India';
+    }
+  }
+  return { item: normalized };
 }
 
 export async function lookupBarcodeFromOpenFoodFacts(barcode: string): Promise<{
@@ -272,26 +310,24 @@ export async function lookupBarcodeFromOpenFoodFacts(barcode: string): Promise<{
     return { item: cached.value };
   }
 
+  const isIndianGs1 = cleanCode.startsWith('890');
+  const hosts = isIndianGs1
+    ? ['https://in.openfoodfacts.org', 'https://world.openfoodfacts.org']
+    : ['https://world.openfoodfacts.org', 'https://in.openfoodfacts.org'];
+
   try {
-    const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(cleanCode)}.json?fields=code,product_name,product_name_en,brands,countries,categories,ingredients_text,ingredients_text_en,serving_size,serving_quantity,nutriments`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'CALOTHRIX-MacroLog/1.0 (nutrition-tracker)',
-        Accept: 'application/json',
-      },
-      signal: AbortSignal.timeout(5500),
-    });
-    if (!res.ok) {
-      return { item: null, error: `Open Food Facts barcode lookup failed (${res.status})` };
+    let lastError: string | undefined;
+    for (const host of hosts) {
+      const res = await fetchOpenFoodFactsProductFromHost(host, cleanCode);
+      if (res.item) {
+        BARCODE_CACHE.set(cleanCode, { value: res.item, expiresAt: Date.now() + CACHE_TTL_MS });
+        return { item: res.item };
+      }
+      if (res.error) lastError = res.error;
     }
-    const json = (await res.json()) as { status?: number; product?: Record<string, unknown> };
-    if (json.status !== 1 || !json.product) {
-      BARCODE_CACHE.set(cleanCode, { value: null, expiresAt: Date.now() + CACHE_TTL_MS });
-      return { item: null };
-    }
-    const normalized = normalizeOpenFoodFactsProduct(json.product);
-    BARCODE_CACHE.set(cleanCode, { value: normalized, expiresAt: Date.now() + CACHE_TTL_MS });
-    return { item: normalized };
+
+    BARCODE_CACHE.set(cleanCode, { value: null, expiresAt: Date.now() + CACHE_TTL_MS });
+    return { item: null, error: lastError };
   } catch (err) {
     return {
       item: null,

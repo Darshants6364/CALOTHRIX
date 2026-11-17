@@ -119,6 +119,7 @@ export interface FoodLogEntry extends MacroNutrients {
 }
 
 export type GoalPreset = 'fat_loss' | 'maintenance' | 'muscle_gain' | 'recomposition' | 'custom';
+export type GoalSpeed = 'slow' | 'moderate' | 'aggressive';
 
 export interface NutritionGoals {
   userId: string;
@@ -131,6 +132,9 @@ export interface NutritionGoals {
   targetWeightKg?: number;
   estimatedBmr?: number;
   estimatedTdee?: number;
+  bmi?: number;
+  goalSpeed?: GoalSpeed;
+  estimatedWeeks?: number | null;
   updatedAt: string;
 }
 
@@ -190,9 +194,11 @@ export interface UserProfile {
   workoutFrequencyPerWeek: number;
   workoutIntensity: WorkoutIntensity;
   fitnessGoal: FitnessGoalType;
+  goalSpeed?: GoalSpeed;
   dietaryPreference: DietaryPreference;
   foodRestrictions: FoodRestriction[];
   accountRole: AccountRole;
+  roleSelected?: boolean;
   isDemoProfile: boolean;
 }
 
@@ -231,14 +237,75 @@ export type NavTab =
   | 'goals'
   | 'profile';
 
+export type TrainerNavTab =
+  | 'overview'
+  | 'clients'
+  | 'client-detail'
+  | 'analytics'
+  | 'settings';
+
 export interface ToastMessage {
   id: string;
   type: 'success' | 'info' | 'error';
   message: string;
 }
 
-// Future-ready Trainer Architecture Types (Feature flag disabled until separate launch)
-export const ENABLE_TRAINER_PORTAL = false;
+// Trainer Portal Enabled
+export const ENABLE_TRAINER_PORTAL = true;
+
+export type TrainerSubscriptionTier = 'free' | 'pro' | 'premium';
+
+export const TRAINER_SUBSCRIPTION_PLANS: Record<
+  TrainerSubscriptionTier,
+  {
+    id: TrainerSubscriptionTier;
+    name: string;
+    maxClients: number | null; // null = unlimited
+    maxAnalyticsDays: number;
+    tagline: string;
+    features: string[];
+  }
+> = {
+  free: {
+    id: 'free',
+    name: 'Starter Coach (Free)',
+    maxClients: 5,
+    maxAnalyticsDays: 30,
+    tagline: 'Core client coaching & 30-day compliance tracking',
+    features: [
+      'Up to 5 active clients',
+      'Email & shareable invite links',
+      '7-day & 30-day client nutrition charts',
+      'Private coach notes & target proposals',
+    ],
+  },
+  pro: {
+    id: 'pro',
+    name: 'Pro Coach',
+    maxClients: 25,
+    maxAnalyticsDays: 90,
+    tagline: 'Extended 90-day analytics & structured weekly check-ins',
+    features: [
+      'Up to 25 active clients',
+      '90-day & custom date-range analytics',
+      'Weekly check-in feedback workflow',
+      'Multi-client compliance comparison',
+    ],
+  },
+  premium: {
+    id: 'premium',
+    name: 'Studio & Elite (Premium)',
+    maxClients: null,
+    maxAnalyticsDays: 365,
+    tagline: 'Unlimited coaching roster & full-year client telemetry',
+    features: [
+      'Unlimited active clients',
+      'Full historical & custom date-range analytics',
+      'Cohort adherence benchmarking',
+      'Ready for team & billing integrations',
+    ],
+  },
+};
 
 export interface TrainerProfile {
   userId: string;
@@ -247,6 +314,8 @@ export interface TrainerProfile {
   specialties: string[];
   certifications: string[];
   acceptingClients: boolean;
+  subscriptionTier: TrainerSubscriptionTier;
+  maxClients: number;
   createdAt: string;
 }
 
@@ -255,21 +324,31 @@ export interface TrainerClientRelationship {
   trainerId: string;
   clientId: string;
   status: 'pending' | 'active' | 'revoked';
+  canViewProfile: boolean;
   canViewNutrition: boolean;
   canViewWeight: boolean;
   canViewGoals: boolean;
   canAddNotes: boolean;
+  canManageGoals: boolean;
+  isArchived: boolean;
   authorizedAt?: string;
   createdAt: string;
+  trainerProfile?: Partial<TrainerProfile>;
 }
 
 export interface ClientInvitation {
   id: string;
   trainerId: string;
   clientEmail: string;
+  clientName?: string;
+  inviteToken: string;
+  message?: string;
   status: 'pending' | 'accepted' | 'declined' | 'expired';
   expiresAt: string;
   createdAt: string;
+  trainerName?: string;
+  trainerBio?: string;
+  trainerSpecialties?: string[];
 }
 
 export interface TrainerNote {
@@ -293,6 +372,110 @@ export interface WeeklyClientCheckin {
   trainerFeedback?: string;
   status: 'submitted' | 'reviewed';
   createdAt: string;
+}
+
+export interface TargetRecommendation {
+  id: string;
+  trainerId: string;
+  clientId: string;
+  trainerName?: string;
+  recommendedCalories: number;
+  recommendedProtein: number;
+  recommendedCarbs: number;
+  recommendedFat: number;
+  recommendedFibre: number;
+  recommendedTargetWeightKg?: number;
+  rationale: string;
+  status: 'pending' | 'approved' | 'declined';
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+export interface MealGuidelineItem {
+  mealType: MealCategory;
+  targetCalories: number;
+  targetProtein: number;
+  guidance: string;
+}
+
+export interface TrainerClientPlan {
+  id: string;
+  trainerId: string;
+  clientId: string;
+  trainerName?: string;
+  phaseTitle: string;
+  coachSummary: string;
+  dailyWaterGoalMl: number;
+  dailyStepsTarget: number;
+  mealGuidelines: MealGuidelineItem[];
+  actionItems: string[];
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface AnalyzedMealItem {
+  name: string;
+  estimatedQuantityDescription: string;
+  estimatedGrams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fibre: number;
+  notes?: string;
+}
+
+export interface MealAiAnalysisResult {
+  mealTitle: string;
+  detectedDescription: string;
+  suggestedMealType: MealCategory;
+  confidence: 'high' | 'moderate' | 'low';
+  items: AnalyzedMealItem[];
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  totalFibre: number;
+  nutritionTip: string;
+}
+
+export interface AiMealScanRecord {
+  id: string;
+  userId: string;
+  inputMode: 'photo' | 'voice' | 'text';
+  mealType: MealCategory;
+  mealTitle: string;
+  transcriptOrNotes?: string;
+  detectedItems: AnalyzedMealItem[];
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  totalFibre: number;
+  confidence: 'high' | 'moderate' | 'low';
+  nutritionTip?: string;
+  imageStoragePath?: string;
+  loggedToDiary: boolean;
+  createdAt: string;
+}
+
+export interface TrainerClientSnapshot {
+  relationship: TrainerClientRelationship;
+  profile: {
+    userId: string;
+    name: string;
+    email?: string;
+    avatarUrl?: string;
+    age: number;
+    heightCm: number;
+    currentWeightKg: number;
+    targetWeightKg: number;
+    fitnessGoal: FitnessGoalType;
+    goalSpeed?: GoalSpeed;
+  } | null;
+  goals: NutritionGoals | null;
+  foodEntries: FoodLogEntry[];
+  weightEntries: WeightEntry[];
 }
 
 export interface WeeklySummaryResult {

@@ -11,13 +11,57 @@ import {
 } from './server/foodService.ts';
 import { GLOBAL_REFERENCE_FOODS } from './src/data/globalReferenceFoods.ts';
 
+import {
+  calculateSmartFitnessTargets,
+  validateCalculatorInput,
+} from './src/utils/fitnessCalculator.ts';
+import {
+  analyzeMealWithGemini,
+  type AnalyzeMealInputMode,
+} from './server/mealAiService.ts';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
-  app.use(express.json({ limit: '512kb' }));
+  app.use(express.json({ limit: '12mb' }));
+
+  // Production health check
+  app.get('/api/health', (_req, res) => {
+    const foodStatus = getExternalFoodSourceStatus();
+    res.json({
+      ok: true,
+      service: 'calothrix',
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+      integrations: {
+        usdaFdcConfigured: foodStatus.usdaFdc.configured,
+        openFoodFacts: true,
+        ifct2017: true,
+      },
+    });
+  });
+
+  // Backend Personalized Fitness Goal & Macro Calculator API
+  app.post('/api/goals/calculate', (req, res) => {
+    try {
+      const validation = validateCalculatorInput(req.body || {});
+      if (!validation.valid || !validation.sanitized) {
+        return res.status(400).json({
+          error: validation.errors[0] || 'Invalid fitness calculator inputs.',
+          errors: validation.errors,
+        });
+      }
+      const result = calculateSmartFitnessTargets(validation.sanitized);
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to calculate goals',
+      });
+    }
+  });
 
   // External Food Database Status & Attribution
   app.get('/api/foods/status', (_req, res) => {
@@ -113,6 +157,48 @@ async function startServer() {
       items: ranked.slice(0, 20),
       sourceMeta: searchRes.sourceMeta,
     });
+  });
+
+  // Multimodal AI Meal Photo, Voice & Description Analyzer (Gemini 4)
+  app.post('/api/ai/analyze-meal', async (req, res) => {
+    try {
+      const body = (req.body || {}) as {
+        mode?: string;
+        mimeType?: string;
+        mediaBase64?: string;
+        promptText?: string;
+        mealHint?: string;
+      };
+
+      const mode: AnalyzeMealInputMode =
+        body.mode === 'voice' || body.mode === 'text' ? body.mode : 'photo';
+
+      if (mode === 'text' && !(body.promptText || '').trim()) {
+        return res.status(400).json({ error: 'Please describe what you ate.' });
+      }
+
+      const result = await analyzeMealWithGemini({
+        mode,
+        mimeType: body.mimeType,
+        mediaBase64: body.mediaBase64,
+        promptText: body.promptText,
+        mealHint: body.mealHint as
+          | 'breakfast'
+          | 'lunch'
+          | 'evening_snacks'
+          | 'dinner'
+          | 'other'
+          | undefined,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number; status?: number };
+      const status = e.statusCode || e.status || 500;
+      return res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: e.message || 'Meal analysis failed.',
+      });
+    }
   });
 
   // Weekly AI Progress Summary (Supabase Edge Function with deterministic fallback)

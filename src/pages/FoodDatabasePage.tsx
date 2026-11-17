@@ -57,6 +57,7 @@ export const FoodDatabasePage: React.FC = () => {
     allFoods,
     selectedDate,
     openAddFoodModal,
+    openBarcodeScannerModal,
     addCustomFood,
     updateCustomFood,
     deleteCustomFood,
@@ -286,17 +287,28 @@ export const FoodDatabasePage: React.FC = () => {
           </h1>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setEditingFood(undefined);
-            setCustomModalOpen(true);
-          }}
-          className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Create Custom Food
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => openBarcodeScannerModal({ date: selectedDate })}
+            className="min-h-[44px] px-4 py-2.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-lime-500 transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+          >
+            <Barcode className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+            <span>Scan Barcode</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setEditingFood(undefined);
+              setCustomModalOpen(true);
+            }}
+            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            Create Custom Food
+          </button>
+        </div>
       </section>
 
       {/* Search Bar + Smart Semantic Toggle + Filters */}
@@ -366,6 +378,20 @@ export const FoodDatabasePage: React.FC = () => {
               <option value="United States">United States</option>
               <option value="International">International</option>
             </select>
+
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedCountry((prev) => (prev === 'India' ? 'all' : 'India'))
+              }
+              className={`h-9 px-3 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap ${
+                selectedCountry === 'India'
+                  ? 'bg-lime-500 text-slate-950 border-lime-500'
+                  : 'bg-white dark:bg-[#121821] border-stone-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-lime-500'
+              }`}
+            >
+              Indian Foods (IFCT & 890…)
+            </button>
 
             <select
               value={selectedSourceType}

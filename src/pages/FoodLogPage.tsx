@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Pencil, Plus, Trash2, Utensils } from 'lucide-react';
+import { Barcode, Camera, Copy, Mic, Pencil, Plus, Trash2, Utensils } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DateStrip } from '../components/DateStrip';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
@@ -16,6 +16,8 @@ export const FoodLogPage: React.FC = () => {
     selectedDateTotals,
     openAddFoodModal,
     openEditFoodModal,
+    openMealScannerModal,
+    openBarcodeScannerModal,
     deleteFoodEntry,
     duplicateFoodEntry,
     updateFoodEntry,
@@ -65,14 +67,35 @@ export const FoodLogPage: React.FC = () => {
           </h1>
         </div>
 
-        <button
-          type="button"
-          onClick={() => openAddFoodModal({ date: selectedDate })}
-          className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Add Food
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => openBarcodeScannerModal({ date: selectedDate })}
+            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-lime-500 transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+          >
+            <Barcode className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+            <span>Barcode</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
+            className="min-h-[44px] px-4 py-2.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-lime-500 transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+          >
+            <Camera className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+            <Mic className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400 -ml-1" />
+            <span>Photo / Voice AI</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openAddFoodModal({ date: selectedDate })}
+            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            Add Food
+          </button>
+        </div>
       </section>
 
       <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} />
@@ -132,14 +155,24 @@ export const FoodLogPage: React.FC = () => {
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
             Each calendar day starts clean. Add your first meal to immediately update your calories and macros.
           </p>
-          <button
-            type="button"
-            onClick={() => openAddFoodModal({ date: selectedDate })}
-            className="mt-5 min-h-[44px] px-5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold inline-flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Log First Meal
-          </button>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => openAddFoodModal({ date: selectedDate })}
+              className="min-h-[44px] px-5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold inline-flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Log First Meal
+            </button>
+            <button
+              type="button"
+              onClick={() => openMealScannerModal({ mode: 'voice', date: selectedDate })}
+              className="min-h-[44px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-2"
+            >
+              <Mic className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+              Log with Voice or Photo
+            </button>
+          </div>
         </section>
       )}
 
