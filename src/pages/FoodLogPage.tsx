@@ -202,6 +202,12 @@ export const FoodLogPage: React.FC = () => {
                           <span>F {entry.fat}g</span>
                           <span aria-hidden="true">·</span>
                           <span>Fibre {entry.fibre}g</span>
+                          {entry.sourceName && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="text-[11px] text-slate-400">{entry.sourceName}</span>
+                            </>
+                          )}
                         </div>
                       </div>
 

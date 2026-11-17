@@ -1,4 +1,6 @@
 import React from 'react';
+import { AuthScreen } from './components/AuthScreen';
+import { CalothrixLogo } from './components/CalothrixLogo';
 import { FoodEntryModal } from './components/FoodEntryModal';
 import { Layout } from './components/Layout';
 import { ToastContainer } from './components/ToastContainer';
@@ -35,14 +37,37 @@ const MacroLogRouter: React.FC = () => {
   }
 };
 
-export default function App() {
+const AppShell: React.FC = () => {
+  const { authMode } = useMacroLogStore();
+
+  if (authMode === 'loading') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8F8F6] dark:bg-[#0B0F14] gap-4">
+        <CalothrixLogo size="md" />
+        <p className="text-xs text-slate-500 dark:text-slate-400">Loading your workspace...</p>
+      </div>
+    );
+  }
+
+  if (authMode === 'unauthenticated') {
+    return <AuthScreen />;
+  }
+
   return (
-    <MacroLogProvider>
+    <>
       <Layout>
         <MacroLogRouter />
       </Layout>
       <FoodEntryModal />
       <WeightEntryModal />
+    </>
+  );
+};
+
+export default function App() {
+  return (
+    <MacroLogProvider>
+      <AppShell />
       <ToastContainer />
     </MacroLogProvider>
   );

@@ -41,11 +41,12 @@ const TONE_MAP: Record<
 };
 
 export const MacroCard: React.FC<MacroCardProps> = ({ name, consumed, target, tone }) => {
+  const hasTarget = target > 0;
   const safeTarget = Math.max(1, target);
-  const pct = Math.min(100, Math.round((consumed / safeTarget) * 100));
-  const rawPct = Math.round((consumed / safeTarget) * 100);
-  const remaining = round1(target - consumed);
-  const isOver = remaining < 0;
+  const pct = hasTarget ? Math.min(100, Math.round((consumed / safeTarget) * 100)) : 0;
+  const rawPct = hasTarget ? Math.round((consumed / safeTarget) * 100) : 0;
+  const remaining = hasTarget ? round1(target - consumed) : 0;
+  const isOver = hasTarget && remaining < 0;
   const styles = TONE_MAP[tone];
 
   return (
@@ -74,13 +75,13 @@ export const MacroCard: React.FC<MacroCardProps> = ({ name, consumed, target, to
       </div>
 
       <div className="mt-2.5 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-        <span>{isOver ? 'Over target' : 'Remaining'}</span>
+        <span>{!hasTarget ? 'Target not set' : isOver ? 'Over target' : 'Remaining'}</span>
         <span
           className={`font-medium ${
             isOver ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'
           }`}
         >
-          {isOver ? `+${Math.abs(remaining)} g` : `${remaining} g left`}
+          {!hasTarget ? '0 g' : isOver ? `+${Math.abs(remaining)} g` : `${remaining} g left`}
         </span>
       </div>
     </div>

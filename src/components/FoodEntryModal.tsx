@@ -1,8 +1,36 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Plus, Search, Star, X } from 'lucide-react';
+import { ArrowLeft, Check, Globe, Plus, Search, Star, X } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
-import { FoodItem, MealCategory, MEAL_CATEGORIES } from '../types';
-import { calculateScaledNutrition, formatFoodQuantity } from '../utils/nutritionUtils';
+import { lookupBarcodeApi, searchGlobalFoodsApi } from '../services/globalFoodApiService';
+import {
+  FoodCategory,
+  FoodItem,
+  FoodSourceType,
+  GLOBAL_FOOD_CATEGORIES,
+  MealCategory,
+  MEAL_CATEGORIES,
+} from '../types';
+import {
+  calculateScaledNutrition,
+  formatFoodQuantity,
+  formatNutrientValue,
+} from '../utils/nutritionUtils';
+
+function getSourceTypeLabel(sourceType?: FoodSourceType, isCustom?: boolean): string {
+  if (isCustom || sourceType === 'personal_custom') return 'Personal Custom';
+  if (sourceType === 'branded') return 'Branded Product';
+  if (sourceType === 'community') return 'Community Food';
+  return 'Verified Reference';
+}
+
+const HOUSEHOLD_UNIT_PRESETS: { label: string; grams: number }[] = [
+  { label: '1 piece (50g)', grams: 50 },
+  { label: '1 tsp (5g)', grams: 5 },
+  { label: '1 tbsp (15g)', grams: 15 },
+  { label: '100g', grams: 100 },
+  { label: '1 bowl (200g)', grams: 200 },
+  { label: '1 cup (240g)', grams: 240 },
+];
 
 export const FoodEntryModal: React.FC = () => {
   const {
@@ -27,9 +55,15 @@ export const FoodEntryModal: React.FC = () => {
   const [date, setDate] = useState<string>(foodModal.targetDate);
   const [error, setError] = useState<string>('');
 
+  // Debounced live global search (Open Food Facts / USDA / IFCT)
+  const [remoteFoods, setRemoteFoods] = useState<FoodItem[]>([]);
+  const [remoteSearching, setRemoteSearching] = useState(false);
+
   // Quick custom food creation sub-view
   const [creatingCustom, setCreatingCustom] = useState(false);
   const [customName, setCustomName] = useState('');
+  const [customBrand, setCustomBrand] = useState('');
+  const [customCategory, setCustomCategory] = useState<FoodCategory>('Homemade foods');
   const [customServingName, setCustomServingName] = useState('100 g');
   const [customServingGrams, setCustomServingGrams] = useState('100');
   const [customCalories, setCustomCalories] = useState('');
@@ -45,6 +79,7 @@ export const FoodEntryModal: React.FC = () => {
     setCustomError('');
     setCreatingCustom(false);
     setSearchQuery('');
+    setRemoteFoods([]);
     setFilterTab('all');
     setMealType(editing ? editing.mealType : foodModal.initialMeal);
     setDate(editing ? editing.date : foodModal.targetDate);
@@ -62,7 +97,6 @@ export const FoodEntryModal: React.FC = () => {
         );
         setInputMode('grams');
       } else {
-        // Fallback synthetic item if custom food was deleted
         const fallback: FoodItem = {
           id: editing.foodId,
           name: editing.foodName,
@@ -75,12 +109,20 @@ export const FoodEntryModal: React.FC = () => {
           fat: editing.fat,
           fibre: editing.fibre,
           isCustom: true,
+          sourceName: editing.sourceName,
+          sourceType: editing.sourceType,
         };
         setSelectedFood(fallback);
         setQuantityGrams(String(editing.quantityGrams));
         setServingsCount('1');
         setInputMode('grams');
       }
+    } else if (foodModal.preselectedFood) {
+      const pre = foodModal.preselectedFood;
+      setSelectedFood(pre);
+      setQuantityGrams(String(pre.servingWeightGrams || 100));
+      setServingsCount('1');
+      setInputMode(pre.servingWeightGrams === 100 ? 'grams' : 'servings');
     } else if (foodModal.preselectedFoodId) {
       const matched = allFoods.find((f) => f.id === foodModal.preselectedFoodId) ?? null;
       setSelectedFood(matched);
@@ -95,14 +137,66 @@ export const FoodEntryModal: React.FC = () => {
       setServingsCount('1');
       setInputMode('grams');
     }
-  }, [foodModal.isOpen, foodModal.initialMeal, foodModal.preselectedFoodId, foodModal.targetDate, editing, allFoods]);
+  }, [
+    foodModal.isOpen,
+    foodModal.initialMeal,
+    foodModal.preselectedFoodId,
+    foodModal.preselectedFood,
+    foodModal.targetDate,
+    editing,
+    allFoods,
+  ]);
 
-  const filteredFoods = useMemo(() => {
+  // Trigger debounced global search when query >= 2 chars on 'all' tab
+  useEffect(() => {
+    if (!foodModal.isOpen || selectedFood || creatingCustom) return;
+    const q = searchQuery.trim();
+    if (q.length < 2 || filterTab !== 'all') {
+      setRemoteFoods([]);
+      setRemoteSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    setRemoteSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        if (/^\d{8,14}$/.test(q)) {
+          const bcRes = await lookupBarcodeApi(q);
+          if (!cancelled && bcRes.item) {
+            setRemoteFoods([bcRes.item]);
+            setRemoteSearching(false);
+            return;
+          }
+        }
+        const res = await searchGlobalFoodsApi({ query: q });
+        if (!cancelled) {
+          const localIds = new Set(allFoods.map((f) => f.id));
+          setRemoteFoods(res.items.filter((item) => !localIds.has(item.id)));
+        }
+      } catch {
+        if (!cancelled) setRemoteFoods([]);
+      } finally {
+        if (!cancelled) setRemoteSearching(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [allFoods, creatingCustom, filterTab, foodModal.isOpen, searchQuery, selectedFood]);
+
+  const filteredLocalFoods = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return allFoods.filter((f) => {
       const matchesQ =
         !q ||
         f.name.toLowerCase().includes(q) ||
+        (f.brand || '').toLowerCase().includes(q) ||
+        (f.country || '').toLowerCase().includes(q) ||
+        (f.barcode || '').toLowerCase().includes(q) ||
+        (f.ingredientsText || '').toLowerCase().includes(q) ||
         f.category.toLowerCase().includes(q);
       if (!matchesQ) return false;
       if (filterTab === 'favorites') return state.favoriteFoodIds.includes(f.id);
@@ -112,6 +206,12 @@ export const FoodEntryModal: React.FC = () => {
     });
   }, [allFoods, filterTab, searchQuery, state.favoriteFoodIds, state.recentFoodIds]);
 
+  const combinedFoods = useMemo(() => {
+    if (filterTab !== 'all') return filteredLocalFoods;
+    const seen = new Set(filteredLocalFoods.map((f) => f.id));
+    return [...filteredLocalFoods, ...remoteFoods.filter((r) => !seen.has(r.id))];
+  }, [filterTab, filteredLocalFoods, remoteFoods]);
+
   const effectiveGrams = useMemo(() => {
     if (!selectedFood) return 0;
     if (inputMode === 'grams') {
@@ -120,7 +220,7 @@ export const FoodEntryModal: React.FC = () => {
     }
     const parsedServings = parseFloat(servingsCount);
     return Number.isFinite(parsedServings)
-      ? parsedServings * selectedFood.servingWeightGrams
+      ? parsedServings * (selectedFood.servingWeightGrams || 100)
       : 0;
   }, [inputMode, quantityGrams, selectedFood, servingsCount]);
 
@@ -135,9 +235,9 @@ export const FoodEntryModal: React.FC = () => {
 
   const handleSelectFood = (food: FoodItem) => {
     setSelectedFood(food);
-    setQuantityGrams(String(food.servingWeightGrams));
+    setQuantityGrams(String(food.servingWeightGrams || 100));
     setServingsCount('1');
-    setInputMode(food.servingWeightGrams === 100 ? 'grams' : 'servings');
+    setInputMode((food.servingWeightGrams || 100) === 100 ? 'grams' : 'servings');
     setError('');
   };
 
@@ -203,7 +303,8 @@ export const FoodEntryModal: React.FC = () => {
 
     const created = addCustomFood({
       name,
-      category: 'Custom',
+      brand: customBrand.trim() || undefined,
+      category: customCategory,
       servingName: customServingName.trim() || `${grams} g`,
       servingWeightGrams: grams,
       calories: cal,
@@ -215,6 +316,7 @@ export const FoodEntryModal: React.FC = () => {
     setCreatingCustom(false);
     handleSelectFood(created);
     setCustomName('');
+    setCustomBrand('');
     setCustomCalories('');
     setCustomProtein('');
     setCustomCarbs('');
@@ -230,7 +332,6 @@ export const FoodEntryModal: React.FC = () => {
       aria-label={editing ? 'Edit food entry' : 'Add food to log'}
     >
       <div className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col bg-white dark:bg-[#121821] rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-slate-800 shadow-2xl overflow-hidden">
-        {/* Mobile bottom-sheet handle */}
         <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3 shrink-0" />
 
         {/* Header */}
@@ -293,6 +394,37 @@ export const FoodEntryModal: React.FC = () => {
                 placeholder="e.g., Homemade Paneer Bhurji"
                 className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                  Brand (optional)
+                </label>
+                <input
+                  type="text"
+                  value={customBrand}
+                  onChange={(e) => setCustomBrand(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                  Category
+                </label>
+                <select
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value as FoodCategory)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                >
+                  {GLOBAL_FOOD_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -423,7 +555,7 @@ export const FoodEntryModal: React.FC = () => {
                   autoFocus
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search rice, roti, banana, paneer, whey..."
+                  placeholder="Search food, brand, country or barcode..."
                   className="w-full h-11 pl-10 pr-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
@@ -458,7 +590,14 @@ export const FoodEntryModal: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto divide-y divide-stone-100 dark:divide-slate-800/70 px-2 py-1">
-              {filteredFoods.length === 0 ? (
+              {remoteSearching && (
+                <div className="px-3 py-2 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 animate-pulse text-lime-600 dark:text-lime-400" />
+                  Searching global databases (Open Food Facts, IFCT 2017, USDA)...
+                </div>
+              )}
+
+              {combinedFoods.length === 0 && !remoteSearching ? (
                 <div className="py-12 px-6 text-center">
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     No matching foods found
@@ -479,7 +618,7 @@ export const FoodEntryModal: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                filteredFoods.map((food) => {
+                combinedFoods.map((food) => {
                   const isFav = state.favoriteFoodIds.includes(food.id);
                   return (
                     <button
@@ -493,6 +632,11 @@ export const FoodEntryModal: React.FC = () => {
                           <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                             {food.name}
                           </span>
+                          {food.brand && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                              · {food.brand}
+                            </span>
+                          )}
                           {isFav && (
                             <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
                           )}
@@ -500,18 +644,30 @@ export const FoodEntryModal: React.FC = () => {
                         <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
                           <span>{food.servingName}</span>
                           <span aria-hidden="true">·</span>
-                          <span className="tabular-nums">P {food.protein}g</span>
+                          <span className="tabular-nums">
+                            P {formatNutrientValue(food, 'protein', 'g')}
+                          </span>
                           <span aria-hidden="true">·</span>
-                          <span className="tabular-nums">C {food.carbs}g</span>
+                          <span className="tabular-nums">
+                            C {formatNutrientValue(food, 'carbs', 'g')}
+                          </span>
                           <span aria-hidden="true">·</span>
-                          <span className="tabular-nums">F {food.fat}g</span>
+                          <span className="tabular-nums">
+                            F {formatNutrientValue(food, 'fat', 'g')}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-slate-400 truncate">
+                          {getSourceTypeLabel(food.sourceType, food.isCustom)}
+                          {food.sourceName ? ` · ${food.sourceName}` : ''}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
                         <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 font-mono-nums">
-                          {food.calories}
+                          {formatNutrientValue(food, 'calories')}
                         </div>
-                        <div className="text-[11px] text-slate-400">kcal</div>
+                        <div className="text-[11px] text-slate-400">
+                          {food.missingFields?.includes('calories') ? '' : 'kcal'}
+                        </div>
                       </div>
                     </button>
                   );
@@ -529,19 +685,25 @@ export const FoodEntryModal: React.FC = () => {
             )}
 
             <div className="flex items-start justify-between gap-3 pb-4 border-b border-stone-200 dark:border-slate-800">
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                   {selectedFood.name}
+                  {selectedFood.brand ? ` (${selectedFood.brand})` : ''}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Base serving: {selectedFood.servingName} ({selectedFood.calories} kcal)
+                  Base serving: {selectedFood.servingName} (
+                  {formatNutrientValue(selectedFood, 'calories', ' kcal')})
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {getSourceTypeLabel(selectedFood.sourceType, selectedFood.isCustom)}
+                  {selectedFood.sourceName ? ` · ${selectedFood.sourceName}` : ''}
                 </p>
               </div>
               {!editing && (
                 <button
                   type="button"
                   onClick={() => setSelectedFood(null)}
-                  className="text-xs font-medium text-lime-700 dark:text-lime-400 hover:underline whitespace-nowrap"
+                  className="text-xs font-medium text-lime-700 dark:text-lime-400 hover:underline whitespace-nowrap shrink-0"
                 >
                   Change food
                 </button>
@@ -559,7 +721,11 @@ export const FoodEntryModal: React.FC = () => {
                     type="button"
                     onClick={() => {
                       setInputMode('grams');
-                      setQuantityGrams(String(Math.round(effectiveGrams * 10) / 10 || selectedFood.servingWeightGrams));
+                      setQuantityGrams(
+                        String(
+                          Math.round(effectiveGrams * 10) / 10 || selectedFood.servingWeightGrams
+                        )
+                      );
                     }}
                     className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
                       inputMode === 'grams'
@@ -609,21 +775,21 @@ export const FoodEntryModal: React.FC = () => {
                 </span>
               </div>
 
-              {/* Quick preset buttons */}
-              <div className="flex flex-wrap gap-2">
+              {/* Quick preset buttons & household unit presets */}
+              <div className="flex flex-wrap gap-1.5">
                 {inputMode === 'grams'
-                  ? [50, 100, 150, 200, 250].map((g) => (
+                  ? HOUSEHOLD_UNIT_PRESETS.map((preset) => (
                       <button
-                        key={g}
+                        key={preset.label}
                         type="button"
-                        onClick={() => setQuantityGrams(String(g))}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium font-mono-nums border transition-colors ${
-                          Number(quantityGrams) === g
+                        onClick={() => setQuantityGrams(String(preset.grams))}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                          Number(quantityGrams) === preset.grams
                             ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500'
                             : 'border-stone-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
                         }`}
                       >
-                        {g} g
+                        {preset.label}
                       </button>
                     ))
                   : [0.5, 1, 1.5, 2, 3].map((srv) => (
@@ -650,32 +816,42 @@ export const FoodEntryModal: React.FC = () => {
                   Calculated nutrition
                 </span>
                 <span className="text-lg font-bold text-slate-900 dark:text-slate-100 font-mono-nums">
-                  {liveMacros.calories} kcal
+                  {selectedFood.missingFields?.includes('calories')
+                    ? 'Unavailable'
+                    : `${liveMacros.calories} kcal`}
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-2 text-center">
                 <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/70 dark:border-slate-800">
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">Protein</div>
                   <div className="text-sm font-semibold text-lime-700 dark:text-lime-400 font-mono-nums mt-0.5">
-                    {liveMacros.protein}g
+                    {selectedFood.missingFields?.includes('protein')
+                      ? 'Unavailable'
+                      : `${liveMacros.protein}g`}
                   </div>
                 </div>
                 <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/70 dark:border-slate-800">
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">Carbs</div>
                   <div className="text-sm font-semibold text-amber-700 dark:text-amber-400 font-mono-nums mt-0.5">
-                    {liveMacros.carbs}g
+                    {selectedFood.missingFields?.includes('carbs')
+                      ? 'Unavailable'
+                      : `${liveMacros.carbs}g`}
                   </div>
                 </div>
                 <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/70 dark:border-slate-800">
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">Fat</div>
                   <div className="text-sm font-semibold text-indigo-700 dark:text-indigo-400 font-mono-nums mt-0.5">
-                    {liveMacros.fat}g
+                    {selectedFood.missingFields?.includes('fat')
+                      ? 'Unavailable'
+                      : `${liveMacros.fat}g`}
                   </div>
                 </div>
                 <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/70 dark:border-slate-800">
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">Fibre</div>
                   <div className="text-sm font-semibold text-teal-700 dark:text-teal-400 font-mono-nums mt-0.5">
-                    {liveMacros.fibre}g
+                    {selectedFood.missingFields?.includes('fibre')
+                      ? 'Unavailable'
+                      : `${liveMacros.fibre}g`}
                   </div>
                 </div>
               </div>

@@ -20,6 +20,7 @@ import {
   getTodayDateKey,
   parseLocalDateKey,
 } from '../utils/dateUtils';
+import { getMultiWeekProgressSeries } from '../utils/analyticsUtils';
 import {
   convertDisplayWeightToKg,
   convertWeightToDisplay,
@@ -49,6 +50,7 @@ export const WeightPage: React.FC = () => {
     openWeightModal,
     deleteWeightEntry,
     updateWeightGoal,
+    setActiveTab,
   } = useMacroLogStore();
 
   const isDark = resolvedTheme === 'dark';
@@ -95,9 +97,11 @@ export const WeightPage: React.FC = () => {
   const previousKg = previousWeightEntry?.weightKg ?? null;
   const startingKg = weightGoal.startingWeightKg;
   const targetKg = weightGoal.targetWeightKg;
-  const totalChangeKg = round2(currentKg - startingKg);
-  const remainingToTargetKg = round2(Math.abs(targetKg - currentKg));
-  const isAtTarget = Math.abs(targetKg - currentKg) < 0.05;
+  const totalChangeKg =
+    startingKg > 0 && currentKg > 0 ? round2(currentKg - startingKg) : 0;
+  const remainingToTargetKg =
+    targetKg > 0 && currentKg > 0 ? round2(Math.abs(targetKg - currentKg)) : 0;
+  const isAtTarget = targetKg > 0 && currentKg > 0 && Math.abs(targetKg - currentKg) < 0.05;
 
   // Chart data filtered by range + 7-entry rolling weekly average trend
   const chartData = useMemo(() => {
@@ -130,6 +134,11 @@ export const WeightPage: React.FC = () => {
   const weeklyBreakdown = useMemo(
     () => getWeeklyWeightBreakdown(state.weightEntries, today, weekOffset),
     [state.weightEntries, today, weekOffset]
+  );
+
+  const fourWeekSeries = useMemo(
+    () => getMultiWeekProgressSeries(state.foodEntries, state.weightEntries, today, 4),
+    [state.foodEntries, state.weightEntries, today]
   );
 
   // History rows with change vs previous chronological entry
@@ -174,8 +183,15 @@ export const WeightPage: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              setStartInput(String(convertWeightToDisplay(weightGoal.startingWeightKg, unit)));
-              setTargetInput(String(convertWeightToDisplay(weightGoal.targetWeightKg, unit)));
+              const fallbackStart = weightGoal.startingWeightKg > 0 ? weightGoal.startingWeightKg : currentKg;
+              setStartInput(
+                fallbackStart > 0 ? String(convertWeightToDisplay(fallbackStart, unit)) : ''
+              );
+              setTargetInput(
+                weightGoal.targetWeightKg > 0
+                  ? String(convertWeightToDisplay(weightGoal.targetWeightKg, unit))
+                  : ''
+              );
               setGoalDirection(weightGoal.goalDirection);
               setEditingGoal((v) => !v);
             }}
@@ -300,7 +316,13 @@ export const WeightPage: React.FC = () => {
         <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400">Remaining</div>
           <div className="mt-1 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
-            {isAtTarget ? 'On target' : `${convertWeightToDisplay(remainingToTargetKg, unit)} ${unit}`}
+            {targetKg <= 0
+              ? 'Not set'
+              : currentKg <= 0
+              ? formatWeight(0, unit)
+              : isAtTarget
+              ? 'On target'
+              : `${convertWeightToDisplay(remainingToTargetKg, unit)} ${unit}`}
           </div>
         </div>
       </section>
@@ -366,23 +388,27 @@ export const WeightPage: React.FC = () => {
                   formatter={(value, name) => [`${value} ${unit}`, name]}
                 />
                 <Legend />
-                <ReferenceLine
-                  y={targetDisplay}
-                  stroke={targetLineColor}
-                  strokeDasharray="5 4"
-                  strokeWidth={2}
-                  label={{
-                    value: `Target (${targetDisplay} ${unit})`,
-                    position: 'insideTopRight',
-                    fontSize: 11,
-                    fill: targetLineColor,
-                  }}
-                />
-                <ReferenceLine
-                  y={startingDisplay}
-                  stroke={isDark ? '#475569' : '#94a3b8'}
-                  strokeDasharray="3 3"
-                />
+                {targetKg > 0 && (
+                  <ReferenceLine
+                    y={targetDisplay}
+                    stroke={targetLineColor}
+                    strokeDasharray="5 4"
+                    strokeWidth={2}
+                    label={{
+                      value: `Target (${targetDisplay} ${unit})`,
+                      position: 'insideTopRight',
+                      fontSize: 11,
+                      fill: targetLineColor,
+                    }}
+                  />
+                )}
+                {startingKg > 0 && (
+                  <ReferenceLine
+                    y={startingDisplay}
+                    stroke={isDark ? '#475569' : '#94a3b8'}
+                    strokeDasharray="3 3"
+                  />
+                )}
                 <Line
                   type="monotone"
                   dataKey="weight"
@@ -404,6 +430,46 @@ export const WeightPage: React.FC = () => {
             </ResponsiveContainer>
           </div>
         )}
+      </section>
+
+      {/* 4-Week Weekly Average Weight Trend */}
+      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              4-Week Average Weight Comparison
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Weekly averages help evaluate progress without day-to-day water fluctuations
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('progress')}
+            className="text-xs font-medium text-lime-700 dark:text-lime-400 hover:underline"
+          >
+            View 2–4 Week Calorie Review →
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {fourWeekSeries.map((wk) => (
+            <div
+              key={wk.weekStart}
+              className="p-3.5 rounded-xl bg-stone-50/80 dark:bg-slate-900/80 border border-stone-200/70 dark:border-slate-800"
+            >
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                Week of {wk.label}
+              </div>
+              <div className="mt-1 text-base font-bold font-mono-nums text-slate-900 dark:text-slate-100">
+                {wk.avgWeightKg !== null ? formatWeight(wk.avgWeightKg, unit) : 'No weigh-ins'}
+              </div>
+              <div className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
+                {wk.weightReadings} {wk.weightReadings === 1 ? 'entry' : 'entries'}
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* Weekly Average Weight + History Grid */}

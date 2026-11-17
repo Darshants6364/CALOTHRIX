@@ -1,24 +1,54 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Download, Monitor, Moon, RotateCcw, Sun, Trash2 } from 'lucide-react';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import {
+  Check,
+  Database,
+  Download,
+  LogOut,
+  Monitor,
+  Moon,
+  ShieldCheck,
+  Sun,
+} from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
-import { ActivityLevel, FitnessGoalType } from '../types';
+import {
+  ExternalSourceStatus,
+  fetchExternalSourceStatus,
+} from '../services/globalFoodApiService';
+import {
+  ActivityLevel,
+  BiologicalSex,
+  DietaryPreference,
+  ENABLE_TRAINER_PORTAL,
+  FitnessGoalType,
+  FoodRestriction,
+  WorkoutIntensity,
+} from '../types';
 import { convertDisplayWeightToKg, convertWeightToDisplay } from '../utils/nutritionUtils';
+
+const RESTRICTION_OPTIONS: { id: FoodRestriction; label: string }[] = [
+  { id: 'dairy_free', label: 'Dairy-free' },
+  { id: 'gluten_free', label: 'Gluten-free' },
+  { id: 'nut_free', label: 'Nut-free' },
+];
 
 export const ProfileSettingsPage: React.FC = () => {
   const {
     state,
+    authUser,
+    authDetails,
     updateProfile,
     updateSettings,
     exportData,
-    resetDemoData,
-    clearAllData,
+    signOut,
   } = useMacroLogStore();
 
   const { profile, settings } = state;
 
   const [name, setName] = useState(profile.name);
   const [age, setAge] = useState(String(profile.age));
+  const [biologicalSex, setBiologicalSex] = useState<BiologicalSex>(
+    profile.biologicalSex || 'male'
+  );
   const [heightCm, setHeightCm] = useState(String(profile.heightCm));
   const [currentWeight, setCurrentWeight] = useState(
     String(convertWeightToDisplay(profile.currentWeightKg, settings.weightUnit))
@@ -26,14 +56,28 @@ export const ProfileSettingsPage: React.FC = () => {
   const [targetWeight, setTargetWeight] = useState(
     String(convertWeightToDisplay(profile.targetWeightKg, settings.weightUnit))
   );
+  const [dailySteps, setDailySteps] = useState(String(profile.dailyAverageSteps || 7000));
+  const [workoutFrequency, setWorkoutFrequency] = useState(
+    String(profile.workoutFrequencyPerWeek ?? 3)
+  );
+  const [workoutIntensity, setWorkoutIntensity] = useState<WorkoutIntensity>(
+    profile.workoutIntensity || 'moderate'
+  );
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>(profile.activityLevel);
   const [fitnessGoal, setFitnessGoal] = useState<FitnessGoalType>(profile.fitnessGoal);
+  const [dietaryPreference, setDietaryPreference] = useState<DietaryPreference>(
+    profile.dietaryPreference || 'omnivore'
+  );
+  const [foodRestrictions, setFoodRestrictions] = useState<FoodRestriction[]>(
+    profile.foodRestrictions || []
+  );
 
-  const [confirmAction, setConfirmAction] = useState<'clear' | 'reset' | null>(null);
+  const [sourceStatus, setSourceStatus] = useState<ExternalSourceStatus | null>(null);
 
   useEffect(() => {
     setName(profile.name);
     setAge(String(profile.age));
+    setBiologicalSex(profile.biologicalSex || 'male');
     setHeightCm(String(profile.heightCm));
     setCurrentWeight(
       String(convertWeightToDisplay(profile.currentWeightKg, settings.weightUnit))
@@ -41,9 +85,30 @@ export const ProfileSettingsPage: React.FC = () => {
     setTargetWeight(
       String(convertWeightToDisplay(profile.targetWeightKg, settings.weightUnit))
     );
+    setDailySteps(String(profile.dailyAverageSteps || 7000));
+    setWorkoutFrequency(String(profile.workoutFrequencyPerWeek ?? 3));
+    setWorkoutIntensity(profile.workoutIntensity || 'moderate');
     setActivityLevel(profile.activityLevel);
     setFitnessGoal(profile.fitnessGoal);
+    setDietaryPreference(profile.dietaryPreference || 'omnivore');
+    setFoodRestrictions(profile.foodRestrictions || []);
   }, [profile, settings.weightUnit]);
+
+  useEffect(() => {
+    let mounted = true;
+    void fetchExternalSourceStatus().then((status) => {
+      if (mounted && status) setSourceStatus(status);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const toggleRestriction = (id: FoodRestriction) => {
+    setFoodRestrictions((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,34 +117,140 @@ export const ProfileSettingsPage: React.FC = () => {
     const parsedHeight = parseFloat(heightCm);
     const parsedCurrentW = parseFloat(currentWeight);
     const parsedTargetW = parseFloat(targetWeight);
+    const parsedSteps = parseInt(dailySteps, 10);
+    const parsedWorkouts = parseInt(workoutFrequency, 10);
 
     updateProfile({
       name: name.trim(),
-      age: Number.isFinite(parsedAge) && parsedAge > 0 ? parsedAge : profile.age,
+      age: Number.isFinite(parsedAge) && parsedAge >= 0 ? parsedAge : profile.age,
+      biologicalSex,
       heightCm:
-        Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : profile.heightCm,
+        Number.isFinite(parsedHeight) && parsedHeight >= 0 ? parsedHeight : profile.heightCm,
       currentWeightKg:
-        Number.isFinite(parsedCurrentW) && parsedCurrentW > 0
+        Number.isFinite(parsedCurrentW) && parsedCurrentW >= 0
           ? convertDisplayWeightToKg(parsedCurrentW, settings.weightUnit)
           : profile.currentWeightKg,
       targetWeightKg:
-        Number.isFinite(parsedTargetW) && parsedTargetW > 0
+        Number.isFinite(parsedTargetW) && parsedTargetW >= 0
           ? convertDisplayWeightToKg(parsedTargetW, settings.weightUnit)
           : profile.targetWeightKg,
+      dailyAverageSteps:
+        Number.isFinite(parsedSteps) && parsedSteps >= 0
+          ? parsedSteps
+          : profile.dailyAverageSteps,
+      workoutFrequencyPerWeek:
+        Number.isFinite(parsedWorkouts) && parsedWorkouts >= 0
+          ? parsedWorkouts
+          : profile.workoutFrequencyPerWeek,
+      workoutIntensity,
       activityLevel,
       fitnessGoal,
+      dietaryPreference,
+      foodRestrictions,
     });
   };
+
+  const displayAvatar = profile.avatarUrl || authDetails?.avatarUrl;
+  const providerLabel =
+    authDetails?.provider === 'google'
+      ? 'Google Account'
+      : authDetails?.provider === 'email'
+      ? 'Email & Password'
+      : authDetails?.provider || 'Supabase Auth';
+
+  const lastSignInFormatted = authUser?.last_sign_in_at
+    ? new Date(authUser.last_sign_in_at).toLocaleString()
+    : null;
 
   return (
     <div className="space-y-6 max-w-4xl">
       <section>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Personal details, measurement preferences, and local data backup
+          Your login details, body profile, dietary preferences, theme, and database exports
         </p>
         <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
           Profile & Settings
         </h1>
+      </section>
+
+      {/* Account & Login Details Card */}
+      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {displayAvatar ? (
+              <img
+                src={displayAvatar}
+                alt={profile.name}
+                referrerPolicy="no-referrer"
+                className="w-16 h-16 rounded-full object-cover border border-stone-200 dark:border-slate-700 shrink-0"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-lime-100 dark:bg-lime-950 text-lime-800 dark:text-lime-300 font-bold text-xl flex items-center justify-center shrink-0">
+                {profile.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {authDetails?.name || profile.name}
+                </h2>
+                <ShieldCheck className="w-4 h-4 text-lime-600 dark:text-lime-400 shrink-0" />
+              </div>
+              <p className="text-sm text-slate-600 dark:text-slate-300 truncate">
+                {authDetails?.email || profile.email}
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                <span>Signed in via {providerLabel}</span>
+                {lastSignInFormatted && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>Last sign-in: {lastSignInFormatted}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-2 whitespace-nowrap shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
+        </div>
+
+        {authUser && (
+          <div className="mt-4 pt-4 border-t border-stone-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+              <span className="text-slate-400 block">Account ID</span>
+              <span className="font-mono-nums text-slate-700 dark:text-slate-300 break-all">
+                {authUser.id}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 block">Account Role</span>
+              <span className="font-semibold capitalize text-slate-800 dark:text-slate-200">
+                {profile.accountRole || 'individual'}
+                {!ENABLE_TRAINER_PORTAL ? ' (Personal Mode)' : ''}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 block">Saved Food Entries</span>
+              <span className="font-mono-nums font-semibold text-slate-800 dark:text-slate-200">
+                {state.foodEntries.length}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 block">Saved Weight Entries</span>
+              <span className="font-mono-nums font-semibold text-slate-800 dark:text-slate-200">
+                {state.weightEntries.length}
+              </span>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Profile Form */}
@@ -87,33 +258,14 @@ export const ProfileSettingsPage: React.FC = () => {
         onSubmit={handleSaveProfile}
         className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
       >
-        <div className="flex items-center gap-4 pb-4 border-b border-stone-100 dark:border-slate-800">
-          {profile.avatarUrl ? (
-            <img
-              src={profile.avatarUrl}
-              alt={profile.name}
-              referrerPolicy="no-referrer"
-              className="w-14 h-14 rounded-full object-cover border border-stone-200 dark:border-slate-700 shrink-0"
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-full bg-lime-100 dark:bg-lime-950 text-lime-800 dark:text-lime-300 font-bold text-lg flex items-center justify-center shrink-0">
-              {profile.name.slice(0, 2).toUpperCase()}
-            </div>
-          )}
-          <div>
-            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              {profile.name}
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {state.isDemoData ? 'Demo Profile · Stored in browser localStorage' : 'Local Profile · Stored in browser localStorage'}
-            </p>
-          </div>
-        </div>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          Body, Fitness & Dietary Profile
+        </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-              Full Name
+              Display Name
             </label>
             <input
               type="text"
@@ -125,11 +277,25 @@ export const ProfileSettingsPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Biological Sex (BMR Calculation)
+            </label>
+            <select
+              value={biologicalSex}
+              onChange={(e) => setBiologicalSex(e.target.value as BiologicalSex)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+            >
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
               Age (years)
             </label>
             <input
               type="number"
-              min="12"
+              min="0"
               max="110"
               value={age}
               onChange={(e) => setAge(e.target.value)}
@@ -143,7 +309,7 @@ export const ProfileSettingsPage: React.FC = () => {
             </label>
             <input
               type="number"
-              min="90"
+              min="0"
               max="250"
               value={heightCm}
               onChange={(e) => setHeightCm(e.target.value)}
@@ -157,6 +323,7 @@ export const ProfileSettingsPage: React.FC = () => {
             </label>
             <input
               type="number"
+              min="0"
               step="0.05"
               value={currentWeight}
               onChange={(e) => setCurrentWeight(e.target.value)}
@@ -170,11 +337,55 @@ export const ProfileSettingsPage: React.FC = () => {
             </label>
             <input
               type="number"
+              min="0"
               step="0.05"
               value={targetWeight}
               onChange={(e) => setTargetWeight(e.target.value)}
               className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Daily Average Steps
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="500"
+              value={dailySteps}
+              onChange={(e) => setDailySteps(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Workouts / Week
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="14"
+              value={workoutFrequency}
+              onChange={(e) => setWorkoutFrequency(e.target.value)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Workout Intensity
+            </label>
+            <select
+              value={workoutIntensity}
+              onChange={(e) => setWorkoutIntensity(e.target.value as WorkoutIntensity)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+            >
+              <option value="light">Light</option>
+              <option value="moderate">Moderate</option>
+              <option value="vigorous">Vigorous</option>
+            </select>
           </div>
 
           <div>
@@ -189,8 +400,8 @@ export const ProfileSettingsPage: React.FC = () => {
               <option value="sedentary">Sedentary (Desk job)</option>
               <option value="light">Lightly Active (1–2 workouts/wk)</option>
               <option value="moderate">Moderately Active (3–5 workouts/wk)</option>
-              <option value="active">Active (6–7 workouts/wk)</option>
-              <option value="very_active">Very Active (Athlete / Physical job)</option>
+              <option value="active">Very Active (6–7 workouts/wk)</option>
+              <option value="very_active">Extremely Active (Athlete / Physical job)</option>
             </select>
           </div>
 
@@ -208,6 +419,47 @@ export const ProfileSettingsPage: React.FC = () => {
               <option value="muscle_gain">Muscle Gain</option>
               <option value="recomposition">Body Recomposition</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+              Dietary Preference (for Smart Suggestions)
+            </label>
+            <select
+              value={dietaryPreference}
+              onChange={(e) => setDietaryPreference(e.target.value as DietaryPreference)}
+              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+            >
+              <option value="omnivore">Omnivore (All foods)</option>
+              <option value="eggetarian">Eggetarian</option>
+              <option value="vegetarian">Vegetarian</option>
+              <option value="vegan">Vegan</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+            Food Restrictions
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {RESTRICTION_OPTIONS.map((opt) => {
+              const active = foodRestrictions.includes(opt.id);
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => toggleRestriction(opt.id)}
+                  className={`min-h-[38px] px-3.5 rounded-xl border text-xs font-medium transition-colors ${
+                    active
+                      ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500 font-semibold'
+                      : 'border-stone-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -334,14 +586,60 @@ export const ProfileSettingsPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Export & Data Reset */}
+      {/* Global Food Sources & Backend Status */}
+      {sourceStatus && (
+        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-3">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Database className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+            Global Food Sources & AI Integrations
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+              <div className="font-semibold text-slate-800 dark:text-slate-200">
+                ICMR-NIN IFCT 2017 & Reference Catalog
+              </div>
+              <div className="text-slate-500 dark:text-slate-400 mt-0.5">
+                Active · {sourceStatus.ifct2017.count} Indian & global staple foods
+              </div>
+            </div>
+            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+              <div className="font-semibold text-slate-800 dark:text-slate-200">
+                Open Food Facts API {sourceStatus.openFoodFacts.apiVersion}
+              </div>
+              <div className="text-slate-500 dark:text-slate-400 mt-0.5">
+                Active · Branded products & barcode lookup ({sourceStatus.openFoodFacts.license})
+              </div>
+            </div>
+            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+              <div className="font-semibold text-slate-800 dark:text-slate-200">
+                USDA FoodData Central API
+              </div>
+              <div className="text-slate-500 dark:text-slate-400 mt-0.5">
+                {sourceStatus.usdaFdc.configured
+                  ? 'Configured & Active (Backend API key loaded)'
+                  : `Using reference fallback · Set ${sourceStatus.usdaFdc.envVar} on server for full live catalog`}
+              </div>
+            </div>
+            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+              <div className="font-semibold text-slate-800 dark:text-slate-200">
+                Supabase AI & Deterministic Engine
+              </div>
+              <div className="text-slate-500 dark:text-slate-400 mt-0.5">
+                Semantic search & weekly summary active with deterministic fallback
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Export My Data */}
       <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
         <div>
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            Data Export & Workspace Management
+            Export Your Data
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Download your complete food and weight history, restore sample demo data, or start with a clean slate.
+            Download your personal food logs, custom foods, and weight history from the database.
           </p>
         </div>
 
@@ -363,51 +661,8 @@ export const ProfileSettingsPage: React.FC = () => {
             <Download className="w-4 h-4" />
             Export JSON
           </button>
-
-          <button
-            type="button"
-            onClick={() => setConfirmAction('reset')}
-            className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-2"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Restore Demo Data
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setConfirmAction('clear')}
-            className="min-h-[42px] px-4 rounded-xl border border-red-200 dark:border-red-900/60 text-xs font-semibold text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 inline-flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            Clear Demo Data & Start Fresh
-          </button>
         </div>
       </section>
-
-      <ConfirmDialog
-        isOpen={confirmAction !== null}
-        title={
-          confirmAction === 'clear'
-            ? 'Clear all data and start fresh?'
-            : 'Restore sample demo data?'
-        }
-        description={
-          confirmAction === 'clear'
-            ? 'This will remove all food entries, custom foods, and weight logs stored in your browser so you can start completely fresh.'
-            : 'This will replace your current local entries with the CALOTHRIX sample demo dataset.'
-        }
-        confirmLabel={confirmAction === 'clear' ? 'Clear All Data' : 'Restore Demo'}
-        destructive={confirmAction === 'clear'}
-        onConfirm={() => {
-          if (confirmAction === 'clear') {
-            clearAllData();
-          } else if (confirmAction === 'reset') {
-            resetDemoData();
-          }
-          setConfirmAction(null);
-        }}
-        onCancel={() => setConfirmAction(null)}
-      />
     </div>
   );
 };

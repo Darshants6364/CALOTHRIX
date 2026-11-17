@@ -96,7 +96,7 @@ export function getDailyGoalCompletionScore(
   totals: MacroNutrients,
   goals: NutritionGoals
 ): number {
-  if (totals.calories <= 0) return 0;
+  if (totals.calories <= 0 || goals.calories <= 0) return 0;
   const scores = [
     Math.min(1, totals.calories / Math.max(1, goals.calories)),
     Math.min(1, totals.protein / Math.max(1, goals.protein)),
@@ -189,6 +189,35 @@ export function getWeeklyWeightBreakdown(
   };
 }
 
+export function formatNutrientValue(
+  food: FoodItem,
+  field: 'calories' | 'protein' | 'carbs' | 'fat' | 'fibre',
+  unitSuffix = ''
+): string {
+  if (food.missingFields?.includes(field)) {
+    return 'Unavailable';
+  }
+  const value = food[field];
+  return `${value}${unitSuffix}`;
+}
+
+export function normalizeLegacyCategory(cat: string): string {
+  switch (cat) {
+    case 'Indian Staples':
+      return 'Indian foods';
+    case 'Protein':
+      return 'Meat and poultry';
+    case 'Grains & Carbs':
+      return 'Grains and cereals';
+    case 'Fruits & Vegetables':
+      return 'Fruits';
+    case 'Nuts & Fats':
+      return 'Nuts and seeds';
+    default:
+      return cat;
+  }
+}
+
 export function searchFoods(
   foods: FoodItem[],
   query: string,
@@ -201,6 +230,10 @@ export function searchFoods(
     const matchesQuery =
       !q ||
       food.name.toLowerCase().includes(q) ||
+      (food.brand || '').toLowerCase().includes(q) ||
+      (food.country || '').toLowerCase().includes(q) ||
+      (food.barcode || '').toLowerCase().includes(q) ||
+      (food.ingredientsText || '').toLowerCase().includes(q) ||
       food.category.toLowerCase().includes(q) ||
       food.servingName.toLowerCase().includes(q);
     if (!matchesQuery) return false;
@@ -209,6 +242,6 @@ export function searchFoods(
     if (category === 'Favorites') return favoriteIds.includes(food.id);
     if (category === 'Recent') return recentIds.includes(food.id);
     if (category === 'My Custom Foods') return food.isCustom;
-    return food.category === category;
+    return food.category === category || normalizeLegacyCategory(food.category) === category;
   });
 }

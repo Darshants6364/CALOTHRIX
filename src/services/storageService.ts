@@ -57,7 +57,7 @@ class LocalStorageRepository implements StorageRepository {
     return fresh;
   }
 
-  clearAll(preserveTheme: 'light' | 'dark' | 'system' = 'light'): MacroLogPersistedState {
+  clearAll(preserveTheme: 'light' | 'dark' | 'system' = 'dark'): MacroLogPersistedState {
     const empty = createEmptyState(preserveTheme);
     this.saveState(empty);
     return empty;

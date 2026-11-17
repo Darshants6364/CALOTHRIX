@@ -1,5 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  SlidersHorizontal,
+  Sparkles,
+} from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -16,7 +23,13 @@ import {
   YAxis,
 } from 'recharts';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
-import { MEAL_CATEGORIES } from '../types';
+import { fetchWeeklyAiSummaryApi } from '../services/globalFoodApiService';
+import { MEAL_CATEGORIES, WeeklySummaryResult } from '../types';
+import {
+  buildDeterministicWeeklySummary,
+  evaluateAdaptiveCalorieAdjustment,
+  getMultiWeekProgressSeries,
+} from '../utils/analyticsUtils';
 import {
   formatReadableDate,
   formatShortDate,
@@ -26,19 +39,23 @@ import {
   getTodayDateKey,
 } from '../utils/dateUtils';
 import {
+  convertWeightToDisplay,
+  formatWeight,
   getDailyGoalCompletionScore,
   getEntriesForDate,
   getMealBreakdown,
   isCalorieGoalAchieved,
   round1,
+  round2,
   roundCal,
+  sortWeightEntriesChronological,
   sumMacros,
 } from '../utils/nutritionUtils';
 
 type ProgressTab = 'daily' | 'weekly' | 'monthly';
 
 export const ProgressPage: React.FC = () => {
-  const { state, resolvedTheme, selectedDate } = useMacroLogStore();
+  const { state, resolvedTheme, selectedDate, updateGoals } = useMacroLogStore();
   const isDark = resolvedTheme === 'dark';
   const gridStroke = isDark ? '#1e293b' : '#e7e5e4';
   const tickColor = isDark ? '#94a3b8' : '#64748b';
@@ -53,7 +70,8 @@ export const ProgressPage: React.FC = () => {
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
 
-  const { goals, foodEntries } = state;
+  const { goals, foodEntries, weightEntries, profile, settings } = state;
+  const unit = settings.weightUnit;
   const today = getTodayDateKey();
 
   // DAILY ANALYTICS (using selectedDate)
@@ -107,11 +125,130 @@ export const ProgressPage: React.FC = () => {
       count > 0 ? roundCal(logged.reduce((s, r) => s + r.calories, 0) / count) : 0;
     const avgProtein =
       count > 0 ? round1(logged.reduce((s, r) => s + r.protein, 0) / count) : 0;
+    const avgCarbs =
+      count > 0 ? round1(logged.reduce((s, r) => s + r.carbs, 0) / count) : 0;
+    const avgFat =
+      count > 0 ? round1(logged.reduce((s, r) => s + r.fat, 0) / count) : 0;
     const avgFibre =
       count > 0 ? round1(logged.reduce((s, r) => s + r.fibre, 0) / count) : 0;
     const achievedDays = logged.filter((r) => r.achieved).length;
-    return { count, avgCalories, avgProtein, avgFibre, achievedDays };
+    return { count, avgCalories, avgProtein, avgCarbs, avgFat, avgFibre, achievedDays };
   }, [weeklyRows]);
+
+  const weekLabel = `${formatShortDate(weekDates[0])} – ${formatShortDate(weekDates[6])}`;
+
+  // 4-Week Average Weight + Nutrition Trend (Module 3)
+  const multiWeekSeries = useMemo(
+    () => getMultiWeekProgressSeries(foodEntries, weightEntries, today, 4),
+    [foodEntries, today, weightEntries]
+  );
+
+  const adaptiveSuggestion = useMemo(
+    () =>
+      evaluateAdaptiveCalorieAdjustment({
+        foodEntries,
+        weightEntries,
+        goals,
+        profile,
+        todayKey: today,
+      }),
+    [foodEntries, goals, profile, today, weightEntries]
+  );
+
+  // Weekly AI Summary (Module 4.3)
+  const deterministicWeeklyFallback = useMemo(
+    () =>
+      buildDeterministicWeeklySummary({
+        weekLabel,
+        avgCalories: weeklySummary.avgCalories,
+        targetCalories: goals.calories,
+        avgProtein: weeklySummary.avgProtein,
+        targetProtein: goals.protein,
+        avgCarbs: weeklySummary.avgCarbs,
+        avgFat: weeklySummary.avgFat,
+        avgFibre: weeklySummary.avgFibre,
+        targetFibre: goals.fibre,
+        loggedDays: weeklySummary.count,
+        weightEntries,
+        weekDates,
+        consistencyPct: Math.round((weeklySummary.count / 7) * 100),
+      }),
+    [
+      goals.calories,
+      goals.fibre,
+      goals.protein,
+      weekDates,
+      weekLabel,
+      weeklySummary,
+      weightEntries,
+    ]
+  );
+
+  const [aiWeeklySummary, setAiWeeklySummary] = useState<WeeklySummaryResult>(
+    deterministicWeeklyFallback
+  );
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const refreshWeeklyAiSummary = async () => {
+    setAiLoading(true);
+    try {
+      const sortedWeekWeights = sortWeightEntriesChronological(
+        weightEntries.filter((w) => w.date >= weekDates[0] && w.date <= weekDates[6]),
+        'asc'
+      );
+      const weightChangeKg =
+        sortedWeekWeights.length >= 2
+          ? round2(
+              sortedWeekWeights[sortedWeekWeights.length - 1].weightKg -
+                sortedWeekWeights[0].weightKg
+            )
+          : null;
+
+      const remote = await fetchWeeklyAiSummaryApi({
+        weekLabel,
+        avgCalories: weeklySummary.avgCalories,
+        targetCalories: goals.calories,
+        avgProtein: weeklySummary.avgProtein,
+        targetProtein: goals.protein,
+        avgCarbs: weeklySummary.avgCarbs,
+        avgFat: weeklySummary.avgFat,
+        avgFibre: weeklySummary.avgFibre,
+        targetFibre: goals.fibre,
+        loggedDays: weeklySummary.count,
+        weightChangeKg,
+        consistencyPct: Math.round((weeklySummary.count / 7) * 100),
+      });
+      setAiWeeklySummary(remote ?? deterministicWeeklyFallback);
+    } catch {
+      setAiWeeklySummary(deterministicWeeklyFallback);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setAiWeeklySummary(deterministicWeeklyFallback);
+  }, [deterministicWeeklyFallback]);
+
+  const handleApplyAdaptiveTarget = () => {
+    if (!adaptiveSuggestion.suggestedTargetCalories) return;
+    const newCal = adaptiveSuggestion.suggestedTargetCalories;
+    const proteinCals = goals.protein * 4;
+    const fatCals = goals.fat * 9;
+    const newCarbs = Math.max(40, Math.round((newCal - proteinCals - fatCals) / 4));
+    const syncedCalories = goals.protein * 4 + newCarbs * 4 + goals.fat * 9;
+    updateGoals({
+      preset: goals.preset,
+      calories: syncedCalories,
+      protein: goals.protein,
+      carbs: newCarbs,
+      fat: goals.fat,
+      fibre: goals.fibre,
+      targetWeightKg: goals.targetWeightKg,
+      estimatedBmr: goals.estimatedBmr,
+      estimatedTdee: adaptiveSuggestion.observedTdee ?? goals.estimatedTdee,
+    });
+  };
 
   // MONTHLY ANALYTICS
   const monthInfo = useMemo(() => getCalendarMonthDates(monthOffset), [monthOffset]);
@@ -134,7 +271,6 @@ export const ProgressPage: React.FC = () => {
   }, [foodEntries, goals, monthInfo.dates]);
 
   const monthlySummary = useMemo(() => {
-    // Only count days up to today if viewing current month for consistency denominator
     const elapsedDays = monthInfo.dates.filter((d) => d <= today).length;
     const logged = monthlyRows.filter((r) => r.hasEntries);
     const count = logged.length;
@@ -179,7 +315,7 @@ export const ProgressPage: React.FC = () => {
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Analytics from your logged entries
+            Target vs actual adherence, weekly weight trends, and smart insights
           </p>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             Nutrition Progress
@@ -218,21 +354,55 @@ export const ProgressPage: React.FC = () => {
 
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {[
-              { label: 'Calories', val: `${dailyTotals.calories} kcal`, sub: `Target ${goals.calories}` },
-              { label: 'Protein', val: `${dailyTotals.protein} g`, sub: `Target ${goals.protein} g` },
-              { label: 'Carbs', val: `${dailyTotals.carbs} g`, sub: `Target ${goals.carbs} g` },
-              { label: 'Fat', val: `${dailyTotals.fat} g`, sub: `Target ${goals.fat} g` },
-              { label: 'Fibre', val: `${dailyTotals.fibre} g`, sub: `Target ${goals.fibre} g` },
+              {
+                label: 'Calories',
+                val: `${dailyTotals.calories} kcal`,
+                sub: `Target ${goals.calories}`,
+                pct: goals.calories > 0 ? Math.min(100, Math.round((dailyTotals.calories / goals.calories) * 100)) : 0,
+              },
+              {
+                label: 'Protein',
+                val: `${dailyTotals.protein} g`,
+                sub: `Target ${goals.protein} g`,
+                pct: goals.protein > 0 ? Math.min(100, Math.round((dailyTotals.protein / goals.protein) * 100)) : 0,
+              },
+              {
+                label: 'Carbs',
+                val: `${dailyTotals.carbs} g`,
+                sub: `Target ${goals.carbs} g`,
+                pct: goals.carbs > 0 ? Math.min(100, Math.round((dailyTotals.carbs / goals.carbs) * 100)) : 0,
+              },
+              {
+                label: 'Fat',
+                val: `${dailyTotals.fat} g`,
+                sub: `Target ${goals.fat} g`,
+                pct: goals.fat > 0 ? Math.min(100, Math.round((dailyTotals.fat / goals.fat) * 100)) : 0,
+              },
+              {
+                label: 'Fibre',
+                val: `${dailyTotals.fibre} g`,
+                sub: `Target ${goals.fibre} g`,
+                pct: goals.fibre > 0 ? Math.min(100, Math.round((dailyTotals.fibre / goals.fibre) * 100)) : 0,
+              },
             ].map((kpi) => (
               <div
                 key={kpi.label}
                 className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4"
               >
-                <div className="text-xs text-slate-500 dark:text-slate-400">{kpi.label}</div>
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                  <span>{kpi.label}</span>
+                  <span className="tabular-nums">{kpi.pct}%</span>
+                </div>
                 <div className="mt-1 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
                   {kpi.val}
                 </div>
                 <div className="mt-0.5 text-[11px] text-slate-400 tabular-nums">{kpi.sub}</div>
+                <div className="mt-2 h-1.5 rounded-full bg-stone-100 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full bg-lime-500 rounded-full transition-all"
+                    style={{ width: `${kpi.pct}%` }}
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -267,7 +437,7 @@ export const ProgressPage: React.FC = () => {
         <div className="space-y-5">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              {formatShortDate(weekDates[0])} – {formatShortDate(weekDates[6])}
+              {weekLabel}
             </h2>
             <div className="flex items-center gap-1.5">
               <button
@@ -306,7 +476,7 @@ export const ProgressPage: React.FC = () => {
                 {weeklySummary.avgCalories.toLocaleString()} kcal
               </div>
               <div className="mt-0.5 text-[11px] text-slate-400">
-                Across {weeklySummary.count} logged days
+                Target {goals.calories.toLocaleString()} · {weeklySummary.count} logged days
               </div>
             </div>
             <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
@@ -332,6 +502,173 @@ export const ProgressPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Weekly AI Progress Summary + Optional 2-4 Week Adaptive Adjustment */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            {/* Weekly AI Progress Summary (Module 4.3) */}
+            <div className="lg:col-span-7 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+                    Weekly Progress Summary
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {aiWeeklySummary.provider === 'supabase_ai'
+                      ? 'Generated via Supabase AI Edge Function'
+                      : 'Deterministic analytics from your logged intake & weight'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void refreshWeeklyAiSummary()}
+                  disabled={aiLoading}
+                  className="min-h-[34px] px-3 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${aiLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
+
+              <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                {aiWeeklySummary.headline}
+              </div>
+
+              {aiWeeklySummary.highlights.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-lime-700 dark:text-lime-400 mb-1">
+                    Highlights
+                  </div>
+                  <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                    {aiWeeklySummary.highlights.map((item, idx) => (
+                      <li key={idx}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {aiWeeklySummary.areasToImprove.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-1">
+                    Areas to Improve
+                  </div>
+                  <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                    {aiWeeklySummary.areasToImprove.map((item, idx) => (
+                      <li key={idx}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {aiWeeklySummary.practicalSuggestions.length > 0 && (
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                    Practical Suggestions
+                  </div>
+                  <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                    {aiWeeklySummary.practicalSuggestions.map((item, idx) => (
+                      <li key={idx}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* 2–4 Week Optional Calorie Adjustment Advisor (Module 3) */}
+            <div className="lg:col-span-5 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 flex flex-col justify-between gap-4">
+              <div className="space-y-2.5">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+                  2–4 Week Adaptive Review
+                </h3>
+                <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  {adaptiveSuggestion.headline}
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {adaptiveSuggestion.rationale}
+                </p>
+
+                {adaptiveSuggestion.hasSufficientData && adaptiveSuggestion.observedTdee && (
+                  <div className="pt-2 grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                        Observed Maintenance
+                      </span>
+                      <span className="font-mono-nums font-bold text-slate-900 dark:text-slate-100">
+                        {adaptiveSuggestion.observedTdee.toLocaleString()} kcal
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                        Avg Weight Trend
+                      </span>
+                      <span className="font-mono-nums font-bold text-slate-900 dark:text-slate-100">
+                        {adaptiveSuggestion.avgWeeklyWeightChangeKg !== null
+                          ? `${adaptiveSuggestion.avgWeeklyWeightChangeKg > 0 ? '+' : ''}${convertWeightToDisplay(
+                              adaptiveSuggestion.avgWeeklyWeightChangeKg,
+                              unit
+                            )} ${unit}/wk`
+                          : '—'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {adaptiveSuggestion.suggestedTargetCalories ? (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleApplyAdaptiveTarget}
+                    className="w-full min-h-[42px] px-4 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" />
+                    Apply {adaptiveSuggestion.suggestedTargetCalories.toLocaleString()} kcal Target
+                  </button>
+                  <p className="text-[11px] text-slate-400 text-center">
+                    Targets only change when you confirm.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400">
+                  Targets are never modified automatically without your confirmation.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 4-Week Weekly Average Weight & Calorie Table */}
+          <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                4-Week Progress Overview (Weekly Average Weight & Intake)
+              </h3>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Smooths daily weigh-in fluctuations
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {multiWeekSeries.map((wk) => (
+                <div
+                  key={wk.weekStart}
+                  className="p-3.5 rounded-xl bg-stone-50/80 dark:bg-slate-900/80 border border-stone-200/70 dark:border-slate-800"
+                >
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Wk of {wk.label}
+                  </div>
+                  <div className="mt-1 text-base font-bold font-mono-nums text-slate-900 dark:text-slate-100">
+                    {wk.avgWeightKg !== null ? formatWeight(wk.avgWeightKg, unit) : 'No weigh-ins'}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
+                    {wk.loggedFoodDays > 0
+                      ? `${wk.avgCalories.toLocaleString()} kcal/d · ${wk.avgProtein}g P`
+                      : '0 food days'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">
@@ -348,12 +685,14 @@ export const ProgressPage: React.FC = () => {
                       formatter={(val) => [`${val} kcal`, 'Calories']}
                       labelFormatter={(_, payload) => payload?.[0]?.payload?.shortDate || ''}
                     />
-                    <ReferenceLine
-                      y={goals.calories}
-                      stroke="#84cc16"
-                      strokeDasharray="4 4"
-                      label={{ value: 'Goal', position: 'right', fontSize: 11, fill: '#84cc16' }}
-                    />
+                    {goals.calories > 0 && (
+                      <ReferenceLine
+                        y={goals.calories}
+                        stroke="#84cc16"
+                        strokeDasharray="4 4"
+                        label={{ value: 'Goal', position: 'right', fontSize: 11, fill: '#84cc16' }}
+                      />
+                    )}
                     <Bar dataKey="calories" fill="#84cc16" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -375,7 +714,9 @@ export const ProgressPage: React.FC = () => {
                       formatter={(val) => [`${val} g`, 'Protein']}
                       labelFormatter={(_, payload) => payload?.[0]?.payload?.shortDate || ''}
                     />
-                    <ReferenceLine y={goals.protein} stroke="#22c55e" strokeDasharray="4 4" />
+                    {goals.protein > 0 && (
+                      <ReferenceLine y={goals.protein} stroke="#22c55e" strokeDasharray="4 4" />
+                    )}
                     <Bar dataKey="protein" fill="#22c55e" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -426,7 +767,9 @@ export const ProgressPage: React.FC = () => {
                     <XAxis dataKey="label" tick={{ fontSize: 12, fill: tickColor }} stroke={gridStroke} />
                     <YAxis tick={{ fontSize: 12, fill: tickColor }} stroke={gridStroke} />
                     <Tooltip contentStyle={tooltipStyle} formatter={(val) => [`${val} g`, 'Fibre']} />
-                    <ReferenceLine y={goals.fibre} stroke="#14b8a6" strokeDasharray="4 4" />
+                    {goals.fibre > 0 && (
+                      <ReferenceLine y={goals.fibre} stroke="#14b8a6" strokeDasharray="4 4" />
+                    )}
                     <Area
                       type="monotone"
                       dataKey="fibre"
@@ -547,7 +890,9 @@ export const ProgressPage: React.FC = () => {
                     formatter={(val) => [`${val} kcal`, 'Calories']}
                     labelFormatter={(_, payload) => payload?.[0]?.payload?.shortDate || ''}
                   />
-                  <ReferenceLine y={goals.calories} stroke="#84cc16" strokeDasharray="4 4" />
+                  {goals.calories > 0 && (
+                    <ReferenceLine y={goals.calories} stroke="#84cc16" strokeDasharray="4 4" />
+                  )}
                   <Area
                     type="monotone"
                     dataKey="calories"

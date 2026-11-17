@@ -1,11 +1,20 @@
 import React, { useMemo } from 'react';
-import { ArrowRight, Plus, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  ArrowRight,
+  Calculator,
+  Plus,
+  Scale,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { CalorieRing } from '../components/CalorieRing';
 import { DateStrip } from '../components/DateStrip';
 import { MacroCard } from '../components/MacroCard';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { MEAL_CATEGORIES } from '../types';
+import { getSmartFoodRecommendations } from '../utils/analyticsUtils';
 import { formatReadableDate, formatShortDate, getTimeOfDayGreeting } from '../utils/dateUtils';
 import {
   convertWeightToDisplay,
@@ -19,6 +28,9 @@ import {
 export const HomePage: React.FC = () => {
   const {
     state,
+    allFoods,
+    authMode,
+    authDetails,
     resolvedTheme,
     selectedDate,
     setSelectedDate,
@@ -35,7 +47,7 @@ export const HomePage: React.FC = () => {
 
   const { goals, settings, profile, weightGoal } = state;
   const greeting = getTimeOfDayGreeting();
-  const firstName = profile.name.split(' ')[0] || 'there';
+  const firstName = (authDetails?.name || profile.name).split(' ')[0] || 'there';
 
   const macroSplit = useMemo(
     () => getMacroCalorieSplit(selectedDateTotals),
@@ -62,19 +74,32 @@ export const HomePage: React.FC = () => {
       ? round2(latestWeightEntry.weightKg - previousWeightEntry.weightKg)
       : null;
 
+  const smartRecommendations = useMemo(
+    () =>
+      getSmartFoodRecommendations({
+        foods: allFoods,
+        goals,
+        consumedToday: selectedDateTotals,
+        dietaryPreference: profile.dietaryPreference || 'omnivore',
+        foodRestrictions: profile.foodRestrictions || [],
+        limit: 4,
+      }),
+    [allFoods, goals, profile.dietaryPreference, profile.foodRestrictions, selectedDateTotals]
+  );
+
   return (
     <div className="space-y-6">
       {/* Top Greeting & Primary Action */}
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span>{formatReadableDate(selectedDate)}</span>
-            {state.isDemoData && (
+            {authMode === 'authenticated' && authDetails?.email ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span>Demo dataset active</span>
+                <span>{authDetails.email}</span>
               </>
-            )}
+            ) : null}
           </div>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             {greeting}, {firstName}
@@ -106,7 +131,7 @@ export const HomePage: React.FC = () => {
               onClick={() => setActiveTab('goals')}
               className="text-xs font-medium text-lime-700 dark:text-lime-400 hover:underline whitespace-nowrap"
             >
-              Adjust targets
+              {goals.calories > 0 ? 'Adjust targets' : 'Set daily goals →'}
             </button>
           </div>
           <CalorieRing consumed={selectedDateTotals.calories} goal={goals.calories} />
@@ -321,6 +346,86 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Setup CTA when targets are still 0 */}
+      {goals.calories === 0 && (
+        <section className="bg-lime-50/70 dark:bg-lime-950/20 border border-lime-500/50 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-lime-500/20 text-lime-700 dark:text-lime-400 flex items-center justify-center shrink-0">
+              <Calculator className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Calculate Your Personalized Calorie & Macro Targets
+              </h2>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                Use the Mifflin-St Jeor Smart Fitness Calculator to set your initial maintenance TDEE, protein, carbs, fat, and fibre goals.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('goals')}
+            className="min-h-[42px] px-4 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-semibold whitespace-nowrap shrink-0"
+          >
+            Open Smart Calculator →
+          </button>
+        </section>
+      )}
+
+      {/* Rule-Based Smart Meal Suggestions (Module 4.2) */}
+      {smartRecommendations.length > 0 && (
+        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+                Smart Food Suggestions
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Matched to your remaining macros and {profile.dietaryPreference || 'omnivore'} preferences
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('food-database')}
+              className="text-xs font-medium text-lime-700 dark:text-lime-400 hover:underline"
+            >
+              Explore Global Database →
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {smartRecommendations.map((rec) => (
+              <div
+                key={rec.food.id}
+                className="p-3.5 rounded-xl bg-stone-50/70 dark:bg-slate-900/70 border border-stone-200/70 dark:border-slate-800 flex flex-col justify-between gap-3"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-1">
+                    {rec.food.name}
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {rec.suggestedServingsLabel} · {rec.projectedMacros.calories} kcal
+                  </div>
+                  <div className="text-xs font-medium text-lime-700 dark:text-lime-400 mt-1.5">
+                    {rec.reason}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => openAddFoodModal({ food: rec.food, date: selectedDate })}
+                  className="w-full min-h-[36px] px-3 rounded-lg bg-white dark:bg-[#121821] border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-100 hover:border-lime-500 inline-flex items-center justify-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Quick Log
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 };

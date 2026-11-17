@@ -31,7 +31,7 @@ export const WeightEntryModal: React.FC = () => {
       setNotes(editing.notes ?? '');
     } else {
       const baseKg = latestWeightEntry?.weightKg ?? state.profile.currentWeightKg;
-      setWeightValue(String(convertWeightToDisplay(baseKg, unit)));
+      setWeightValue(baseKg > 0 ? String(convertWeightToDisplay(baseKg, unit)) : '');
       setDate(getTodayDateKey());
       setNotes('');
     }

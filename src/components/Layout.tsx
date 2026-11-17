@@ -4,6 +4,7 @@ import {
   BookOpen,
   ClipboardList,
   Home,
+  LogOut,
   Moon,
   Plus,
   Scale,
@@ -14,6 +15,7 @@ import {
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { NavTab } from '../types';
 import { CalothrixLogo } from './CalothrixLogo';
+import { SchemaSetupBanner } from './SchemaSetupBanner';
 
 interface NavItem {
   id: NavTab;
@@ -35,10 +37,22 @@ const ALL_NAV_ITEMS: NavItem[] = [
 const MOBILE_BOTTOM_TABS = ALL_NAV_ITEMS.slice(0, 5);
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { state, resolvedTheme, toggleTheme, activeTab, setActiveTab, openAddFoodModal } =
-    useMacroLogStore();
+  const {
+    state,
+    authDetails,
+    resolvedTheme,
+    toggleTheme,
+    activeTab,
+    setActiveTab,
+    openAddFoodModal,
+    signOut,
+  } = useMacroLogStore();
 
-  const initials = state.profile.name
+  const displayName = authDetails?.name || state.profile.name;
+  const displayEmail = authDetails?.email || state.profile.email;
+  const avatarUrl = state.profile.avatarUrl || authDetails?.avatarUrl;
+
+  const initials = displayName
     .split(' ')
     .map((p) => p[0])
     .join('')
@@ -117,17 +131,17 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           })}
         </nav>
 
-        {/* User profile footer */}
-        <div className="p-4 border-t border-stone-100 dark:border-slate-800/80">
+        {/* User profile & sign-out footer */}
+        <div className="p-3.5 border-t border-stone-100 dark:border-slate-800/80 space-y-2">
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
-            className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-stone-50 dark:hover:bg-slate-800/60 transition-colors text-left"
+            className="w-full min-w-0 flex items-center gap-2.5 p-2 rounded-xl hover:bg-stone-50 dark:hover:bg-slate-800/60 transition-colors text-left"
           >
-            {state.profile.avatarUrl ? (
+            {avatarUrl ? (
               <img
-                src={state.profile.avatarUrl}
-                alt={state.profile.name}
+                src={avatarUrl}
+                alt={displayName}
                 referrerPolicy="no-referrer"
                 className="w-9 h-9 rounded-full object-cover border border-stone-200 dark:border-slate-700 shrink-0"
               />
@@ -138,12 +152,21 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             )}
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
-                {state.profile.name}
+                {displayName}
               </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                {state.isDemoData ? 'Demo workspace' : 'Local workspace'}
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                {displayEmail || 'Signed in'}
               </div>
             </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="w-full min-h-[38px] px-3 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-2"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
@@ -196,10 +219,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               activeTab === 'profile' ? 'ring-2 ring-lime-500' : ''
             }`}
           >
-            {state.profile.avatarUrl ? (
+            {avatarUrl ? (
               <img
-                src={state.profile.avatarUrl}
-                alt={state.profile.name}
+                src={avatarUrl}
+                alt={displayName}
                 referrerPolicy="no-referrer"
                 className="w-8 h-8 rounded-full object-cover border border-stone-200 dark:border-slate-700"
               />
@@ -209,12 +232,23 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </div>
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            aria-label="Sign out"
+            title="Sign out"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
       {/* Main Content Area */}
       <main className="flex-1 lg:pl-64 pb-24 lg:pb-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
+          <SchemaSetupBanner />
           {children}
         </div>
       </main>

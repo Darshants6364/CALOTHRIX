@@ -7,12 +7,13 @@ interface CalorieRingProps {
 }
 
 export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
+  const hasGoal = goal > 0;
   const safeGoal = Math.max(1, goal);
-  const rawPct = (consumed / safeGoal) * 100;
+  const rawPct = hasGoal ? (consumed / safeGoal) * 100 : 0;
   const clampedPct = Math.min(100, Math.max(0, rawPct));
-  const remaining = goal - consumed;
-  const isOver = remaining < 0;
-  const isComplete = !isOver && rawPct >= 90;
+  const remaining = hasGoal ? goal - consumed : 0;
+  const isOver = hasGoal && remaining < 0;
+  const isComplete = hasGoal && !isOver && rawPct >= 90;
 
   const size = 216;
   const strokeWidth = 15;
@@ -58,16 +59,18 @@ export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
 
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {isOver ? 'Over target' : 'Remaining'}
+            {!hasGoal ? 'Goal not set' : isOver ? 'Over target' : 'Remaining'}
           </span>
           <span className="mt-0.5 text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-50 font-mono-nums">
-            {Math.abs(remaining).toLocaleString()}
+            {hasGoal ? Math.abs(remaining).toLocaleString() : consumed.toLocaleString()}
           </span>
           <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            kcal
+            {hasGoal ? 'kcal' : 'kcal logged'}
           </span>
           <div className="mt-2 flex items-center gap-1 text-xs font-medium">
-            {isOver ? (
+            {!hasGoal ? (
+              <span className="text-slate-500 dark:text-slate-400">Set your goal</span>
+            ) : isOver ? (
               <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
                 <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
                 {Math.round(rawPct)}% of goal
@@ -110,8 +113,15 @@ export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
                 : 'text-slate-900 dark:text-slate-100'
             }`}
           >
-            {isOver ? '+' : ''}
-            {Math.abs(remaining).toLocaleString()} <span className="text-xs font-normal text-slate-500">kcal</span>
+            {!hasGoal ? (
+              <span className="text-slate-500 dark:text-slate-400">0 kcal</span>
+            ) : (
+              <>
+                {isOver ? '+' : ''}
+                {Math.abs(remaining).toLocaleString()}{' '}
+                <span className="text-xs font-normal text-slate-500">kcal</span>
+              </>
+            )}
           </div>
         </div>
       </div>
