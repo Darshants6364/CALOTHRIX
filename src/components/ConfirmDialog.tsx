@@ -31,7 +31,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#121821] border border-stone-200 dark:border-slate-800 p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div
@@ -69,7 +69,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <button
             type="button"
             onClick={onCancel}
-            className="min-h-[42px] px-4 py-2 rounded-xl border border-stone-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
+            className="min-h-[42px] px-4 py-2 rounded-xl border border-black/10 dark:border-white/15 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
           >
             {cancelLabel}
           </button>

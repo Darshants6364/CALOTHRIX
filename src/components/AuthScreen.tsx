@@ -147,7 +147,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
   const isTrainerPortal = portalRole === 'trainer';
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-[#F8F8F6] dark:bg-[#0B0F14] text-[#14181F] dark:text-[#F3F4F6] px-4 py-6 sm:px-6">
+    <div className="min-h-screen flex flex-col justify-between bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] px-4 py-6 sm:px-6 selection:bg-[#C8FF00] selection:text-black">
       {/* Top Bar */}
       <div className="max-w-5xl w-full mx-auto flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -156,7 +156,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
             <button
               type="button"
               onClick={onBackToHome}
-              className="min-h-[36px] px-3 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
+              className="min-h-[38px] px-3.5 rounded-xl border border-black/15 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-[#C8FF00] hover:border-black/30 dark:hover:border-[#C8FF00]/60 inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Home</span>
@@ -167,11 +167,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
           type="button"
           onClick={toggleTheme}
           aria-label={resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          className="min-h-[40px] px-3.5 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-xs font-medium text-slate-700 dark:text-slate-200 inline-flex items-center gap-2 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors"
+          className="min-h-[40px] px-3.5 rounded-xl border border-black/15 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-medium text-slate-700 dark:text-slate-200 inline-flex items-center gap-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
         >
           {resolvedTheme === 'dark' ? (
             <>
-              <Sun className="w-4 h-4 text-amber-400" />
+              <Sun className="w-4 h-4 text-[#C8FF00]" />
               <span>White</span>
             </>
           ) : (
@@ -184,33 +184,33 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
       </div>
 
       {/* Main Centered Auth Card */}
-      <div className="w-full max-w-md mx-auto my-8 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm">
+      <div className="w-full max-w-md mx-auto my-8 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-6 sm:p-8 shadow-2xl">
         {/* Account Type / Portal Switcher */}
         <div className="mb-5">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 text-center mb-2">
+          <span className="block text-[11px] font-mono-nums font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 text-center mb-2.5">
             Select Sign-In Portal
           </span>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={() => handleSelectPortal('individual')}
-              className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-2.5 ${
+              className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
                 !isTrainerPortal
-                  ? 'border-lime-500 bg-lime-50/70 dark:bg-lime-950/30 ring-1 ring-lime-500'
-                  : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                  ? 'border-[#4E6800] dark:border-[#C8FF00] bg-[#C8FF00]/12 dark:bg-[#C8FF00]/10 ring-1 ring-[#4E6800] dark:ring-[#C8FF00]'
+                  : 'border-black/12 dark:border-white/12 hover:border-black/30 dark:hover:border-white/25'
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                   !isTrainerPortal
-                    ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950'
-                    : 'bg-stone-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black'
+                    : 'bg-black/5 dark:bg-white/8 text-slate-500 dark:text-slate-400'
                 }`}
               >
                 <ClipboardCheck className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                <div className="text-xs font-bold text-[#111317] dark:text-white">
                   Normal User
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
@@ -222,23 +222,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
             <button
               type="button"
               onClick={() => handleSelectPortal('trainer')}
-              className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-2.5 ${
+              className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
                 isTrainerPortal
-                  ? 'border-lime-500 bg-lime-50/70 dark:bg-lime-950/30 ring-1 ring-lime-500'
-                  : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                  ? 'border-[#4E6800] dark:border-[#C8FF00] bg-[#C8FF00]/12 dark:bg-[#C8FF00]/10 ring-1 ring-[#4E6800] dark:ring-[#C8FF00]'
+                  : 'border-black/12 dark:border-white/12 hover:border-black/30 dark:hover:border-white/25'
               }`}
             >
               <div
                 className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                   isTrainerPortal
-                    ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950'
-                    : 'bg-stone-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black'
+                    : 'bg-black/5 dark:bg-white/8 text-slate-500 dark:text-slate-400'
                 }`}
               >
                 <Users className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                <div className="text-xs font-bold text-[#111317] dark:text-white">
                   Fitness Trainer
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
@@ -250,7 +250,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
         </div>
 
         <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          <h1 className="text-2xl font-display font-extrabold tracking-tight text-[#111317] dark:text-white">
             {isTrainerPortal
               ? emailMode === 'signup'
                 ? 'Create Trainer Account'
@@ -259,13 +259,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
               ? 'Create CALOTHRIX Account'
               : 'Sign in to CALOTHRIX'}
           </h1>
-          <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
             {isTrainerPortal
               ? 'Access your separate Coaching Dashboard to invite clients, monitor nutrition adherence, and track client progress.'
               : 'Every account stores its own food logs, goals, and weight history privately in the database.'}
           </p>
           {isTrainerPortal && (
-            <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-lime-50 dark:bg-lime-950/40 border border-lime-200 dark:border-lime-900/60 text-[11px] font-medium text-lime-800 dark:text-lime-300">
+            <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#C8FF00]/15 dark:bg-[#C8FF00]/10 border border-[#4E6800]/30 dark:border-[#C8FF00]/30 text-[11px] font-medium text-[#3D5200] dark:text-[#C8FF00]">
               <Shield className="w-3.5 h-3.5" />
               <span>Opens Dedicated Fitness Trainer Dashboard</span>
             </div>
@@ -277,7 +277,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
           type="button"
           onClick={handleGoogleClick}
           disabled={googleLoading}
-          className="mt-5 w-full min-h-[48px] px-4 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 text-sm font-semibold hover:opacity-92 transition-opacity inline-flex items-center justify-center gap-3 disabled:opacity-60"
+          className="mt-5 w-full min-h-[48px] px-4 rounded-xl bg-[#111317] dark:bg-white text-white dark:text-black text-sm font-semibold hover:opacity-92 transition-opacity inline-flex items-center justify-center gap-3 disabled:opacity-60"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -308,13 +308,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
 
         {/* Divider */}
         <div className="my-5 flex items-center gap-3">
-          <div className="h-px flex-1 bg-stone-200 dark:bg-slate-800" />
-          <span className="text-xs text-slate-400">or use email</span>
-          <div className="h-px flex-1 bg-stone-200 dark:bg-slate-800" />
+          <div className="h-px flex-1 bg-black/10 dark:bg-white/10" />
+          <span className="text-xs text-slate-500 dark:text-slate-400">or use email</span>
+          <div className="h-px flex-1 bg-black/10 dark:bg-white/10" />
         </div>
 
         {/* Email Mode Tabs */}
-        <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-stone-100 dark:bg-slate-900 mb-4">
+        <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-black/5 dark:bg-[#090A0C] border border-black/5 dark:border-white/8 mb-4">
           {(
             [
               { id: 'signin', label: 'Sign In' },
@@ -332,8 +332,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
               }}
               className={`min-h-[34px] rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
                 emailMode === m.id
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
-                  : 'text-slate-500 dark:text-slate-400'
+                  ? 'bg-white dark:bg-[#14161C] text-[#111317] dark:text-[#C8FF00] shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
               }`}
             >
               {m.label}
@@ -348,7 +348,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
         )}
 
         {infoMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-lime-50 dark:bg-lime-950/50 border border-lime-200 dark:border-lime-900/60 text-xs text-lime-800 dark:text-lime-300 leading-relaxed flex items-start gap-2">
+          <div className="mb-4 p-3 rounded-xl bg-[#C8FF00]/15 dark:bg-[#C8FF00]/10 border border-[#4E6800]/30 dark:border-[#C8FF00]/30 text-xs text-[#3D5200] dark:text-[#C8FF00] leading-relaxed flex items-start gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{infoMessage}</span>
           </div>
@@ -365,7 +365,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-[#F4F3EF]/60 dark:bg-[#090A0C] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
               />
             </div>
           )}
@@ -379,7 +379,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-[#F4F3EF]/60 dark:bg-[#090A0C] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
             />
           </div>
 
@@ -393,7 +393,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-[#F4F3EF]/60 dark:bg-[#090A0C] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
               />
             </div>
           )}
@@ -401,7 +401,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
           <button
             type="submit"
             disabled={submitting}
-            className="w-full min-h-[46px] rounded-xl bg-lime-500 hover:bg-lime-400 text-slate-950 text-sm font-semibold transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full min-h-[48px] rounded-xl bg-[#C8FF00] hover:bg-[#D9FF4D] text-black text-sm font-bold uppercase tracking-[0.08em] transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {emailMode === 'magic' ? (
               <>
@@ -424,8 +424,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
         </form>
       </div>
 
-      <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-        Eat Smart. Track Progress. Build Better.
+      <p className="text-center text-xs text-slate-500 dark:text-slate-500">
+        CALOTHRIX · Eat Smart. Track Progress. Build Better.
       </p>
     </div>
   );

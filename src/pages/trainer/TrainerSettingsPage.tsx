@@ -83,7 +83,7 @@ export const TrainerSettingsPage: React.FC = () => {
 
       <form
         onSubmit={handleSave}
-        className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
+        className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-5"
       >
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <UserCheck className="w-4 h-4 text-lime-600 dark:text-lime-400" />
@@ -100,7 +100,7 @@ export const TrainerSettingsPage: React.FC = () => {
               required
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -113,7 +113,7 @@ export const TrainerSettingsPage: React.FC = () => {
               value={specialtiesStr}
               onChange={(e) => setSpecialtiesStr(e.target.value)}
               placeholder="Fat Loss, Body Recomposition, Indian Macros"
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             />
           </div>
         </div>
@@ -127,7 +127,7 @@ export const TrainerSettingsPage: React.FC = () => {
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             placeholder="Describe your coaching philosophy and weekly check-in cadence..."
-            className="w-full p-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+            className="w-full p-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
           />
         </div>
 
@@ -141,11 +141,11 @@ export const TrainerSettingsPage: React.FC = () => {
               value={certificationsStr}
               onChange={(e) => setCertificationsStr(e.target.value)}
               placeholder="CSCS, Precision Nutrition L1"
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             />
           </div>
 
-          <label className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/60 dark:bg-slate-900 cursor-pointer mt-4 sm:mt-0">
+          <label className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/60 dark:bg-[#090A0C] cursor-pointer mt-4 sm:mt-0">
             <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
               Accepting New Client Invitations
             </span>
@@ -159,7 +159,7 @@ export const TrainerSettingsPage: React.FC = () => {
         </div>
 
         {/* Subscription Architecture (No payment processing yet) */}
-        <div className="pt-4 border-t border-stone-100 dark:border-slate-800 space-y-3">
+        <div className="pt-4 border-t border-stone-100 dark:border-white/12 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -184,7 +184,7 @@ export const TrainerSettingsPage: React.FC = () => {
                   className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-3 ${
                     active
                       ? 'border-lime-500 bg-lime-50/60 dark:bg-lime-950/20 ring-1 ring-lime-500'
-                      : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                      : 'border-black/10 dark:border-white/12 hover:border-stone-300 dark:hover:border-slate-700'
                   }`}
                 >
                   <div>
@@ -223,7 +223,7 @@ export const TrainerSettingsPage: React.FC = () => {
       </form>
 
       {/* Role Switcher */}
-      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-start gap-3">
           <Shield className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
           <div>
@@ -239,7 +239,7 @@ export const TrainerSettingsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => void selectAccountRole('individual')}
-          className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 whitespace-nowrap shrink-0"
+          className="min-h-[42px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 whitespace-nowrap shrink-0"
         >
           Switch to Normal User
         </button>

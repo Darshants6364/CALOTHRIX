@@ -3,32 +3,27 @@ import {
   Barcode,
   Camera,
   Check,
+  Flashlight,
   ImagePlus,
   Loader2,
   Plus,
+  RefreshCw,
   RotateCcw,
+  ScanLine,
   Search,
   Sparkles,
   VideoOff,
   X,
 } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
-import { lookupBarcodeApi } from '../services/globalFoodApiService';
+import { lookupBarcodeApi, readBarcodeImageApi } from '../services/globalFoodApiService';
 import { FoodItem, MEAL_CATEGORIES, MealCategory } from '../types';
+import {
+  captureVideoFrameJpegDataUrl,
+  decodeBarcodeFromImageFile,
+  decodeBarcodeFromVideo,
+} from '../utils/barcodeDecoder';
 import { formatNutrientValue } from '../utils/nutritionUtils';
-
-interface DetectedBarcode {
-  rawValue?: string;
-}
-
-interface NativeBarcodeDetector {
-  detect: (source: ImageBitmapSource) => Promise<DetectedBarcode[]>;
-}
-
-interface NativeBarcodeDetectorConstructor {
-  new (options?: { formats?: string[] }): NativeBarcodeDetector;
-  getSupportedFormats?: () => Promise<string[]>;
-}
 
 const SAMPLE_INDIAN_BARCODES: { label: string; code: string }[] = [
   { label: 'Amul Gold Milk', code: '8901262150118' },
@@ -37,14 +32,6 @@ const SAMPLE_INDIAN_BARCODES: { label: string; code: string }[] = [
   { label: 'Epigamia Greek Yogurt', code: '8908005471015' },
   { label: 'Amul Fresh Paneer', code: '8901262080019' },
 ];
-
-const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'];
-
-function getBarcodeDetectorCtor(): NativeBarcodeDetectorConstructor | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as unknown as { BarcodeDetector?: NativeBarcodeDetectorConstructor };
-  return typeof w.BarcodeDetector === 'function' ? w.BarcodeDetector : null;
-}
 
 export const BarcodeScannerModal: React.FC = () => {
   const {
@@ -60,6 +47,7 @@ export const BarcodeScannerModal: React.FC = () => {
   const [mealType, setMealType] = useState<MealCategory>('lunch');
   const [logDate, setLogDate] = useState(barcodeScannerModal.targetDate);
   const [lookingUp, setLookingUp] = useState(false);
+  const [decodingImage, setDecodingImage] = useState(false);
   const [matchedFood, setMatchedFood] = useState<FoodItem | null>(null);
   const [lastSearchedCode, setLastSearchedCode] = useState('');
   const [error, setError] = useState('');
@@ -67,14 +55,22 @@ export const BarcodeScannerModal: React.FC = () => {
   // Camera state
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [cameraMessage, setCameraMessage] = useState('');
-  const [nativeDetectorSupported, setNativeDetectorSupported] = useState(false);
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [activeDeviceId, setActiveDeviceId] = useState<string>('');
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastScanCheckRef = useRef<number>(0);
+  const scanBusyRef = useRef<boolean>(false);
+  const detectLockRef = useRef<boolean>(false);
+  const frameCountRef = useRef<number>(0);
+  const isOpenRef = useRef<boolean>(barcodeScannerModal.isOpen);
 
   const stopCamera = useCallback(() => {
     if (rafRef.current !== null) {
@@ -88,15 +84,16 @@ export const BarcodeScannerModal: React.FC = () => {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    scanBusyRef.current = false;
     setCameraActive(false);
     setCameraStarting(false);
+    setCameraReady(false);
+    setTorchSupported(false);
+    setTorchEnabled(false);
   }, []);
 
   useEffect(() => {
-    setNativeDetectorSupported(Boolean(getBarcodeDetectorCtor()));
-  }, []);
-
-  useEffect(() => {
+    isOpenRef.current = barcodeScannerModal.isOpen;
     if (!barcodeScannerModal.isOpen) {
       stopCamera();
       return;
@@ -109,6 +106,8 @@ export const BarcodeScannerModal: React.FC = () => {
     setLastSearchedCode('');
     setError('');
     setCameraMessage('');
+    setDecodingImage(false);
+    detectLockRef.current = false;
 
     return () => {
       stopCamera();
@@ -136,8 +135,17 @@ export const BarcodeScannerModal: React.FC = () => {
       setLastSearchedCode(cleaned);
 
       try {
+        const candidates = [cleaned];
+        if (cleaned.length === 13 && cleaned.startsWith('0')) {
+          candidates.push(cleaned.slice(1));
+        } else if (cleaned.length === 12) {
+          candidates.push(`0${cleaned}`);
+        }
+
         // 1. Check local curated & custom foods first (instant, works offline)
-        const localMatch = allFoods.find((f) => f.barcode === cleaned);
+        const localMatch = allFoods.find(
+          (f) => f.barcode && candidates.includes(f.barcode.replace(/\D/g, ''))
+        );
         if (localMatch) {
           setMatchedFood(localMatch);
           return;
@@ -157,12 +165,112 @@ export const BarcodeScannerModal: React.FC = () => {
         setError(err instanceof Error ? err.message : 'Unable to look up barcode right now.');
       } finally {
         setLookingUp(false);
+        detectLockRef.current = false;
       }
     },
     [allFoods, stopCamera]
   );
 
-  const startCameraScanner = async () => {
+  // Live continuous barcode scanning (ZXing multi-pass + native BarcodeDetector)
+  useEffect(() => {
+    if (!cameraActive) return;
+    const videoEl = videoRef.current;
+    const stream = streamRef.current;
+    if (!videoEl || !stream) return;
+
+    let cancelled = false;
+    detectLockRef.current = false;
+    scanBusyRef.current = false;
+    frameCountRef.current = 0;
+
+    if (videoEl.srcObject !== stream) {
+      videoEl.srcObject = stream;
+    }
+
+    const tryPlay = async () => {
+      if (cancelled) return;
+      try {
+        await videoEl.play();
+      } catch {
+        // Fallback handled by autoPlay + playsInline + muted or ready listeners
+      }
+    };
+
+    const handleReady = () => {
+      if (cancelled) return;
+      if (videoEl.videoWidth > 0 || videoEl.readyState >= 2) {
+        setCameraReady(true);
+      }
+      void tryPlay();
+    };
+
+    videoEl.addEventListener('loadedmetadata', handleReady);
+    videoEl.addEventListener('loadeddata', handleReady);
+    videoEl.addEventListener('canplay', handleReady);
+    videoEl.addEventListener('playing', handleReady);
+
+    if (videoEl.readyState >= 2 || videoEl.videoWidth > 0) {
+      setCameraReady(true);
+    }
+    void tryPlay();
+
+    const scanFrame = async (timestamp: number) => {
+      if (cancelled || !streamRef.current || !videoRef.current || detectLockRef.current) {
+        return;
+      }
+
+      if (
+        !scanBusyRef.current &&
+        timestamp - lastScanCheckRef.current >= 180 &&
+        videoEl.readyState >= 2 &&
+        videoEl.videoWidth > 0
+      ) {
+        lastScanCheckRef.current = timestamp;
+        scanBusyRef.current = true;
+        frameCountRef.current += 1;
+        const thorough = frameCountRef.current % 3 === 0;
+
+        try {
+          const detectedCode = await decodeBarcodeFromVideo(videoEl, thorough);
+          if (detectedCode && !cancelled && !detectLockRef.current) {
+            detectLockRef.current = true;
+            notify(`Detected barcode ${detectedCode}`);
+            void handleLookupCode(detectedCode);
+            return;
+          }
+        } catch {
+          // Ignore transient frame decode errors
+        } finally {
+          scanBusyRef.current = false;
+        }
+      }
+
+      if (!cancelled && !detectLockRef.current) {
+        rafRef.current = window.requestAnimationFrame((t) => {
+          void scanFrame(t);
+        });
+      }
+    };
+
+    rafRef.current = window.requestAnimationFrame((t) => {
+      void scanFrame(t);
+    });
+
+    return () => {
+      cancelled = true;
+      scanBusyRef.current = false;
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      videoEl.removeEventListener('loadedmetadata', handleReady);
+      videoEl.removeEventListener('loadeddata', handleReady);
+      videoEl.removeEventListener('canplay', handleReady);
+      videoEl.removeEventListener('playing', handleReady);
+    };
+  }, [cameraActive, handleLookupCode, notify]);
+
+  const startCameraScanner = async (preferredDeviceId?: string) => {
     setError('');
     setCameraMessage('');
 
@@ -173,81 +281,147 @@ export const BarcodeScannerModal: React.FC = () => {
       return;
     }
 
-    const DetectorCtor = getBarcodeDetectorCtor();
+    stopCamera();
     setCameraStarting(true);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: preferredDeviceId
+            ? {
+                deviceId: { exact: preferredDeviceId },
+                width: { ideal: 1920, min: 640 },
+                height: { ideal: 1080, min: 480 },
+              }
+            : {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1920, min: 640 },
+                height: { ideal: 1080, min: 480 },
+              },
+          audio: false,
+        });
+      } catch {
+        // Fallback for older webcams / constraints mismatch
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: preferredDeviceId
+            ? { deviceId: { exact: preferredDeviceId } }
+            : { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+      }
+
+      if (!isOpenRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const settings = track.getSettings?.();
+        if (settings?.deviceId) {
+          setActiveDeviceId(settings.deviceId);
+        }
+        // Best-effort continuous autofocus + torch detection
+        try {
+          const caps = track.getCapabilities?.() as
+            | (MediaTrackCapabilities & { focusMode?: string[]; torch?: boolean })
+            | undefined;
+          if (caps?.focusMode?.includes('continuous')) {
+            await track.applyConstraints({
+              advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
+            });
+          }
+          setTorchSupported(Boolean(caps?.torch));
+        } catch {
+          setTorchSupported(false);
+        }
+      }
+
+      // Enumerate available cameras so user can switch if ultra-wide lens is selected
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setCameraDevices(devices.filter((d) => d.kind === 'videoinput'));
+      } catch {
+        setCameraDevices([]);
+      }
 
       streamRef.current = stream;
+      setCameraReady(false);
       setCameraActive(true);
       setCameraStarting(false);
-
-      // Attach stream on next frame once <video> mounts
-      window.requestAnimationFrame(async () => {
-        const videoEl = videoRef.current;
-        if (!videoEl) return;
-        videoEl.srcObject = stream;
-        try {
-          await videoEl.play();
-        } catch {
-          // Autoplay might settle cleanly via playsInline muted
-        }
-
-        if (!DetectorCtor) {
-          setCameraMessage(
-            'Live auto-detection is not supported in this browser engine (use Chrome/Android/Edge, or snap a photo / type the barcode digits).'
-          );
-          return;
-        }
-
-        let detector: NativeBarcodeDetector;
-        try {
-          detector = new DetectorCtor({ formats: BARCODE_FORMATS });
-        } catch {
-          detector = new DetectorCtor();
-        }
-
-        const scanFrame = async (timestamp: number) => {
-          if (!streamRef.current || !videoRef.current) return;
-          if (timestamp - lastScanCheckRef.current >= 220) {
-            lastScanCheckRef.current = timestamp;
-            try {
-              if (videoRef.current.readyState >= 2) {
-                const results = await detector.detect(videoRef.current);
-                const firstCode = results.find((r) => Boolean(r.rawValue?.trim()))?.rawValue?.trim();
-                if (firstCode) {
-                  notify(`Detected barcode ${firstCode}`);
-                  void handleLookupCode(firstCode);
-                  return;
-                }
-              }
-            } catch {
-              // Ignore transient frame decode errors
-            }
-          }
-          rafRef.current = window.requestAnimationFrame((t) => {
-            void scanFrame(t);
-          });
-        };
-
-        rafRef.current = window.requestAnimationFrame((t) => {
-          void scanFrame(t);
-        });
-      });
     } catch {
       setCameraStarting(false);
       setCameraActive(false);
+      setCameraReady(false);
       setCameraMessage(
         'Camera permission denied or no camera detected. You can upload a barcode photo or enter the digits manually below.'
       );
+    }
+  };
+
+  const handleSwitchCamera = () => {
+    if (cameraDevices.length < 2) return;
+    const currentIdx = cameraDevices.findIndex((d) => d.deviceId === activeDeviceId);
+    const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % cameraDevices.length : 0;
+    const nextDevice = cameraDevices[nextIdx];
+    if (nextDevice) {
+      void startCameraScanner(nextDevice.deviceId);
+    }
+  };
+
+  const handleToggleTorch = async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const next = !torchEnabled;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: next } as MediaTrackConstraintSet],
+      });
+      setTorchEnabled(next);
+    } catch {
+      notify('Flashlight control is not supported on this camera');
+    }
+  };
+
+  const handleSnapAndReadFrame = async () => {
+    const videoEl = videoRef.current;
+    if (!videoEl || videoEl.readyState < 2 || videoEl.videoWidth <= 0) {
+      setError('Camera preview is still warming up. Please wait a moment and try again.');
+      return;
+    }
+
+    setError('');
+    setDecodingImage(true);
+    try {
+      // 1. Thorough optical barcode pass first
+      const opticalCode = await decodeBarcodeFromVideo(videoEl, true);
+      if (opticalCode) {
+        detectLockRef.current = true;
+        notify(`Detected barcode ${opticalCode}`);
+        void handleLookupCode(opticalCode);
+        return;
+      }
+
+      // 2. Fallback: Gemini Vision reads the printed digits underneath the bars
+      const frameDataUrl = captureVideoFrameJpegDataUrl(videoEl);
+      if (frameDataUrl) {
+        const aiRes = await readBarcodeImageApi(frameDataUrl);
+        if (aiRes.barcode) {
+          detectLockRef.current = true;
+          notify(`Read barcode ${aiRes.barcode}`);
+          void handleLookupCode(aiRes.barcode);
+          return;
+        }
+      }
+
+      setError(
+        'Could not read a clear barcode from that frame. Move closer in bright light so the bars & numbers fill the green frame, or type the digits below.'
+      );
+    } catch {
+      setError('Unable to capture barcode frame right now. Please try typing the digits below.');
+    } finally {
+      setDecodingImage(false);
     }
   };
 
@@ -258,37 +432,31 @@ export const BarcodeScannerModal: React.FC = () => {
 
     setError('');
     setCameraMessage('');
-
-    const DetectorCtor = getBarcodeDetectorCtor();
-    if (!DetectorCtor) {
-      setError(
-        'Automatic image barcode decoding is unavailable in this browser. Type the barcode numbers below, or switch to Meal Photo AI.'
-      );
-      return;
-    }
+    setDecodingImage(true);
 
     try {
-      const bitmap = await createImageBitmap(file);
-      let detector: NativeBarcodeDetector;
-      try {
-        detector = new DetectorCtor({ formats: BARCODE_FORMATS });
-      } catch {
-        detector = new DetectorCtor();
-      }
-      const detected = await detector.detect(bitmap);
-      bitmap.close?.();
-
-      const code = detected.find((d) => Boolean(d.rawValue?.trim()))?.rawValue?.trim();
+      const { code, dataUrl } = await decodeBarcodeFromImageFile(file);
       if (code) {
         notify(`Barcode ${code} detected from image`);
         void handleLookupCode(code);
-      } else {
-        setError(
-          'No barcode could be read clearly from that image. Hold the camera closer in good lighting or enter the barcode digits manually.'
-        );
+        return;
       }
+
+      // Optical bars were blurred or had glare — fall back to reading the printed digits with AI
+      const aiRes = await readBarcodeImageApi(dataUrl);
+      if (aiRes.barcode) {
+        notify(`Barcode ${aiRes.barcode} read from image`);
+        void handleLookupCode(aiRes.barcode);
+        return;
+      }
+
+      setError(
+        'No barcode could be read clearly from that image. Hold the camera closer in good lighting or enter the barcode digits manually.'
+      );
     } catch {
       setError('Could not scan barcode from the selected image. Please enter the digits manually.');
+    } finally {
+      setDecodingImage(false);
     }
   };
 
@@ -317,11 +485,11 @@ export const BarcodeScannerModal: React.FC = () => {
       aria-modal="true"
       aria-label="Barcode Food Scanner"
     >
-      <div className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col bg-white dark:bg-[#121821] rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      <div className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
         <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3 shrink-0" />
 
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-stone-200 dark:border-slate-800 shrink-0">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-black/10 dark:border-white/12 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-lime-500/15 text-lime-700 dark:text-lime-400 flex items-center justify-center shrink-0">
               <Barcode className="w-4 h-4" />
@@ -357,7 +525,7 @@ export const BarcodeScannerModal: React.FC = () => {
               <select
                 value={mealType}
                 onChange={(e) => setMealType(e.target.value as MealCategory)}
-                className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-slate-100"
+                className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-xs font-medium text-slate-900 dark:text-slate-100"
               >
                 {MEAL_CATEGORIES.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -374,7 +542,7 @@ export const BarcodeScannerModal: React.FC = () => {
                 type="date"
                 value={logDate}
                 onChange={(e) => setLogDate(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-xs font-medium text-slate-900 dark:text-slate-100"
+                className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-xs font-medium text-slate-900 dark:text-slate-100"
               />
             </div>
           </div>
@@ -382,35 +550,96 @@ export const BarcodeScannerModal: React.FC = () => {
           {!matchedFood && (
             <>
               {/* Camera / Image Scan Box */}
-              <div className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/70 overflow-hidden">
+              <div className="rounded-2xl border border-black/10 dark:border-white/12 bg-stone-50/70 dark:bg-[#090A0C]/70 overflow-hidden">
                 {cameraActive ? (
-                  <div className="relative bg-black">
-                    <video
-                      ref={videoRef}
-                      playsInline
-                      muted
-                      className="w-full h-56 object-cover"
-                    />
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <div className="w-60 h-28 rounded-xl border-2 border-lime-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)] flex items-center justify-center">
-                        <div className="w-full h-0.5 bg-lime-400/80 animate-pulse" />
+                  <div>
+                    <div className="relative bg-black">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-60 object-cover bg-black"
+                      />
+                      {!cameraReady && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/75 text-white text-xs pointer-events-none">
+                          <Loader2 className="w-5 h-5 animate-spin text-[#C8FF00]" />
+                          <span>Starting camera preview...</span>
+                        </div>
+                      )}
+                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
+                        <div className="w-64 h-28 rounded-xl border-2 border-lime-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.38)] flex items-center justify-center">
+                          <div className="w-full h-0.5 bg-lime-400/80 animate-pulse" />
+                        </div>
+                        <span className="px-2.5 py-0.5 rounded-full bg-black/65 text-[10px] font-medium text-white/90">
+                          Align barcode inside frame
+                        </span>
+                      </div>
+
+                      <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          {torchSupported && (
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleTorch()}
+                              className={`px-2.5 py-1.5 rounded-xl text-xs font-medium inline-flex items-center gap-1 transition-colors ${
+                                torchEnabled
+                                  ? 'bg-lime-400 text-slate-950'
+                                  : 'bg-black/70 text-white hover:bg-black/85'
+                              }`}
+                            >
+                              <Flashlight className="w-3.5 h-3.5" />
+                              {torchEnabled ? 'Light On' : 'Light'}
+                            </button>
+                          )}
+                          {cameraDevices.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={handleSwitchCamera}
+                              className="px-2.5 py-1.5 rounded-xl bg-black/70 text-white text-xs font-medium inline-flex items-center gap-1 hover:bg-black/85"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              Switch Lens
+                            </button>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={stopCamera}
+                          className="px-3 py-1.5 rounded-xl bg-black/70 text-white text-xs font-medium inline-flex items-center gap-1.5 hover:bg-black/85"
+                        >
+                          <VideoOff className="w-3.5 h-3.5" />
+                          Stop
+                        </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={stopCamera}
-                      className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-black/70 text-white text-xs font-medium inline-flex items-center gap-1.5 hover:bg-black/85"
-                    >
-                      <VideoOff className="w-3.5 h-3.5" />
-                      Stop
-                    </button>
+
+                    <div className="p-2.5 bg-white dark:bg-[#111317] border-t border-black/10 dark:border-white/12 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Auto-scanning live…
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void handleSnapAndReadFrame()}
+                        disabled={decodingImage || !cameraReady}
+                        className="min-h-[36px] px-3 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-semibold inline-flex items-center gap-1.5 hover:opacity-90 disabled:opacity-50"
+                      >
+                        {decodingImage ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <ScanLine className="w-3.5 h-3.5" />
+                        )}
+                        {decodingImage ? 'Reading...' : 'Snap & Read'}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                     <button
                       type="button"
                       onClick={() => void startCameraScanner()}
-                      disabled={cameraStarting}
+                      disabled={cameraStarting || decodingImage}
                       className="flex-1 min-h-[44px] px-4 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-semibold inline-flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-60"
                     >
                       {cameraStarting ? (
@@ -421,13 +650,18 @@ export const BarcodeScannerModal: React.FC = () => {
                       {cameraStarting ? 'Starting Camera...' : 'Start Live Camera Scan'}
                     </button>
 
-                    <label className="min-h-[44px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center justify-center gap-2 cursor-pointer">
-                      <ImagePlus className="w-4 h-4 text-lime-600 dark:text-lime-400" />
-                      <span>Upload Barcode Photo</span>
+                    <label className="min-h-[44px] px-4 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center justify-center gap-2 cursor-pointer">
+                      {decodingImage ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-lime-600 dark:text-lime-400" />
+                      ) : (
+                        <ImagePlus className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+                      )}
+                      <span>{decodingImage ? 'Reading Barcode...' : 'Upload Barcode Photo'}</span>
                       <input
                         ref={fileInputRef}
                         type="file"
                         accept="image/*"
+                        disabled={decodingImage}
                         onChange={handleBarcodeImageUpload}
                         className="sr-only"
                       />
@@ -435,10 +669,9 @@ export const BarcodeScannerModal: React.FC = () => {
                   </div>
                 )}
 
-                {(cameraMessage || !nativeDetectorSupported) && (
-                  <div className="px-4 py-2.5 border-t border-stone-200/80 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-                    {cameraMessage ||
-                      'Tip: Enter the printed EAN/UPC digits below if automatic camera barcode detection is unavailable on this browser.'}
+                {cameraMessage && (
+                  <div className="px-4 py-2.5 border-t border-black/10 dark:border-white/12 text-[11px] text-slate-500 dark:text-slate-400">
+                    {cameraMessage}
                   </div>
                 )}
               </div>
@@ -457,7 +690,7 @@ export const BarcodeScannerModal: React.FC = () => {
                       value={manualBarcode}
                       onChange={(e) => setManualBarcode(e.target.value)}
                       placeholder="e.g., 8901262150118"
-                      className="w-full h-11 pl-10 pr-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/70 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                      className="w-full h-11 pl-10 pr-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/70 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                     />
                   </div>
                   <button
@@ -481,7 +714,7 @@ export const BarcodeScannerModal: React.FC = () => {
                       key={sample.code}
                       type="button"
                       onClick={() => void handleLookupCode(sample.code)}
-                      className="px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-[11px] font-medium text-slate-700 dark:text-slate-300 hover:border-lime-500 transition-colors"
+                      className="px-2.5 py-1.5 rounded-lg border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-[11px] font-medium text-slate-700 dark:text-slate-300 hover:border-lime-500 transition-colors"
                     >
                       {sample.label}
                     </button>
@@ -551,7 +784,7 @@ export const BarcodeScannerModal: React.FC = () => {
                     setMatchedFood(null);
                     setError('');
                   }}
-                  className="px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] font-medium text-slate-600 dark:text-slate-300 inline-flex items-center gap-1 shrink-0"
+                  className="px-2.5 py-1.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-[11px] font-medium text-slate-600 dark:text-slate-300 inline-flex items-center gap-1 shrink-0"
                 >
                   <RotateCcw className="w-3 h-3" />
                   Scan Again
@@ -559,31 +792,31 @@ export const BarcodeScannerModal: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-5 gap-2 text-center">
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[10px] text-slate-500 dark:text-slate-400">Calories</div>
                   <div className="text-sm font-bold text-slate-900 dark:text-slate-100 font-mono-nums mt-0.5">
                     {formatNutrientValue(matchedFood, 'calories')}
                   </div>
                 </div>
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[10px] text-slate-500 dark:text-slate-400">Protein</div>
                   <div className="text-sm font-bold text-lime-700 dark:text-lime-400 font-mono-nums mt-0.5">
                     {formatNutrientValue(matchedFood, 'protein', 'g')}
                   </div>
                 </div>
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[10px] text-slate-500 dark:text-slate-400">Carbs</div>
                   <div className="text-sm font-bold text-amber-700 dark:text-amber-400 font-mono-nums mt-0.5">
                     {formatNutrientValue(matchedFood, 'carbs', 'g')}
                   </div>
                 </div>
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[10px] text-slate-500 dark:text-slate-400">Fat</div>
                   <div className="text-sm font-bold text-indigo-700 dark:text-indigo-400 font-mono-nums mt-0.5">
                     {formatNutrientValue(matchedFood, 'fat', 'g')}
                   </div>
                 </div>
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[10px] text-slate-500 dark:text-slate-400">Fibre</div>
                   <div className="text-sm font-bold text-teal-700 dark:text-teal-400 font-mono-nums mt-0.5">
                     {formatNutrientValue(matchedFood, 'fibre', 'g')}

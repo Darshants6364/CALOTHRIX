@@ -117,12 +117,12 @@ function StatusPill({ status, label }: { status: GraphStatus; label: string }) {
 export const ProgressPage: React.FC = () => {
   const { state, resolvedTheme, selectedDate, updateGoals, notify } = useMacroLogStore();
   const isDark = resolvedTheme === 'dark';
-  const gridStroke = isDark ? '#1e293b' : '#e7e5e4';
-  const tickColor = isDark ? '#94a3b8' : '#64748b';
+  const gridStroke = isDark ? 'rgba(255,255,255,0.08)' : '#e7e5e4';
+  const tickColor = isDark ? '#9A9CA3' : '#52555E';
   const tooltipStyle = {
-    backgroundColor: isDark ? '#0f172a' : '#ffffff',
-    borderColor: isDark ? '#334155' : '#e7e5e4',
-    color: isDark ? '#f8fafc' : '#0f172a',
+    backgroundColor: isDark ? '#14161C' : '#ffffff',
+    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)',
+    color: isDark ? '#F3F4F6' : '#111317',
     borderRadius: '10px',
     fontSize: '12px',
   };
@@ -673,28 +673,30 @@ export const ProgressPage: React.FC = () => {
           </h1>
         </div>
 
-        <div className="inline-flex items-center p-1 rounded-xl bg-stone-200/70 dark:bg-slate-800/90 self-start sm:self-auto">
-          {(['daily', 'weekly', 'monthly'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`min-h-[38px] px-4 rounded-lg text-xs font-semibold capitalize transition-colors whitespace-nowrap ${
-                tab === t
-                  ? 'bg-white dark:bg-[#121821] text-slate-900 dark:text-slate-100 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          <div className="inline-flex items-center p-1 rounded-xl bg-black/5 dark:bg-[#14161C] border border-black/8 dark:border-white/10">
+            {(['daily', 'weekly', 'monthly'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`min-h-[38px] px-4 rounded-lg text-xs font-semibold capitalize transition-colors whitespace-nowrap ${
+                  tab === t
+                    ? 'bg-white dark:bg-[#090A0C] text-[#111317] dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-[#111317] dark:hover:text-white'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
       {/* DAILY VIEW */}
       {tab === 'daily' && (
         <div className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl px-4 py-3">
             <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 font-medium">
               {formatReadableDate(selectedDate)} ·{' '}
               <span className="font-semibold text-lime-700 dark:text-lime-400">
@@ -758,7 +760,7 @@ export const ProgressPage: React.FC = () => {
             ].map((kpi) => (
               <div
                 key={kpi.label}
-                className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4"
+                className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4"
               >
                 <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                   <span>{kpi.label}</span>
@@ -778,7 +780,7 @@ export const ProgressPage: React.FC = () => {
             ))}
           </div>
 
-          <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5">
+          <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5">
             <div className="flex items-center justify-between gap-2 mb-4">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -801,7 +803,7 @@ export const ProgressPage: React.FC = () => {
                     <XAxis dataKey="meal" tick={{ fontSize: 12, fill: tickColor }} stroke={gridStroke} />
                     <YAxis tick={{ fontSize: 12, fill: tickColor }} stroke={gridStroke} />
                     <Tooltip contentStyle={tooltipStyle} />
-                    <Bar dataKey="calories" name="Calories (kcal)" fill="#84cc16" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="calories" name="Calories (kcal)" fill="#C8FF00" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -823,7 +825,7 @@ export const ProgressPage: React.FC = () => {
                 type="button"
                 onClick={() => setWeekOffset((w) => w - 1)}
                 aria-label="Previous week"
-                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800"
+                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -831,7 +833,7 @@ export const ProgressPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setWeekOffset(0)}
-                  className="min-h-[38px] px-3 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-xs font-medium text-slate-700 dark:text-slate-200"
+                  className="min-h-[38px] px-3 rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-xs font-medium text-slate-700 dark:text-slate-200"
                 >
                   This Week
                 </button>
@@ -841,7 +843,7 @@ export const ProgressPage: React.FC = () => {
                 onClick={() => setWeekOffset((w) => Math.min(0, w + 1))}
                 disabled={weekOffset === 0}
                 aria-label="Next week"
-                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-40"
+                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-40"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -849,7 +851,7 @@ export const ProgressPage: React.FC = () => {
           </div>
 
           {/* Concise One-Line Weekly Summary Bar */}
-          <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex items-center gap-2.5 min-w-0">
               <span
                 className={`w-2.5 h-2.5 rounded-full shrink-0 ${
@@ -879,7 +881,7 @@ export const ProgressPage: React.FC = () => {
 
           {/* 4 Compact Dashboard KPI Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Avg Daily Calories</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
                 {weeklySummary.avgCalories.toLocaleString()} kcal
@@ -888,21 +890,21 @@ export const ProgressPage: React.FC = () => {
                 Target {goals.calories.toLocaleString()} · {weeklySummary.count}/7 days logged
               </div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Avg Daily Protein</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
                 {weeklySummary.avgProtein} g
               </div>
               <div className="mt-0.5 text-[11px] text-slate-400">Target {goals.protein} g</div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Days Goal Hit</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
                 {weeklySummary.achievedDays} / 7
               </div>
               <div className="mt-0.5 text-[11px] text-slate-400">Within ±10% of target</div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <Flame className="w-3.5 h-3.5 text-amber-500" />
                 28-Day Streak
@@ -942,7 +944,7 @@ export const ProgressPage: React.FC = () => {
               className={`min-h-[36px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
                 showCustomize
                   ? 'border-lime-500 bg-lime-50 dark:bg-lime-950/40 text-lime-800 dark:text-lime-300'
-                  : 'border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-slate-700 dark:text-slate-200 hover:border-lime-500'
+                  : 'border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-700 dark:text-slate-200 hover:border-lime-500'
               }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -951,7 +953,7 @@ export const ProgressPage: React.FC = () => {
           </div>
 
           {showCustomize && (
-            <div className="bg-white dark:bg-[#121821] border border-stone-200 dark:border-slate-800 rounded-2xl p-4 space-y-2.5">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 space-y-2.5">
               <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Choose which graphs appear on your dashboard:
               </div>
@@ -968,7 +970,7 @@ export const ProgressPage: React.FC = () => {
                       className={`min-h-[34px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
                         active
                           ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500'
-                          : 'bg-stone-50 dark:bg-slate-900 border-stone-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                          : 'bg-stone-50 dark:bg-[#090A0C] border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {active && <Check className="w-3.5 h-3.5" />}
@@ -984,7 +986,7 @@ export const ProgressPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Graph 1: 7-Day Calorie Intake */}
             {visibleGraphs.calories && (
-              <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -999,7 +1001,7 @@ export const ProgressPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => openInlineTargetEdit('calories')}
-                      className="px-2 py-1 rounded-lg border border-stone-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500 inline-flex items-center gap-1"
+                      className="px-2 py-1 rounded-lg border border-black/10 dark:border-white/15 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500 inline-flex items-center gap-1"
                     >
                       <Pencil className="w-3 h-3" />
                       Target
@@ -1008,7 +1010,7 @@ export const ProgressPage: React.FC = () => {
                 </div>
 
                 {editingTargetField === 'calories' && (
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200 dark:border-slate-800">
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                       New Goal (kcal):
                     </span>
@@ -1016,7 +1018,7 @@ export const ProgressPage: React.FC = () => {
                       type="number"
                       value={targetDraft}
                       onChange={(e) => setTargetDraft(e.target.value)}
-                      className="w-24 h-8 px-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-mono-nums"
+                      className="w-24 h-8 px-2.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-mono-nums"
                     />
                     <button
                       type="button"
@@ -1049,12 +1051,12 @@ export const ProgressPage: React.FC = () => {
                       {goals.calories > 0 && (
                         <ReferenceLine
                           y={goals.calories}
-                          stroke="#84cc16"
+                          stroke="#C8FF00"
                           strokeDasharray="4 4"
-                          label={{ value: 'Goal', position: 'right', fontSize: 11, fill: '#84cc16' }}
+                          label={{ value: 'Goal', position: 'right', fontSize: 11, fill: '#C8FF00' }}
                         />
                       )}
-                      <Bar dataKey="calories" fill="#84cc16" radius={[8, 8, 0, 0]} />
+                      <Bar dataKey="calories" fill="#C8FF00" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1063,7 +1065,7 @@ export const ProgressPage: React.FC = () => {
 
             {/* Graph 2: Daily Protein Intake */}
             {visibleGraphs.protein && (
-              <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -1078,7 +1080,7 @@ export const ProgressPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => openInlineTargetEdit('protein')}
-                      className="px-2 py-1 rounded-lg border border-stone-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500 inline-flex items-center gap-1"
+                      className="px-2 py-1 rounded-lg border border-black/10 dark:border-white/15 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500 inline-flex items-center gap-1"
                     >
                       <Pencil className="w-3 h-3" />
                       Target
@@ -1087,7 +1089,7 @@ export const ProgressPage: React.FC = () => {
                 </div>
 
                 {editingTargetField === 'protein' && (
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200 dark:border-slate-800">
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                       New Protein (g):
                     </span>
@@ -1095,7 +1097,7 @@ export const ProgressPage: React.FC = () => {
                       type="number"
                       value={targetDraft}
                       onChange={(e) => setTargetDraft(e.target.value)}
-                      className="w-24 h-8 px-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-mono-nums"
+                      className="w-24 h-8 px-2.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-mono-nums"
                     />
                     <button
                       type="button"
@@ -1137,7 +1139,7 @@ export const ProgressPage: React.FC = () => {
 
             {/* Graph 3: 4-Week Weight vs Energy Intake */}
             {visibleGraphs.weightVsIntake && (
-              <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
@@ -1177,7 +1179,7 @@ export const ProgressPage: React.FC = () => {
                         type="monotone"
                         dataKey="avgCalories"
                         name="Avg Intake (kcal)"
-                        stroke="#84cc16"
+                        stroke="#C8FF00"
                         strokeWidth={2.5}
                         dot={{ r: 4 }}
                         connectNulls
@@ -1200,7 +1202,7 @@ export const ProgressPage: React.FC = () => {
 
             {/* Graph 4: Carbs & Fats */}
             {visibleGraphs.carbsFat && (
-              <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -1215,7 +1217,7 @@ export const ProgressPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => openInlineTargetEdit('carbs')}
-                      className="px-2 py-1 rounded-lg border border-stone-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500 inline-flex items-center gap-1"
+                      className="px-2 py-1 rounded-lg border border-black/10 dark:border-white/15 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500 inline-flex items-center gap-1"
                     >
                       <Pencil className="w-3 h-3" />
                       Carbs
@@ -1224,7 +1226,7 @@ export const ProgressPage: React.FC = () => {
                 </div>
 
                 {editingTargetField === 'carbs' && (
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200 dark:border-slate-800">
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                       New Carbs (g):
                     </span>
@@ -1232,7 +1234,7 @@ export const ProgressPage: React.FC = () => {
                       type="number"
                       value={targetDraft}
                       onChange={(e) => setTargetDraft(e.target.value)}
-                      className="w-24 h-8 px-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-mono-nums"
+                      className="w-24 h-8 px-2.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-mono-nums"
                     />
                     <button
                       type="button"
@@ -1283,7 +1285,7 @@ export const ProgressPage: React.FC = () => {
 
             {/* Graph 5: Fibre Intake (Toggleable) */}
             {visibleGraphs.fibre && (
-              <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -1298,7 +1300,7 @@ export const ProgressPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => openInlineTargetEdit('fibre')}
-                      className="px-2 py-1 rounded-lg border border-stone-200 dark:border-slate-700 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500 inline-flex items-center gap-1"
+                      className="px-2 py-1 rounded-lg border border-black/10 dark:border-white/15 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500 inline-flex items-center gap-1"
                     >
                       <Pencil className="w-3 h-3" />
                       Target
@@ -1307,7 +1309,7 @@ export const ProgressPage: React.FC = () => {
                 </div>
 
                 {editingTargetField === 'fibre' && (
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200 dark:border-slate-800">
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                       New Fibre (g):
                     </span>
@@ -1315,7 +1317,7 @@ export const ProgressPage: React.FC = () => {
                       type="number"
                       value={targetDraft}
                       onChange={(e) => setTargetDraft(e.target.value)}
-                      className="w-24 h-8 px-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-mono-nums"
+                      className="w-24 h-8 px-2.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-mono-nums"
                     />
                     <button
                       type="button"
@@ -1360,7 +1362,7 @@ export const ProgressPage: React.FC = () => {
 
             {/* Graph 6: Meal Timing & Protein Split (Toggleable) */}
             {visibleGraphs.mealTiming && (
-              <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -1404,7 +1406,7 @@ export const ProgressPage: React.FC = () => {
                           yAxisId="kcal"
                           dataKey="avgCalories"
                           name="Avg Calories (kcal)"
-                          fill="#84cc16"
+                          fill="#C8FF00"
                           radius={[6, 6, 0, 0]}
                         />
                         <Bar
@@ -1423,7 +1425,7 @@ export const ProgressPage: React.FC = () => {
 
             {/* Graph 7: 28-Day Consistency Heatmap (Toggleable) */}
             {visibleGraphs.heatmap && (
-              <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+              <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -1446,7 +1448,7 @@ export const ProgressPage: React.FC = () => {
                         ? 'bg-lime-500 text-slate-950 border-lime-500'
                         : d.status === 'logged'
                         ? 'bg-amber-400/90 text-slate-950 border-amber-400'
-                        : 'bg-stone-100 dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-stone-200/80 dark:border-slate-800';
+                        : 'bg-stone-100 dark:bg-[#090A0C] text-slate-400 dark:text-slate-500 border-black/10 dark:border-white/12';
                     return (
                       <div
                         key={d.date}
@@ -1469,7 +1471,7 @@ export const ProgressPage: React.FC = () => {
 
           {/* Compact Top Food Contributors (only when logged) */}
           {topFoodContributors.hasData && (
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                   <Award className="w-4 h-4 text-lime-600 dark:text-lime-400" />
@@ -1480,7 +1482,7 @@ export const ProgressPage: React.FC = () => {
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-xl bg-stone-50/70 dark:bg-slate-900/60 border border-stone-200/70 dark:border-slate-800 p-3.5 space-y-1.5">
+                <div className="rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/60 border border-black/10 dark:border-white/12 p-3.5 space-y-1.5">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Top Calorie Sources
                   </div>
@@ -1495,7 +1497,7 @@ export const ProgressPage: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                <div className="rounded-xl bg-stone-50/70 dark:bg-slate-900/60 border border-stone-200/70 dark:border-slate-800 p-3.5 space-y-1.5">
+                <div className="rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/60 border border-black/10 dark:border-white/12 p-3.5 space-y-1.5">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-lime-700 dark:text-lime-400">
                     Top Protein Sources
                   </div>
@@ -1528,7 +1530,7 @@ export const ProgressPage: React.FC = () => {
                 type="button"
                 onClick={() => setMonthOffset((m) => m - 1)}
                 aria-label="Previous month"
-                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800"
+                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -1536,7 +1538,7 @@ export const ProgressPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setMonthOffset(0)}
-                  className="min-h-[38px] px-3 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-xs font-medium text-slate-700 dark:text-slate-200"
+                  className="min-h-[38px] px-3 rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-xs font-medium text-slate-700 dark:text-slate-200"
                 >
                   This Month
                 </button>
@@ -1546,7 +1548,7 @@ export const ProgressPage: React.FC = () => {
                 onClick={() => setMonthOffset((m) => Math.min(0, m + 1))}
                 disabled={monthOffset === 0}
                 aria-label="Next month"
-                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-40"
+                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-40"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -1554,7 +1556,7 @@ export const ProgressPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Goal Completion</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
                 {monthlySummary.goalCompletionPct}%
@@ -1563,7 +1565,7 @@ export const ProgressPage: React.FC = () => {
                 Avg daily score ({monthlySummary.count} days)
               </div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Consistency Score</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
                 {monthlySummary.consistencyScore}%
@@ -1572,7 +1574,7 @@ export const ProgressPage: React.FC = () => {
                 {monthlySummary.count} of {monthlySummary.elapsedDays} days logged
               </div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Avg Macro Intake</div>
               <div className="mt-1 text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-50">
                 P {monthlySummary.avgProtein}g · C {monthlySummary.avgCarbs}g
@@ -1581,7 +1583,7 @@ export const ProgressPage: React.FC = () => {
                 F {monthlySummary.avgFat}g · Fibre {monthlySummary.avgFibre}g
               </div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Best Nutrition Day</div>
               <div className="mt-1 text-base font-bold text-slate-900 dark:text-slate-50">
                 {monthlySummary.bestDay ? monthlySummary.bestDay.shortDate : '—'}
@@ -1594,7 +1596,7 @@ export const ProgressPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5">
+          <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5">
             <div className="flex items-center justify-between gap-2 mb-4">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -1626,8 +1628,8 @@ export const ProgressPage: React.FC = () => {
                 <AreaChart data={monthlyRows}>
                   <defs>
                     <linearGradient id="monthlyCalGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#84cc16" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#84cc16" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#C8FF00" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#C8FF00" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
@@ -1639,7 +1641,7 @@ export const ProgressPage: React.FC = () => {
                     labelFormatter={(_, payload) => payload?.[0]?.payload?.shortDate || ''}
                   />
                   {goals.calories > 0 && (
-                    <ReferenceLine y={goals.calories} stroke="#84cc16" strokeDasharray="4 4" />
+                    <ReferenceLine y={goals.calories} stroke="#C8FF00" strokeDasharray="4 4" />
                   )}
                   <Area
                     type="monotone"

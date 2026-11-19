@@ -109,7 +109,7 @@ const GOAL_PRESETS: {
 ];
 
 const MACRO_COLORS = {
-  protein: '#84cc16', // lime-500
+  protein: '#C8FF00', // lime-500
   carbs: '#f59e0b', // amber-500
   fat: '#6366f1', // indigo-500
 };
@@ -482,7 +482,7 @@ export const GoalsPage: React.FC = () => {
 
       {/* Active Saved Goal Overview Banner (when user already has active goals) */}
       {state.goals.calories > 0 && (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <div className="text-xs text-slate-500 dark:text-slate-400">Active Calorie Goal</div>
             <div className="mt-1 text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
@@ -533,7 +533,7 @@ export const GoalsPage: React.FC = () => {
       {/* USER INPUT FORM */}
       <form
         onSubmit={handleCalculateGoals}
-        className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
+        className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-5"
       >
         <div>
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -564,7 +564,7 @@ export const GoalsPage: React.FC = () => {
               required
               value={calcAge}
               onChange={(e) => setCalcAge(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -573,7 +573,7 @@ export const GoalsPage: React.FC = () => {
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
               Biological Sex
             </label>
-            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-stone-100 dark:bg-slate-900 h-11">
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C] h-11">
               {(['male', 'female'] as const).map((sex) => (
                 <button
                   key={sex}
@@ -604,7 +604,7 @@ export const GoalsPage: React.FC = () => {
               required
               value={calcHeightCm}
               onChange={(e) => setCalcHeightCm(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -620,7 +620,7 @@ export const GoalsPage: React.FC = () => {
               required
               value={calcCurrentWeight}
               onChange={(e) => setCalcCurrentWeight(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -636,7 +636,7 @@ export const GoalsPage: React.FC = () => {
               required
               value={calcTargetWeight}
               onChange={(e) => setCalcTargetWeight(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -652,7 +652,7 @@ export const GoalsPage: React.FC = () => {
               required
               value={calcWorkoutsPerWeek}
               onChange={(e) => setCalcWorkoutsPerWeek(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -664,7 +664,7 @@ export const GoalsPage: React.FC = () => {
             <select
               value={calcActivity}
               onChange={(e) => setCalcActivity(e.target.value as ActivityLevel)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             >
               {(Object.keys(ACTIVITY_MULTIPLIERS) as ActivityLevel[]).map((tier) => (
                 <option key={tier} value={tier}>
@@ -685,7 +685,7 @@ export const GoalsPage: React.FC = () => {
             <select
               value={calcFitnessGoal}
               onChange={(e) => setCalcFitnessGoal(e.target.value as FitnessGoalType)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             >
               <option value="fat_loss">Lose Fat</option>
               <option value="muscle_gain">Build Muscle</option>
@@ -699,7 +699,7 @@ export const GoalsPage: React.FC = () => {
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
               Preferred Goal Pace
             </label>
-            <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-stone-100 dark:bg-slate-900 h-11">
+            <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C] h-11">
               {(['slow', 'moderate', 'aggressive'] as GoalSpeed[]).map((spd) => (
                 <button
                   key={spd}
@@ -707,7 +707,7 @@ export const GoalsPage: React.FC = () => {
                   onClick={() => setCalcGoalSpeed(spd)}
                   className={`rounded-lg text-xs font-semibold capitalize transition-colors ${
                     calcGoalSpeed === spd
-                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
+                      ? 'bg-white dark:bg-[#14161C] text-[#111317] dark:text-white shadow-xs'
                       : 'text-slate-500 dark:text-slate-400'
                   }`}
                 >
@@ -722,7 +722,7 @@ export const GoalsPage: React.FC = () => {
         </div>
 
         {/* Nutrition / Macro Focus Style */}
-        <div className="pt-2 border-t border-stone-100 dark:border-slate-800">
+        <div className="pt-2 border-t border-stone-100 dark:border-white/12">
           <span className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
             Macro Focus Style
           </span>
@@ -737,7 +737,7 @@ export const GoalsPage: React.FC = () => {
                   className={`p-3 rounded-xl border text-left transition-colors ${
                     active
                       ? 'border-lime-500 bg-lime-50/70 dark:bg-lime-950/30'
-                      : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                      : 'border-black/10 dark:border-white/12 hover:border-stone-300 dark:hover:border-slate-700'
                   }`}
                 >
                   <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
@@ -778,8 +778,8 @@ export const GoalsPage: React.FC = () => {
 
       {/* RESULTS DASHBOARD */}
       {calcResult && (
-        <section className="bg-white dark:bg-[#121821] border border-lime-500/50 dark:border-lime-500/40 rounded-2xl p-5 sm:p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-stone-100 dark:border-slate-800 pb-4">
+        <section className="bg-white dark:bg-[#111317] border border-lime-500/50 dark:border-lime-500/40 rounded-2xl p-5 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-stone-100 dark:border-white/12 pb-4">
             <div>
               <span className="text-xs font-semibold text-lime-700 dark:text-lime-400">
                 Your Personalized Plan
@@ -824,7 +824,7 @@ export const GoalsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-3.5">
+            <div className="rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/70 dark:bg-[#090A0C]/60 p-3.5">
               <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                 <Flame className="w-3.5 h-3.5" />
                 Daily Maintenance
@@ -837,7 +837,7 @@ export const GoalsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-3.5">
+            <div className="rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/70 dark:bg-[#090A0C]/60 p-3.5">
               <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5" />
                 Resting Burn
@@ -850,7 +850,7 @@ export const GoalsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-3.5">
+            <div className="rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/70 dark:bg-[#090A0C]/60 p-3.5">
               <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                 <Scale className="w-3.5 h-3.5" />
                 Body Mass Score
@@ -863,7 +863,7 @@ export const GoalsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="col-span-2 sm:col-span-1 rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-3.5">
+            <div className="col-span-2 sm:col-span-1 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/70 dark:bg-[#090A0C]/60 p-3.5">
               <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                 <CalendarClock className="w-3.5 h-3.5" />
                 Target Timeline
@@ -881,7 +881,7 @@ export const GoalsPage: React.FC = () => {
 
           {/* Macro Breakdown Chart + Macro Targets */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
-            <div className="lg:col-span-5 h-56 flex items-center justify-center rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/50 dark:bg-slate-900/40 p-3">
+            <div className="lg:col-span-5 h-56 flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/50 dark:bg-[#090A0C]/40 p-3">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -909,10 +909,10 @@ export const GoalsPage: React.FC = () => {
                       props.payload?.name || '',
                     ]}
                     contentStyle={{
-                      backgroundColor: '#121821',
-                      border: '1px solid #1e293b',
+                      backgroundColor: '#14161C',
+                      border: '1px solid rgba(255,255,255,0.14)',
                       borderRadius: '10px',
-                      color: '#f3f4f6',
+                      color: '#F3F4F6',
                       fontSize: '12px',
                     }}
                   />
@@ -921,7 +921,7 @@ export const GoalsPage: React.FC = () => {
             </div>
 
             <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-2">
+              <div className="rounded-xl border border-black/10 dark:border-white/12 p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Daily Protein
@@ -944,7 +944,7 @@ export const GoalsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-2">
+              <div className="rounded-xl border border-black/10 dark:border-white/12 p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Daily Carbohydrates
@@ -967,7 +967,7 @@ export const GoalsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-2">
+              <div className="rounded-xl border border-black/10 dark:border-white/12 p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Daily Healthy Fat
@@ -990,7 +990,7 @@ export const GoalsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-2">
+              <div className="rounded-xl border border-black/10 dark:border-white/12 p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Daily Fibre & Water
@@ -1016,7 +1016,7 @@ export const GoalsPage: React.FC = () => {
           </div>
 
           {/* Suggested Daily Meal Distribution (HealthifyMe-style) */}
-          <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 space-y-3">
+          <div className="rounded-xl border border-black/10 dark:border-white/12 p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                 Suggested Meal Calorie Guide
@@ -1034,7 +1034,7 @@ export const GoalsPage: React.FC = () => {
               ].map((slot) => (
                 <div
                   key={slot.label}
-                  className="p-2.5 rounded-lg bg-stone-50 dark:bg-slate-900/60 border border-stone-200/60 dark:border-slate-800"
+                  className="p-2.5 rounded-lg bg-stone-50 dark:bg-[#090A0C]/60 border border-black/8 dark:border-white/12"
                 >
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">{slot.label}</div>
                   <div className="mt-0.5 text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-100">
@@ -1045,7 +1045,7 @@ export const GoalsPage: React.FC = () => {
             </div>
           </div>
 
-          <ul className="rounded-xl bg-stone-50/80 dark:bg-slate-900/70 border border-stone-200/70 dark:border-slate-800 p-4 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+          <ul className="rounded-xl bg-stone-50/80 dark:bg-[#090A0C]/70 border border-black/10 dark:border-white/12 p-4 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
             {calcResult.explanation.map((line, idx) => (
               <li key={idx} className="leading-relaxed">
                 • {line}
@@ -1058,7 +1058,7 @@ export const GoalsPage: React.FC = () => {
       {/* Custom Macro Ratio & Target Editor (MyFitnessPal-Inspired) */}
       <form
         onSubmit={handleManualSave}
-        className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
+        className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-5"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -1088,7 +1088,7 @@ export const GoalsPage: React.FC = () => {
                 className={`p-3.5 rounded-xl border text-left transition-colors ${
                   active
                     ? 'bg-lime-50 dark:bg-lime-950/40 border-lime-500'
-                    : 'bg-stone-50/50 dark:bg-slate-900/40 border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                    : 'bg-stone-50/50 dark:bg-[#090A0C]/40 border-black/10 dark:border-white/12 hover:border-stone-300 dark:hover:border-slate-700'
                 }`}
               >
                 <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
@@ -1103,7 +1103,7 @@ export const GoalsPage: React.FC = () => {
         </div>
 
         {/* Interactive Macro % Quick Sliders (MFP Style) */}
-        <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/60 dark:bg-slate-900/40 p-4 space-y-3">
+        <div className="rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/60 dark:bg-[#090A0C]/40 p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <span className="font-semibold text-slate-800 dark:text-slate-200">
               Interactive Macro % Ratio (Auto-scales grams to Calories)
@@ -1181,7 +1181,7 @@ export const GoalsPage: React.FC = () => {
                 setCalories(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -1197,7 +1197,7 @@ export const GoalsPage: React.FC = () => {
                 setProtein(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -1213,7 +1213,7 @@ export const GoalsPage: React.FC = () => {
                 setCarbs(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -1229,7 +1229,7 @@ export const GoalsPage: React.FC = () => {
                 setFat(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -1245,7 +1245,7 @@ export const GoalsPage: React.FC = () => {
                 setFibre(e.target.value);
                 setPreset('custom');
               }}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -1259,12 +1259,12 @@ export const GoalsPage: React.FC = () => {
               value={targetWeight}
               onChange={(e) => setTargetWeight(e.target.value)}
               placeholder={`e.g. ${unit === 'kg' ? '64.0' : '141.0'}`}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-semibold font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
         </div>
 
-        <div className="pt-2 border-t border-stone-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="pt-2 border-t border-stone-100 dark:border-white/12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
             Macro calorie total:{' '}
             <span className="font-semibold text-slate-800 dark:text-slate-200">

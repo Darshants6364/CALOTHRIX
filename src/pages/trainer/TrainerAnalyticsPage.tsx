@@ -175,12 +175,12 @@ export const TrainerAnalyticsPage: React.FC = () => {
     return { count, avgConsistency, avgCalAdherence, avgProteinHit, flagged };
   }, [clientMetrics]);
 
-  const gridStroke = isDark ? '#1e293b' : '#e7e5e4';
-  const tickColor = isDark ? '#94a3b8' : '#64748b';
+  const gridStroke = isDark ? 'rgba(255,255,255,0.08)' : '#e7e5e4';
+  const tickColor = isDark ? '#9A9CA3' : '#52555E';
   const tooltipStyle = {
-    backgroundColor: isDark ? '#0f172a' : '#ffffff',
-    borderColor: isDark ? '#334155' : '#e7e5e4',
-    color: isDark ? '#f8fafc' : '#0f172a',
+    backgroundColor: isDark ? '#14161C' : '#ffffff',
+    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)',
+    color: isDark ? '#F3F4F6' : '#111317',
     borderRadius: '10px',
     fontSize: '12px',
   };
@@ -198,7 +198,7 @@ export const TrainerAnalyticsPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex p-1 rounded-xl bg-stone-200/70 dark:bg-slate-900">
+          <div className="inline-flex p-1 rounded-xl bg-stone-200/70 dark:bg-[#090A0C]">
             {(
               [
                 { id: '7d', label: '7 Days' },
@@ -229,14 +229,14 @@ export const TrainerAnalyticsPage: React.FC = () => {
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="h-9 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                className="h-9 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs"
               />
               <span>–</span>
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="h-9 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                className="h-9 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs"
               />
             </div>
           )}
@@ -244,14 +244,14 @@ export const TrainerAnalyticsPage: React.FC = () => {
       </section>
 
       {clientMetrics.length === 0 ? (
-        <div className="bg-white dark:bg-[#121821] border border-dashed border-stone-300 dark:border-slate-700 rounded-2xl p-8 text-center text-xs text-slate-500">
+        <div className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-8 text-center text-xs text-slate-500">
           Connect with clients first to compare nutrition adherence and progress analytics.
         </div>
       ) : (
         <>
           {/* Cohort KPI Summary */}
           <section className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Avg Logging Consistency</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
                 {rosterSummary.avgConsistency}%
@@ -260,21 +260,21 @@ export const TrainerAnalyticsPage: React.FC = () => {
                 Across {rosterSummary.count} visible client{rosterSummary.count === 1 ? '' : 's'}
               </div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Avg Calorie On-Target</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
                 {rosterSummary.avgCalAdherence}%
               </div>
               <div className="mt-0.5 text-[11px] text-slate-400">Days within ±15% of goal</div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Avg Protein Hit Rate</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-teal-700 dark:text-teal-400">
                 {rosterSummary.avgProteinHit}%
               </div>
               <div className="mt-0.5 text-[11px] text-slate-400">Logged days ≥85% protein goal</div>
             </div>
-            <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400">Needs Attention</div>
               <div className="mt-1 text-xl font-bold font-mono-nums text-amber-600 dark:text-amber-400">
                 {rosterSummary.flagged.length}
@@ -285,7 +285,7 @@ export const TrainerAnalyticsPage: React.FC = () => {
 
           {/* Coaching Alerts + Cohort Adherence Matrix */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <section className="lg:col-span-7 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+            <section className="lg:col-span-7 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-4">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                   Cohort Adherence Matrix ({bounds.start} → {bounds.end})
@@ -305,7 +305,7 @@ export const TrainerAnalyticsPage: React.FC = () => {
                     <Bar
                       dataKey="goalCompletionPct"
                       name="Calorie On-Target %"
-                      fill="#84cc16"
+                      fill="#C8FF00"
                       radius={[5, 5, 0, 0]}
                     />
                     <Bar
@@ -325,7 +325,7 @@ export const TrainerAnalyticsPage: React.FC = () => {
               </div>
             </section>
 
-            <section className="lg:col-span-5 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+            <section className="lg:col-span-5 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
@@ -348,7 +348,7 @@ export const TrainerAnalyticsPage: React.FC = () => {
                   {rosterSummary.flagged.map((c) => (
                     <div
                       key={c.clientId}
-                      className="rounded-xl bg-stone-50 dark:bg-slate-900/80 border border-stone-200/80 dark:border-slate-800 p-3 flex items-start justify-between gap-3"
+                      className="rounded-xl bg-stone-50 dark:bg-[#090A0C]/80 border border-black/10 dark:border-white/12 p-3 flex items-start justify-between gap-3"
                     >
                       <div className="min-w-0 space-y-1">
                         <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
@@ -368,7 +368,7 @@ export const TrainerAnalyticsPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => openTrainerClientDetail(c.clientId)}
-                        className="shrink-0 min-h-[32px] px-2.5 rounded-lg bg-white dark:bg-slate-800 border border-stone-200 dark:border-slate-700 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1"
+                        className="shrink-0 min-h-[32px] px-2.5 rounded-lg bg-white dark:bg-slate-800 border border-black/10 dark:border-white/15 text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1"
                       >
                         Inspect <ArrowRight className="w-3 h-3" />
                       </button>
@@ -379,11 +379,11 @@ export const TrainerAnalyticsPage: React.FC = () => {
             </section>
           </div>
 
-          <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl overflow-hidden">
+          <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-stone-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                  <tr className="border-b border-black/10 dark:border-white/12 text-slate-500 dark:text-slate-400">
                     <th className="py-3.5 px-4 font-semibold">Client</th>
                     <th className="py-3.5 px-4 font-semibold">Logged Days</th>
                     <th className="py-3.5 px-4 font-semibold">Consistency</th>

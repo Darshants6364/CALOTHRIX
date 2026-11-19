@@ -120,7 +120,7 @@ export const TrainerOverviewPage: React.FC = () => {
             type="button"
             onClick={() => void refreshAll()}
             disabled={loading}
-            className="min-h-[42px] px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
+            className="min-h-[42px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -147,7 +147,7 @@ export const TrainerOverviewPage: React.FC = () => {
 
       {/* Top KPI Grid */}
       <section className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" />
             Active Clients
@@ -160,7 +160,7 @@ export const TrainerOverviewPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">New Clients (30d)</div>
           <div className="mt-1.5 text-2xl font-bold font-mono-nums text-slate-900 dark:text-slate-50">
             {newClientsLast30d}
@@ -168,7 +168,7 @@ export const TrainerOverviewPage: React.FC = () => {
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Authorized</div>
         </div>
 
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
             Pending Invites
@@ -179,7 +179,7 @@ export const TrainerOverviewPage: React.FC = () => {
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Awaiting reply</div>
         </div>
 
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
             <Target className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
             On Calorie Goal
@@ -190,7 +190,7 @@ export const TrainerOverviewPage: React.FC = () => {
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Today (±15%)</div>
         </div>
 
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-sky-500" />
             On Protein Goal
@@ -201,7 +201,7 @@ export const TrainerOverviewPage: React.FC = () => {
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Today (≥90%)</div>
         </div>
 
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
             <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
             Not Logged Today
@@ -215,7 +215,7 @@ export const TrainerOverviewPage: React.FC = () => {
 
       {/* Empty Zero-State */}
       {!loading && activeClients.length === 0 && (
-        <section className="bg-white dark:bg-[#121821] border border-dashed border-stone-300 dark:border-slate-700 rounded-2xl p-8 text-center space-y-3">
+        <section className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-8 text-center space-y-3">
           <div className="w-12 h-12 rounded-2xl bg-lime-100 dark:bg-lime-950 text-lime-700 dark:text-lime-400 flex items-center justify-center mx-auto">
             <Users className="w-6 h-6" />
           </div>
@@ -243,7 +243,7 @@ export const TrainerOverviewPage: React.FC = () => {
       {activeClients.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* 7-Day Adherence Chart */}
-          <section className="lg:col-span-7 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+          <section className="lg:col-span-7 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -270,19 +270,19 @@ export const TrainerOverviewPage: React.FC = () => {
               <div className="h-60">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={cohortChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#94a3b8' }} unit="%" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9A9CA3' }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#9A9CA3' }} unit="%" />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: '#121821',
-                        border: '1px solid #1e293b',
+                        backgroundColor: '#14161C',
+                        border: '1px solid rgba(255,255,255,0.14)',
                         borderRadius: '10px',
-                        color: '#f3f4f6',
+                        color: '#F3F4F6',
                         fontSize: '12px',
                       }}
                     />
-                    <Bar dataKey="adherencePct" name="7-Day Logging %" fill="#84cc16" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="adherencePct" name="7-Day Logging %" fill="#C8FF00" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -290,7 +290,7 @@ export const TrainerOverviewPage: React.FC = () => {
           </section>
 
           {/* Clients Needing Attention & Check-Ins */}
-          <section className="lg:col-span-5 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+          <section className="lg:col-span-5 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-4">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               Daily Follow-Up Queue
             </h2>
@@ -328,7 +328,7 @@ export const TrainerOverviewPage: React.FC = () => {
                     key={snap.relationship.id}
                     type="button"
                     onClick={() => openTrainerClientDetail(snap.relationship.clientId)}
-                    className="w-full text-left p-3 rounded-xl border border-stone-200 dark:border-slate-800 hover:bg-stone-50 dark:hover:bg-slate-900 flex items-center justify-between gap-2"
+                    className="w-full text-left p-3 rounded-xl border border-black/10 dark:border-white/12 hover:bg-stone-50 dark:hover:bg-slate-900 flex items-center justify-between gap-2"
                   >
                     <div>
                       <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">

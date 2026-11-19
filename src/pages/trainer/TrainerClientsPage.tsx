@@ -164,7 +164,7 @@ export const TrainerClientsPage: React.FC = () => {
       {inviteModalOpen && (
         <form
           onSubmit={handleSendInvitation}
-          className="bg-white dark:bg-[#121821] border border-lime-500/60 rounded-2xl p-5 sm:p-6 space-y-4"
+          className="bg-white dark:bg-[#111317] border border-lime-500/60 rounded-2xl p-5 sm:p-6 space-y-4"
         >
           <div className="flex items-center justify-between gap-2">
             <div>
@@ -194,7 +194,7 @@ export const TrainerClientsPage: React.FC = () => {
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="client@example.com"
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
               />
             </div>
 
@@ -207,7 +207,7 @@ export const TrainerClientsPage: React.FC = () => {
                 value={inviteName}
                 onChange={(e) => setInviteName(e.target.value)}
                 placeholder="Rohan Sharma"
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
               />
             </div>
           </div>
@@ -221,7 +221,7 @@ export const TrainerClientsPage: React.FC = () => {
               value={inviteMessage}
               onChange={(e) => setInviteMessage(e.target.value)}
               placeholder="Accept to share your daily macros and weight trends so we can dial in your targets."
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -229,7 +229,7 @@ export const TrainerClientsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setInviteModalOpen(false)}
-              className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300"
+              className="min-h-[42px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-600 dark:text-slate-300"
             >
               Cancel
             </button>
@@ -247,7 +247,7 @@ export const TrainerClientsPage: React.FC = () => {
 
       {/* Filter & Search Bar */}
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="inline-flex p-1 rounded-xl bg-stone-200/70 dark:bg-slate-900 w-fit">
+        <div className="inline-flex p-1 rounded-xl bg-stone-200/70 dark:bg-[#090A0C] w-fit">
           {(
             [
               { id: 'active', label: `Active (${activeClients.length})` },
@@ -278,7 +278,7 @@ export const TrainerClientsPage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search client name or email..."
-              className="w-full h-10 pl-9 pr-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs text-slate-900 dark:text-slate-100"
+              className="w-full h-10 pl-9 pr-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs text-slate-900 dark:text-slate-100"
             />
           </div>
         )}
@@ -288,14 +288,14 @@ export const TrainerClientsPage: React.FC = () => {
       {filterTab === 'pending' && (
         <section className="space-y-3">
           {pendingInvites.length === 0 ? (
-            <div className="bg-white dark:bg-[#121821] border border-dashed border-stone-300 dark:border-slate-700 rounded-2xl p-8 text-center text-xs text-slate-500 dark:text-slate-400">
+            <div className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-8 text-center text-xs text-slate-500 dark:text-slate-400">
               No pending invitations. Click “Invite New Client” above to generate a shareable invite link or in-app invite.
             </div>
           ) : (
             pendingInvites.map((inv) => (
               <div
                 key={inv.id}
-                className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+                className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -333,7 +333,7 @@ export const TrainerClientsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => void copyInviteLink(inv.inviteToken, inv.id)}
-                    className="min-h-[38px] px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
+                    className="min-h-[38px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
                   >
                     {copiedId === inv.id ? (
                       <Check className="w-3.5 h-3.5 text-lime-500" />
@@ -361,7 +361,7 @@ export const TrainerClientsPage: React.FC = () => {
       {filterTab !== 'pending' && (
         <section className="space-y-3">
           {filteredActive.length === 0 ? (
-            <div className="bg-white dark:bg-[#121821] border border-dashed border-stone-300 dark:border-slate-700 rounded-2xl p-8 text-center text-xs text-slate-500 dark:text-slate-400">
+            <div className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-8 text-center text-xs text-slate-500 dark:text-slate-400">
               {filterTab === 'archived'
                 ? 'No archived clients.'
                 : searchQuery
@@ -376,7 +376,7 @@ export const TrainerClientsPage: React.FC = () => {
               return (
                 <div
                   key={snap.relationship.id}
-                  className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
+                  className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
                 >
                   <div className="space-y-1.5 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -431,7 +431,7 @@ export const TrainerClientsPage: React.FC = () => {
                           onClick={() =>
                             void handleClientAction(snap.relationship.id, 'archive')
                           }
-                          className="min-h-[40px] px-3 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 inline-flex items-center gap-1.5"
+                          className="min-h-[40px] px-3 rounded-xl border border-black/10 dark:border-white/15 text-xs font-medium text-slate-600 dark:text-slate-300 inline-flex items-center gap-1.5"
                         >
                           <Archive className="w-3.5 h-3.5" />
                           Archive
@@ -441,7 +441,7 @@ export const TrainerClientsPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => void handleClientAction(snap.relationship.id, 'restore')}
-                        className="min-h-[40px] px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
+                        className="min-h-[40px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
                       >
                         <ArchiveRestore className="w-3.5 h-3.5" />
                         Restore

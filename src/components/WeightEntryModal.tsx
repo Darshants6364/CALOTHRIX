@@ -67,10 +67,10 @@ export const WeightEntryModal: React.FC = () => {
       aria-modal="true"
       aria-label={editing ? 'Edit weight entry' : 'Log body weight'}
     >
-      <div className="w-full sm:max-w-md bg-white dark:bg-[#121821] rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      <div className="w-full sm:max-w-md bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
         <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3" />
 
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 dark:border-slate-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-black/10 dark:border-white/12">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
             {editing ? 'Edit Weight Entry' : 'Log Body Weight'}
           </h2>
@@ -102,7 +102,7 @@ export const WeightEntryModal: React.FC = () => {
               value={weightValue}
               onChange={(e) => setWeightValue(e.target.value)}
               placeholder={unit === 'kg' ? '62.95' : '138.8'}
-              className="w-full h-12 px-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/70 dark:bg-slate-900 text-lg font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-12 px-4 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/70 dark:bg-[#090A0C] text-lg font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -114,7 +114,7 @@ export const WeightEntryModal: React.FC = () => {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -127,7 +127,7 @@ export const WeightEntryModal: React.FC = () => {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g., Morning fasted, post-workout"
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 

@@ -405,3 +405,67 @@ export async function analyzeMealWithGemini(
     nutritionTip: String(parsed.nutritionTip || '').trim(),
   };
 }
+
+export async function readBarcodeFromImageWithGemini(req: {
+  mimeType?: string;
+  mediaBase64: string;
+}): Promise<{ barcode: string | null }> {
+  const rawBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
+  if (!rawBase64) {
+    return { barcode: null };
+  }
+
+  const ai = getGeminiClient();
+  const mimeType = req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg';
+
+  const response = await withTimeout(
+    ai.models.generateContent({
+      model: 'gemini-3.1-flash-lite',
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType,
+              data: rawBase64,
+            },
+          },
+          {
+            text: 'Read the numeric barcode printed on this food product package (EAN-13, EAN-8, UPC-A, or UPC-E — usually 8 to 14 digits printed directly underneath the vertical black bars). Return ONLY the digits in `barcode`, with no spaces or dashes. If no barcode digits are clearly readable, return an empty string.',
+          },
+        ],
+      },
+      config: {
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            barcode: {
+              type: Type.STRING,
+              description: 'Digits only (8-14 digits) or empty string if unreadable',
+            },
+          },
+          required: ['barcode'],
+        },
+      },
+    }),
+    9000,
+    'Barcode AI read timed out.'
+  );
+
+  const txt = (response.text || '').trim();
+  if (!txt) return { barcode: null };
+
+  try {
+    const parsed = JSON.parse(txt) as { barcode?: string };
+    const digits = String(parsed.barcode || '').replace(/\D/g, '').trim();
+    if (/^\d{6,14}$/.test(digits)) {
+      return { barcode: digits };
+    }
+  } catch {
+    const match = txt.match(/\d{8,14}/);
+    if (match) return { barcode: match[0] };
+  }
+
+  return { barcode: null };
+}

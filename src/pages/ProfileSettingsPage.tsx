@@ -180,7 +180,7 @@ export const ProfileSettingsPage: React.FC = () => {
       </section>
 
       {/* Account & Login Details Card */}
-      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
+      <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
             {displayAvatar ? (
@@ -188,7 +188,7 @@ export const ProfileSettingsPage: React.FC = () => {
                 src={displayAvatar}
                 alt={profile.name}
                 referrerPolicy="no-referrer"
-                className="w-16 h-16 rounded-full object-cover border border-stone-200 dark:border-slate-700 shrink-0"
+                className="w-16 h-16 rounded-full object-cover border border-black/10 dark:border-white/15 shrink-0"
               />
             ) : (
               <div className="w-16 h-16 rounded-full bg-lime-100 dark:bg-lime-950 text-lime-800 dark:text-lime-300 font-bold text-xl flex items-center justify-center shrink-0">
@@ -221,7 +221,7 @@ export const ProfileSettingsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => void signOut()}
-            className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[42px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-2 whitespace-nowrap shrink-0"
           >
             <LogOut className="w-4 h-4" />
             Sign Out
@@ -229,7 +229,7 @@ export const ProfileSettingsPage: React.FC = () => {
         </div>
 
         {authUser && (
-          <div className="mt-4 pt-4 border-t border-stone-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+          <div className="mt-4 pt-4 border-t border-stone-100 dark:border-white/12 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
             <div>
               <span className="text-slate-400 block">Account ID</span>
               <span className="font-mono-nums text-slate-700 dark:text-slate-300 break-all">
@@ -282,7 +282,7 @@ export const ProfileSettingsPage: React.FC = () => {
       {/* Profile Form */}
       <form
         onSubmit={handleSaveProfile}
-        className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
+        className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-5"
       >
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
           Body, Fitness & Dietary Profile
@@ -297,7 +297,7 @@ export const ProfileSettingsPage: React.FC = () => {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -308,7 +308,7 @@ export const ProfileSettingsPage: React.FC = () => {
             <select
               value={biologicalSex}
               onChange={(e) => setBiologicalSex(e.target.value as BiologicalSex)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             >
               <option value="male">Male</option>
               <option value="female">Female</option>
@@ -325,7 +325,7 @@ export const ProfileSettingsPage: React.FC = () => {
               max="110"
               value={age}
               onChange={(e) => setAge(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -339,7 +339,7 @@ export const ProfileSettingsPage: React.FC = () => {
               max="250"
               value={heightCm}
               onChange={(e) => setHeightCm(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -353,7 +353,7 @@ export const ProfileSettingsPage: React.FC = () => {
               step="0.05"
               value={currentWeight}
               onChange={(e) => setCurrentWeight(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -367,7 +367,7 @@ export const ProfileSettingsPage: React.FC = () => {
               step="0.05"
               value={targetWeight}
               onChange={(e) => setTargetWeight(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -381,7 +381,7 @@ export const ProfileSettingsPage: React.FC = () => {
               step="500"
               value={dailySteps}
               onChange={(e) => setDailySteps(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -395,7 +395,7 @@ export const ProfileSettingsPage: React.FC = () => {
               max="14"
               value={workoutFrequency}
               onChange={(e) => setWorkoutFrequency(e.target.value)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100"
             />
           </div>
 
@@ -406,7 +406,7 @@ export const ProfileSettingsPage: React.FC = () => {
             <select
               value={workoutIntensity}
               onChange={(e) => setWorkoutIntensity(e.target.value as WorkoutIntensity)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             >
               <option value="light">Light</option>
               <option value="moderate">Moderate</option>
@@ -421,7 +421,7 @@ export const ProfileSettingsPage: React.FC = () => {
             <select
               value={activityLevel}
               onChange={(e) => setActivityLevel(e.target.value as ActivityLevel)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             >
               <option value="sedentary">Sedentary (Desk job)</option>
               <option value="light">Lightly Active (1–2 workouts/wk)</option>
@@ -438,7 +438,7 @@ export const ProfileSettingsPage: React.FC = () => {
             <select
               value={fitnessGoal}
               onChange={(e) => setFitnessGoal(e.target.value as FitnessGoalType)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             >
               <option value="fat_loss">Fat Loss</option>
               <option value="maintenance">Maintenance</option>
@@ -454,7 +454,7 @@ export const ProfileSettingsPage: React.FC = () => {
             <select
               value={goalSpeed}
               onChange={(e) => setGoalSpeed(e.target.value as GoalSpeed)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             >
               <option value="slow">Slow & Sustainable</option>
               <option value="moderate">Moderate</option>
@@ -469,7 +469,7 @@ export const ProfileSettingsPage: React.FC = () => {
             <select
               value={dietaryPreference}
               onChange={(e) => setDietaryPreference(e.target.value as DietaryPreference)}
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             >
               <option value="omnivore">Omnivore (All foods)</option>
               <option value="eggetarian">Eggetarian</option>
@@ -494,7 +494,7 @@ export const ProfileSettingsPage: React.FC = () => {
                   className={`min-h-[38px] px-3.5 rounded-xl border text-xs font-medium transition-colors ${
                     active
                       ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500 font-semibold'
-                      : 'border-stone-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
+                      : 'border-black/10 dark:border-white/15 text-slate-700 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
                   }`}
                 >
                   {opt.label}
@@ -516,7 +516,7 @@ export const ProfileSettingsPage: React.FC = () => {
       </form>
 
       {/* Preferences & Units */}
-      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5">
+      <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-5">
         <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
           App Preferences
         </h2>
@@ -531,7 +531,7 @@ export const ProfileSettingsPage: React.FC = () => {
                 Choose Light (White), Dark, or match your device setting
               </div>
             </div>
-            <div className="inline-flex items-center p-1 rounded-xl bg-stone-100 dark:bg-slate-900">
+            <div className="inline-flex items-center p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C]">
               <button
                 type="button"
                 onClick={() => updateSettings({ theme: 'light' })}
@@ -580,7 +580,7 @@ export const ProfileSettingsPage: React.FC = () => {
                 Used across Weight Tracking and Goals
               </div>
             </div>
-            <div className="inline-flex items-center p-1 rounded-xl bg-stone-100 dark:bg-slate-900">
+            <div className="inline-flex items-center p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C]">
               {(['kg', 'lbs'] as const).map((u) => (
                 <button
                   key={u}
@@ -607,7 +607,7 @@ export const ProfileSettingsPage: React.FC = () => {
                 Display logged portions in grams or ounces
               </div>
             </div>
-            <div className="inline-flex items-center p-1 rounded-xl bg-stone-100 dark:bg-slate-900">
+            <div className="inline-flex items-center p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C]">
               {(['g', 'oz'] as const).map((u) => (
                 <button
                   key={u}
@@ -629,13 +629,13 @@ export const ProfileSettingsPage: React.FC = () => {
 
       {/* Global Food Sources & Backend Status */}
       {sourceStatus && (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-3">
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-3">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Database className="w-4 h-4 text-lime-600 dark:text-lime-400" />
             Global Food Sources & AI Integrations
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
               <div className="font-semibold text-slate-800 dark:text-slate-200">
                 ICMR-NIN IFCT 2017 & Reference Catalog
               </div>
@@ -643,7 +643,7 @@ export const ProfileSettingsPage: React.FC = () => {
                 Active · {sourceStatus.ifct2017.count} Indian & global staple foods
               </div>
             </div>
-            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
               <div className="font-semibold text-slate-800 dark:text-slate-200">
                 Open Food Facts API {sourceStatus.openFoodFacts.apiVersion}
               </div>
@@ -651,7 +651,7 @@ export const ProfileSettingsPage: React.FC = () => {
                 Active · Branded products & barcode lookup ({sourceStatus.openFoodFacts.license})
               </div>
             </div>
-            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
               <div className="font-semibold text-slate-800 dark:text-slate-200">
                 USDA FoodData Central API
               </div>
@@ -661,7 +661,7 @@ export const ProfileSettingsPage: React.FC = () => {
                   : `Using reference fallback · Set ${sourceStatus.usdaFdc.envVar} on server for full live catalog`}
               </div>
             </div>
-            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800">
+            <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
               <div className="font-semibold text-slate-800 dark:text-slate-200">
                 Supabase AI & Deterministic Engine
               </div>
@@ -674,7 +674,7 @@ export const ProfileSettingsPage: React.FC = () => {
       )}
 
       {/* Export My Data */}
-      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
+      <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-4">
         <div>
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
             Export Your Data
@@ -688,7 +688,7 @@ export const ProfileSettingsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => exportData('csv')}
-            className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-2"
+            className="min-h-[42px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
             Export CSV
@@ -697,7 +697,7 @@ export const ProfileSettingsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => exportData('json')}
-            className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-2"
+            className="min-h-[42px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
             Export JSON

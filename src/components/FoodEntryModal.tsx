@@ -332,16 +332,14 @@ export const FoodEntryModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs sm:p-4"
+      className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/60 backdrop-blur-xs sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={editing ? 'Edit food entry' : 'Add food to log'}
     >
-      <div className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col bg-white dark:bg-[#121821] rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-slate-800 shadow-2xl overflow-hidden">
-        <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3 shrink-0" />
-
+      <div className="w-full h-[100dvh] sm:h-auto sm:max-w-lg sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#111317] rounded-none sm:rounded-2xl border-0 sm:border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-stone-200 dark:border-slate-800 shrink-0">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 sm:py-4 border-b border-black/10 dark:border-white/12 shrink-0 bg-white dark:bg-[#111317]">
           <div className="flex items-center gap-2.5 min-w-0">
             {(selectedFood && !editing) || creatingCustom ? (
               <button
@@ -398,7 +396,7 @@ export const FoodEntryModal: React.FC = () => {
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}
                 placeholder="e.g., Homemade Paneer Bhurji"
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
 
@@ -412,7 +410,7 @@ export const FoodEntryModal: React.FC = () => {
                   value={customBrand}
                   onChange={(e) => setCustomBrand(e.target.value)}
                   placeholder="Optional"
-                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
               <div>
@@ -422,7 +420,7 @@ export const FoodEntryModal: React.FC = () => {
                 <select
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value as FoodCategory)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 >
                   {GLOBAL_FOOD_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -443,7 +441,7 @@ export const FoodEntryModal: React.FC = () => {
                   value={customServingName}
                   onChange={(e) => setCustomServingName(e.target.value)}
                   placeholder="1 bowl / 100 g"
-                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
               <div>
@@ -456,7 +454,7 @@ export const FoodEntryModal: React.FC = () => {
                   min="1"
                   value={customServingGrams}
                   onChange={(e) => setCustomServingGrams(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
             </div>
@@ -473,7 +471,7 @@ export const FoodEntryModal: React.FC = () => {
                   value={customCalories}
                   onChange={(e) => setCustomCalories(e.target.value)}
                   placeholder="0"
-                  className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
               <div>
@@ -487,7 +485,7 @@ export const FoodEntryModal: React.FC = () => {
                   value={customProtein}
                   onChange={(e) => setCustomProtein(e.target.value)}
                   placeholder="0"
-                  className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
               <div>
@@ -501,7 +499,7 @@ export const FoodEntryModal: React.FC = () => {
                   value={customCarbs}
                   onChange={(e) => setCustomCarbs(e.target.value)}
                   placeholder="0"
-                  className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
               <div>
@@ -515,7 +513,7 @@ export const FoodEntryModal: React.FC = () => {
                   value={customFat}
                   onChange={(e) => setCustomFat(e.target.value)}
                   placeholder="0"
-                  className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
               <div>
@@ -529,7 +527,7 @@ export const FoodEntryModal: React.FC = () => {
                   value={customFibre}
                   onChange={(e) => setCustomFibre(e.target.value)}
                   placeholder="0"
-                  className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
               </div>
             </div>
@@ -538,7 +536,7 @@ export const FoodEntryModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setCreatingCustom(false)}
-                className="min-h-[44px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300"
+                className="min-h-[44px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-sm font-medium text-slate-700 dark:text-slate-300"
               >
                 Cancel
               </button>
@@ -551,23 +549,23 @@ export const FoodEntryModal: React.FC = () => {
             </div>
           </form>
         ) : !selectedFood ? (
-          /* Step 1 & 2: Search & Select Food */
+          /* Step 1 & 2: Search & Select Food — pinned search bar at top on mobile */
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="px-5 pt-4 pb-3 space-y-3 border-b border-stone-100 dark:border-slate-800/80 shrink-0">
+            <div className="sticky top-0 z-20 px-4 sm:px-5 pt-3.5 pb-3 space-y-3 border-b border-stone-100 dark:border-white/10 bg-white dark:bg-[#111317] shrink-0">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
-                  type="text"
-                  autoFocus
+                  type="search"
+                  enterKeyHint="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search food, brand, country or barcode..."
-                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-base sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
                 />
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-slate-900 rounded-xl overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-[#090A0C] rounded-xl overflow-x-auto no-scrollbar">
                   {(['all', 'india', 'recent', 'favorites', 'custom'] as const).map((tab) => (
                     <button
                       key={tab}
@@ -592,7 +590,7 @@ export const FoodEntryModal: React.FC = () => {
                       openBarcodeScannerModal({ meal: mealType, date });
                     }}
                     title="Scan packaged food barcode"
-                    className="min-h-[36px] px-2.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                    className="min-h-[36px] px-2.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
                   >
                     <Barcode className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
                     <span>Scan</span>
@@ -604,7 +602,7 @@ export const FoodEntryModal: React.FC = () => {
                       openMealScannerModal({ mode: 'photo', meal: mealType, date });
                     }}
                     title="Scan meal photo with AI"
-                    className="min-h-[36px] px-2.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                    className="min-h-[36px] px-2.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
                   >
                     <Camera className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
                     <span>Photo</span>
@@ -616,7 +614,7 @@ export const FoodEntryModal: React.FC = () => {
                       openMealScannerModal({ mode: 'voice', meal: mealType, date });
                     }}
                     title="Log meal by voice"
-                    className="min-h-[36px] px-2.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                    className="min-h-[36px] px-2.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
                   >
                     <Mic className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
                     <span>Voice</span>
@@ -633,7 +631,7 @@ export const FoodEntryModal: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-stone-100 dark:divide-slate-800/70 px-2 py-1">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain divide-y divide-stone-100 dark:divide-white/10 px-2 py-1">
               {remoteSearching && (
                 <div className="px-3 py-2 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                   <Globe className="w-3.5 h-3.5 animate-pulse text-lime-600 dark:text-lime-400" />
@@ -728,7 +726,7 @@ export const FoodEntryModal: React.FC = () => {
               </div>
             )}
 
-            <div className="flex items-start justify-between gap-3 pb-4 border-b border-stone-200 dark:border-slate-800">
+            <div className="flex items-start justify-between gap-3 pb-4 border-b border-black/10 dark:border-white/12">
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                   {selectedFood.name}
@@ -760,7 +758,7 @@ export const FoodEntryModal: React.FC = () => {
                 <label className="text-xs font-medium text-slate-600 dark:text-slate-400">
                   Quantity
                 </label>
-                <div className="flex items-center gap-1 p-0.5 bg-stone-100 dark:bg-slate-900 rounded-lg">
+                <div className="flex items-center gap-1 p-0.5 bg-stone-100 dark:bg-[#090A0C] rounded-lg">
                   <button
                     type="button"
                     onClick={() => {
@@ -810,7 +808,7 @@ export const FoodEntryModal: React.FC = () => {
                       setServingsCount(e.target.value);
                     }
                   }}
-                  className="flex-1 h-12 px-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/70 dark:bg-slate-900 text-base font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                  className="flex-1 h-12 px-4 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/70 dark:bg-[#090A0C] text-base font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
                 <span className="text-sm font-medium text-slate-500 dark:text-slate-400 min-w-[70px] text-right tabular-nums">
                   {inputMode === 'grams'
@@ -830,7 +828,7 @@ export const FoodEntryModal: React.FC = () => {
                         className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                           Number(quantityGrams) === preset.grams
                             ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500'
-                            : 'border-stone-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                            : 'border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
                         }`}
                       >
                         {preset.label}
@@ -844,7 +842,7 @@ export const FoodEntryModal: React.FC = () => {
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium font-mono-nums border transition-colors ${
                           Number(servingsCount) === srv
                             ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500'
-                            : 'border-stone-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                            : 'border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
                         }`}
                       >
                         {srv}×
@@ -854,7 +852,7 @@ export const FoodEntryModal: React.FC = () => {
             </div>
 
             {/* Live calculated nutrition */}
-            <div className="rounded-2xl bg-stone-50 dark:bg-slate-900/90 border border-stone-200/80 dark:border-slate-800 p-4">
+            <div className="rounded-2xl bg-stone-50 dark:bg-[#090A0C]/90 border border-black/10 dark:border-white/12 p-4">
               <div className="flex items-baseline justify-between mb-3">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   Calculated nutrition
@@ -866,7 +864,7 @@ export const FoodEntryModal: React.FC = () => {
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-2 text-center">
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/70 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">Protein</div>
                   <div className="text-sm font-semibold text-lime-700 dark:text-lime-400 font-mono-nums mt-0.5">
                     {selectedFood.missingFields?.includes('protein')
@@ -874,7 +872,7 @@ export const FoodEntryModal: React.FC = () => {
                       : `${liveMacros.protein}g`}
                   </div>
                 </div>
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/70 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">Carbs</div>
                   <div className="text-sm font-semibold text-amber-700 dark:text-amber-400 font-mono-nums mt-0.5">
                     {selectedFood.missingFields?.includes('carbs')
@@ -882,7 +880,7 @@ export const FoodEntryModal: React.FC = () => {
                       : `${liveMacros.carbs}g`}
                   </div>
                 </div>
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/70 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">Fat</div>
                   <div className="text-sm font-semibold text-indigo-700 dark:text-indigo-400 font-mono-nums mt-0.5">
                     {selectedFood.missingFields?.includes('fat')
@@ -890,7 +888,7 @@ export const FoodEntryModal: React.FC = () => {
                       : `${liveMacros.fat}g`}
                   </div>
                 </div>
-                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/70 dark:border-slate-800">
+                <div className="py-2 px-1 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12">
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">Fibre</div>
                   <div className="text-sm font-semibold text-teal-700 dark:text-teal-400 font-mono-nums mt-0.5">
                     {selectedFood.missingFields?.includes('fibre')
@@ -915,7 +913,7 @@ export const FoodEntryModal: React.FC = () => {
                     className={`min-h-[42px] px-3 rounded-xl text-xs font-medium border transition-colors text-center whitespace-nowrap ${
                       mealType === m.id
                         ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500 font-semibold'
-                        : 'border-stone-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
+                        : 'border-black/10 dark:border-white/15 text-slate-700 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
                     }`}
                   >
                     {m.label}
@@ -932,7 +930,7 @@ export const FoodEntryModal: React.FC = () => {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
 

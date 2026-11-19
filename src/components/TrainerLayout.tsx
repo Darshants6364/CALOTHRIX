@@ -61,10 +61,10 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
     .toUpperCase();
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#F8F8F6] dark:bg-[#0B0F14] text-[#14181F] dark:text-[#F3F4F6] transition-colors duration-200">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] transition-colors duration-200 overflow-x-clip">
       {/* Dedicated Separate Trainer Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:left-0 bg-white dark:bg-[#121821] border-r border-stone-200 dark:border-slate-800 z-30">
-        <div className="px-6 pt-6 pb-5 border-b border-stone-100 dark:border-slate-800/80">
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:left-0 bg-white dark:bg-[#111317] border-r border-black/10 dark:border-white/10 z-30">
+        <div className="px-6 pt-6 pb-5 border-b border-black/8 dark:border-white/10">
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
@@ -81,10 +81,10 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
               aria-label={
                 resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
               }
-              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300"
+              className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl border border-black/12 dark:border-white/15 bg-[#F4F3EF]/70 dark:bg-[#14161C] text-slate-700 dark:text-slate-300"
             >
               {resolvedTheme === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-400" />
+                <Sun className="w-4 h-4 text-[#C8FF00]" />
               ) : (
                 <Moon className="w-4 h-4" />
               )}
@@ -92,7 +92,7 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
           </div>
 
           <div className="mt-2.5 flex items-center justify-between text-[11px]">
-            <span className="font-semibold uppercase tracking-wider text-lime-700 dark:text-lime-400">
+            <span className="font-semibold uppercase tracking-wider text-[#4E6800] dark:text-[#C8FF00]">
               Trainer Workspace
             </span>
             <span className="font-mono-nums text-slate-500 dark:text-slate-400">
@@ -106,7 +106,7 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
               setTrainerTab('clients');
               setInviteModalOpen(true);
             }}
-            className="mt-4 w-full min-h-[42px] px-4 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap"
+            className="mt-4 w-full min-h-[42px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap"
           >
             <UserPlus className="w-4 h-4" />
             Invite Client
@@ -126,13 +126,13 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
                 onClick={() => setTrainerTab(item.id)}
                 className={`w-full min-h-[44px] px-3.5 rounded-xl flex items-center gap-3 text-sm transition-colors whitespace-nowrap ${
                   isActive
-                    ? 'bg-lime-50 dark:bg-lime-950/50 text-lime-800 dark:text-lime-300 font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-stone-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-100 font-medium'
+                    ? 'bg-[#C8FF00]/18 dark:bg-[#C8FF00]/12 text-[#4E6800] dark:text-[#C8FF00] font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-[#111317] dark:hover:text-white font-medium'
                 }`}
               >
                 <Icon
                   className={`w-[18px] h-[18px] shrink-0 ${
-                    isActive ? 'text-lime-600 dark:text-lime-400' : ''
+                    isActive ? 'text-[#4E6800] dark:text-[#C8FF00]' : ''
                   }`}
                 />
                 <span className="truncate">{item.label}</span>
@@ -141,10 +141,10 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
           })}
         </nav>
 
-        <div className="p-3.5 border-t border-stone-100 dark:border-slate-800/80 space-y-2">
-          <div className="px-2.5 py-1.5 rounded-lg bg-stone-50 dark:bg-slate-900 border border-stone-200/70 dark:border-slate-800 text-[11px] flex items-center justify-between">
+        <div className="p-3.5 border-t border-black/8 dark:border-white/10 space-y-2">
+          <div className="px-2.5 py-1.5 rounded-lg bg-[#F4F3EF]/80 dark:bg-[#090A0C] border border-black/10 dark:border-white/12 text-[11px] flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400">Plan Tier</span>
-            <span className="font-semibold text-slate-800 dark:text-slate-200 capitalize">
+            <span className="font-semibold text-[#111317] dark:text-white capitalize">
               {tier}
             </span>
           </div>
@@ -152,22 +152,22 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
           <button
             type="button"
             onClick={() => setTrainerTab('settings')}
-            className="w-full min-w-0 flex items-center gap-2.5 p-2 rounded-xl hover:bg-stone-50 dark:hover:bg-slate-800/60 transition-colors text-left"
+            className="w-full min-w-0 flex items-center gap-2.5 p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-left"
           >
             {avatarUrl ? (
               <img
                 src={avatarUrl}
                 alt={displayName}
                 referrerPolicy="no-referrer"
-                className="w-9 h-9 rounded-full object-cover border border-stone-200 dark:border-slate-700 shrink-0"
+                className="w-9 h-9 rounded-full object-cover border border-black/15 dark:border-white/15 shrink-0"
               />
             ) : (
-              <div className="w-9 h-9 rounded-full bg-lime-100 dark:bg-lime-950 text-lime-800 dark:text-lime-300 text-xs font-bold flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-full bg-[#C8FF00]/20 text-[#4E6800] dark:text-[#C8FF00] text-xs font-bold flex items-center justify-center shrink-0">
                 {initials || 'TR'}
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+              <div className="text-sm font-medium text-[#111317] dark:text-white truncate">
                 {displayName}
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
@@ -179,7 +179,7 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
           <button
             type="button"
             onClick={() => void selectAccountRole('individual')}
-            className="w-full min-h-[38px] px-3 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-2"
+            className="w-full min-h-[38px] px-3 rounded-xl border border-black/12 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors inline-flex items-center justify-center gap-2"
           >
             <ClipboardList className="w-3.5 h-3.5" />
             <span>Personal Tracker</span>
@@ -188,7 +188,7 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
           <button
             type="button"
             onClick={() => void signOut()}
-            className="w-full min-h-[38px] px-3 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-2"
+            className="w-full min-h-[38px] px-3 rounded-xl border border-black/12 dark:border-white/15 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-black/5 dark:hover:bg-white/5 transition-colors inline-flex items-center justify-center gap-2"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>
@@ -196,93 +196,97 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
         </div>
       </aside>
 
-      {/* Mobile Top Header */}
-      <header className="lg:hidden sticky top-0 z-30 h-[52px] bg-white/90 dark:bg-[#121821]/90 backdrop-blur-md border-b border-stone-200 dark:border-slate-800 px-3 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setTrainerTab('overview')}
-          className="flex items-center gap-2 min-h-[44px] px-1 whitespace-nowrap shrink-0"
-        >
-          <CalothrixLogo size="sm" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-lime-700 dark:text-lime-400">
-            Coach
-          </span>
-        </button>
-
-        <div className="flex items-center gap-1 shrink-0">
+      {/* Mobile Top Header with Safe Area */}
+      <header className="lg:hidden sticky top-0 z-30 pt-[env(safe-area-inset-top)] bg-white/92 dark:bg-[#111317]/92 backdrop-blur-md border-b border-black/10 dark:border-white/10 px-3">
+        <div className="h-[52px] flex items-center justify-between gap-2">
           <button
             type="button"
-            onClick={() => {
-              setTrainerTab('clients');
-              setInviteModalOpen(true);
-            }}
-            aria-label="Invite Client"
-            className="min-h-[40px] px-3 rounded-xl bg-lime-500 text-slate-950 text-xs font-bold inline-flex items-center gap-1"
+            onClick={() => setTrainerTab('overview')}
+            className="flex items-center gap-2 min-h-[44px] px-1 whitespace-nowrap shrink-0"
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Invite</span>
+            <CalothrixLogo size="sm" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#4E6800] dark:text-[#C8FF00]">
+              Coach
+            </span>
           </button>
 
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300"
-          >
-            {resolvedTheme === 'dark' ? (
-              <Sun className="w-5 h-5 text-amber-400" />
-            ) : (
-              <Moon className="w-5 h-5" />
-            )}
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setTrainerTab('clients');
+                setInviteModalOpen(true);
+              }}
+              aria-label="Invite Client"
+              className="min-h-[40px] px-3 rounded-xl bg-[#C8FF00] text-black text-xs font-bold inline-flex items-center gap-1"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Invite</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            aria-label="Sign out"
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300"
+            >
+              {resolvedTheme === 'dark' ? (
+                <Sun className="w-5 h-5 text-[#C8FF00]" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              aria-label="Sign out"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 lg:pl-64 pb-24 lg:pb-10">
+      <main className="flex-1 lg:pl-64 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-10 min-w-0">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
           <SchemaSetupBanner />
           {children}
         </div>
       </main>
 
-      {/* Mobile Bottom Nav */}
+      {/* Mobile Bottom Nav with Safe Area */}
       <nav
         aria-label="Trainer mobile navigation"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-[62px] bg-white/95 dark:bg-[#121821]/95 backdrop-blur-md border-t border-stone-200 dark:border-slate-800 grid grid-cols-4 items-center px-1"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#111317]/95 backdrop-blur-md border-t border-black/10 dark:border-white/10 pb-[env(safe-area-inset-bottom)] px-1"
       >
-        {TRAINER_NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            trainerTab === item.id ||
-            (trainerTab === 'client-detail' && item.id === 'clients');
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setTrainerTab(item.id)}
-              className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl transition-colors ${
-                isActive
-                  ? 'text-lime-700 dark:text-lime-400 font-semibold'
-                  : 'text-slate-500 dark:text-slate-400 font-medium'
-              }`}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="text-[10px] mt-0.5 leading-none whitespace-nowrap">
-                {item.mobileLabel}
-              </span>
-            </button>
-          );
-        })}
+        <div className="h-[60px] grid grid-cols-4 items-center">
+          {TRAINER_NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              trainerTab === item.id ||
+              (trainerTab === 'client-detail' && item.id === 'clients');
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTrainerTab(item.id)}
+                className={`min-h-[48px] flex flex-col items-center justify-center rounded-xl transition-colors ${
+                  isActive
+                    ? 'text-[#4E6800] dark:text-[#C8FF00] font-semibold'
+                    : 'text-slate-500 dark:text-slate-400 font-medium'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-[10px] mt-0.5 leading-none whitespace-nowrap">
+                  {item.mobileLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
     </div>
   );

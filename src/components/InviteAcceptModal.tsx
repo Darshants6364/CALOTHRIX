@@ -87,7 +87,7 @@ export const InviteAcceptModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#121821] border border-stone-200 dark:border-slate-800 p-6 space-y-5 shadow-xl">
+      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 p-6 space-y-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-lime-100 dark:bg-lime-950 text-lime-700 dark:text-lime-400 flex items-center justify-center">
@@ -127,7 +127,7 @@ export const InviteAcceptModal: React.FC = () => {
 
         {!loading && invitation && (
           <>
-            <div className="rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-4 space-y-1.5">
+            <div className="rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/70 dark:bg-[#090A0C]/60 p-4 space-y-1.5">
               <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 {invitation.trainerName || 'Fitness Coach'}
               </div>
@@ -161,7 +161,7 @@ export const InviteAcceptModal: React.FC = () => {
                   ).map((item) => (
                     <label
                       key={item.key}
-                      className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-stone-200/70 dark:border-slate-800 cursor-pointer"
+                      className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-black/10 dark:border-white/12 cursor-pointer"
                     >
                       <span className="text-xs text-slate-700 dark:text-slate-300">
                         {item.label}
@@ -186,7 +186,7 @@ export const InviteAcceptModal: React.FC = () => {
                     type="button"
                     disabled={submitting}
                     onClick={() => void handleDecision(false)}
-                    className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300"
+                    className="min-h-[42px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-300"
                   >
                     Decline
                   </button>

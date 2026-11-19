@@ -50,7 +50,7 @@ export const MacroCard: React.FC<MacroCardProps> = ({ name, consumed, target, to
   const styles = TONE_MAP[tone];
 
   return (
-    <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
+    <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{name}</span>
         <span className={`text-xs font-medium tabular-nums ${styles.label}`}>

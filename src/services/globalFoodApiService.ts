@@ -93,6 +93,34 @@ export async function lookupBarcodeApi(barcode: string): Promise<{
   }
 }
 
+export async function readBarcodeImageApi(dataUrl: string): Promise<{
+  barcode: string | null;
+  error?: string;
+}> {
+  try {
+    const mimeMatch = dataUrl.match(/^data:([^;]+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const res = await fetch('/api/foods/read-barcode-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mimeType,
+        mediaBase64: dataUrl,
+      }),
+    });
+    const json = (await res.json()) as { barcode?: string | null; error?: string };
+    if (!res.ok) {
+      return { barcode: null, error: json.error || `HTTP ${res.status}` };
+    }
+    return { barcode: json.barcode || null, error: json.error };
+  } catch (err) {
+    return {
+      barcode: null,
+      error: err instanceof Error ? err.message : 'Unable to read barcode image',
+    };
+  }
+}
+
 export async function semanticFoodSearchApi(query: string): Promise<{
   provider: 'supabase_ai' | 'deterministic_semantic';
   items: FoodItem[];

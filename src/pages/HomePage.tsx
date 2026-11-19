@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { CalorieRing } from '../components/CalorieRing';
+import { DailyQuestArena } from '../components/DailyQuestArena';
 import { DateStrip } from '../components/DateStrip';
 import { MacroCard } from '../components/MacroCard';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
@@ -312,26 +313,26 @@ export const HomePage: React.FC = () => {
           <button
             type="button"
             onClick={() => openBarcodeScannerModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-lime-500 transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
           >
-            <Barcode className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+            <Barcode className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
             <span>Barcode</span>
           </button>
 
           <button
             type="button"
             onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
-            className="min-h-[44px] px-4 py-2.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-lime-500 transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-4 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
           >
-            <Camera className="w-4 h-4 text-lime-600 dark:text-lime-400" />
-            <Mic className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400 -ml-1" />
+            <Camera className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+            <Mic className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00] -ml-1" />
             <span>Photo / Voice AI</span>
           </button>
 
           <button
             type="button"
             onClick={() => openAddFoodModal({ date: selectedDate })}
-            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4" />
             Add Food
@@ -361,7 +362,7 @@ export const HomePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => void declineTargetRecommendation(rec.id)}
-                  className="min-h-[36px] px-3 rounded-xl border border-stone-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                  className="min-h-[36px] px-3 rounded-xl border border-stone-300 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap"
                 >
                   Decline
                 </button>
@@ -396,7 +397,7 @@ export const HomePage: React.FC = () => {
 
       {/* Active Trainer Blueprint & Plan (defined by connected Coach) */}
       {coachPlans.length > 0 && (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-4">
           {coachPlans.slice(0, 1).map((plan) => (
             <div key={plan.id} className="space-y-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -420,10 +421,10 @@ export const HomePage: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 text-xs font-mono-nums text-slate-600 dark:text-slate-300">
-                  <span className="px-2.5 py-1 rounded-lg bg-stone-50 dark:bg-slate-900 border border-stone-200/80 dark:border-slate-800">
+                  <span className="px-2.5 py-1 rounded-lg bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
                     Water {plan.dailyWaterGoalMl.toLocaleString()} ml
                   </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-stone-50 dark:bg-slate-900 border border-stone-200/80 dark:border-slate-800">
+                  <span className="px-2.5 py-1 rounded-lg bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
                     Steps {plan.dailyStepsTarget.toLocaleString()}/d
                   </span>
                 </div>
@@ -437,7 +438,7 @@ export const HomePage: React.FC = () => {
                     return (
                       <div
                         key={mg.mealType}
-                        className="p-3 rounded-xl bg-stone-50/70 dark:bg-slate-900/60 border border-stone-200/70 dark:border-slate-800"
+                        className="p-3 rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/60 border border-black/10 dark:border-white/12"
                       >
                         <div className="flex items-center justify-between text-xs font-semibold text-slate-900 dark:text-slate-100">
                           <span>{label}</span>
@@ -460,7 +461,7 @@ export const HomePage: React.FC = () => {
               )}
 
               {plan.actionItems.length > 0 && (
-                <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-2 border-t border-stone-100 dark:border-slate-800/80">
+                <div className="flex flex-wrap gap-x-5 gap-y-1.5 pt-2 border-t border-stone-100 dark:border-white/10">
                   {plan.actionItems.map((item, idx) => (
                     <span
                       key={idx}
@@ -482,7 +483,7 @@ export const HomePage: React.FC = () => {
 
       {/* Main Focal Section: Calorie Ring + Macro Ratio Comparison */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        <div className="lg:col-span-7 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-7 flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-7 flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2 mb-5">
             <div>
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -497,19 +498,21 @@ export const HomePage: React.FC = () => {
                 </p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab('goals')}
-              className="text-xs font-medium text-lime-700 dark:text-lime-400 hover:underline whitespace-nowrap shrink-0"
-            >
-              {goals.calories > 0 ? 'Edit goals' : 'Set daily goals →'}
-            </button>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('goals')}
+                className="text-xs font-medium text-[#4E6800] dark:text-[#C8FF00] hover:underline whitespace-nowrap shrink-0"
+              >
+                {goals.calories > 0 ? 'Edit goals' : 'Set daily goals →'}
+              </button>
+            </div>
           </div>
           <CalorieRing consumed={selectedDateTotals.calories} goal={goals.calories} />
         </div>
 
         {/* Daily Macro Split & Target Alignment (MyFitnessPal Nutrition Style) */}
-        <div className="lg:col-span-5 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 flex flex-col justify-between gap-5">
+        <div className="lg:col-span-5 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 flex flex-col justify-between gap-5">
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -582,7 +585,7 @@ export const HomePage: React.FC = () => {
             )}
 
             {/* Compact Macro Legend & Grams Summary */}
-            <div className="pt-2 border-t border-stone-100 dark:border-slate-800/80 divide-y divide-stone-100 dark:divide-slate-800/70 text-xs">
+            <div className="pt-2 border-t border-stone-100 dark:border-white/10 divide-y divide-stone-100 dark:divide-slate-800/70 text-xs">
               <div className="py-2 flex items-center justify-between">
                 <span className="font-medium text-lime-700 dark:text-lime-400">Protein (4 kcal/g)</span>
                 <span className="font-mono-nums text-slate-800 dark:text-slate-200">
@@ -612,7 +615,7 @@ export const HomePage: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('food-log')}
-            className="w-full min-h-[40px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+            className="w-full min-h-[40px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             Open Full Food Diary
             <ArrowRight className="w-3.5 h-3.5" />
@@ -650,8 +653,11 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
+      {/* Playable Daily Quests, XP Level & Trophy Arena */}
+      <DailyQuestArena />
+
       {/* Interactive Meal Diary & Recommended Meal Budgets (HealthifyMe & MFP Style) */}
-      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
+      <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -685,7 +691,7 @@ export const HomePage: React.FC = () => {
             return (
               <div
                 key={meal.id}
-                className="rounded-xl border border-stone-200/80 dark:border-slate-800 p-4 flex flex-col justify-between gap-3"
+                className="rounded-xl border border-black/10 dark:border-white/12 p-4 flex flex-col justify-between gap-3"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
@@ -760,12 +766,12 @@ export const HomePage: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100 dark:border-slate-800/80">
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100 dark:border-white/10">
                   {data.items.length === 0 && yesterdayCount > 0 ? (
                     <button
                       type="button"
                       onClick={() => copyMealFromPreviousDay(meal.id, selectedDate)}
-                      className="min-h-[34px] px-2.5 rounded-lg border border-stone-200 dark:border-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 whitespace-nowrap"
+                      className="min-h-[34px] px-2.5 rounded-lg border border-black/10 dark:border-white/15 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 whitespace-nowrap"
                     >
                       <Copy className="w-3.5 h-3.5" />
                       Copy yesterday ({yesterdayCount})
@@ -794,7 +800,7 @@ export const HomePage: React.FC = () => {
       {/* Hydration & Weight Progress Split Row */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* Daily Water Tracker (HealthifyMe & MFP Staple) */}
-        <div className="lg:col-span-6 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 flex flex-col justify-between gap-4">
+        <div className="lg:col-span-6 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 flex flex-col justify-between gap-4">
           <div>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -817,7 +823,7 @@ export const HomePage: React.FC = () => {
                   type="button"
                   onClick={() => setDailyWaterGoalMl(dailyWaterGoalMl - 250)}
                   aria-label="Decrease water goal"
-                  className="w-6 h-6 rounded-md border border-stone-200 dark:border-slate-700 flex items-center justify-center hover:bg-stone-100 dark:hover:bg-slate-800"
+                  className="w-6 h-6 rounded-md border border-black/10 dark:border-white/15 flex items-center justify-center hover:bg-stone-100 dark:hover:bg-slate-800"
                 >
                   <Minus className="w-3 h-3" />
                 </button>
@@ -828,7 +834,7 @@ export const HomePage: React.FC = () => {
                   type="button"
                   onClick={() => setDailyWaterGoalMl(dailyWaterGoalMl + 250)}
                   aria-label="Increase water goal"
-                  className="w-6 h-6 rounded-md border border-stone-200 dark:border-slate-700 flex items-center justify-center hover:bg-stone-100 dark:hover:bg-slate-800"
+                  className="w-6 h-6 rounded-md border border-black/10 dark:border-white/15 flex items-center justify-center hover:bg-stone-100 dark:hover:bg-slate-800"
                 >
                   <Plus className="w-3 h-3" />
                 </button>
@@ -860,7 +866,7 @@ export const HomePage: React.FC = () => {
               type="button"
               onClick={() => addWaterMl(selectedDate, -250)}
               disabled={waterMl <= 0}
-              className="min-h-[38px] px-3 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-40 inline-flex items-center gap-1 whitespace-nowrap"
+              className="min-h-[38px] px-3 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800 disabled:opacity-40 inline-flex items-center gap-1 whitespace-nowrap"
             >
               <Minus className="w-3.5 h-3.5" />
               250 ml
@@ -885,7 +891,7 @@ export const HomePage: React.FC = () => {
         </div>
 
         {/* Weight Progress Card */}
-        <div className="lg:col-span-6 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 flex flex-col justify-between gap-4">
+        <div className="lg:col-span-6 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 flex flex-col justify-between gap-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-stone-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center shrink-0">
@@ -950,7 +956,7 @@ export const HomePage: React.FC = () => {
             <button
               type="button"
               onClick={() => openWeightModal()}
-              className="min-h-[38px] px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-800/80 text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+              className="min-h-[38px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-slate-800/80 text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               Log Weight
@@ -963,17 +969,17 @@ export const HomePage: React.FC = () => {
                 <AreaChart data={weightTrendData}>
                   <defs>
                     <linearGradient id="miniWeightGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#84cc16" stopOpacity={0.28} />
-                      <stop offset="95%" stopColor="#84cc16" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#C8FF00" stopOpacity={0.28} />
+                      <stop offset="95%" stopColor="#C8FF00" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <Tooltip
                     contentStyle={{
                       fontSize: '11px',
                       borderRadius: '8px',
-                      backgroundColor: isDark ? '#0f172a' : '#ffffff',
-                      border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
-                      color: isDark ? '#f8fafc' : '#0f172a',
+                      backgroundColor: isDark ? '#111317' : '#ffffff',
+                      border: isDark ? '1px solid rgba(255,255,255,0.14)' : '1px solid rgba(0,0,0,0.1)',
+                      color: isDark ? '#F3F4F6' : '#111317',
                     }}
                     formatter={(value) => [`${value} ${settings.weightUnit}`, 'Weight']}
                   />
@@ -988,7 +994,7 @@ export const HomePage: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="text-xs text-slate-400 dark:text-slate-500 pt-2 border-t border-stone-100 dark:border-slate-800/80">
+            <div className="text-xs text-slate-400 dark:text-slate-500 pt-2 border-t border-stone-100 dark:border-white/10">
               Log at least 2 weight check-ins to display your trend chart.
             </div>
           )}
@@ -997,7 +1003,7 @@ export const HomePage: React.FC = () => {
 
       {/* Real Logged Micronutrients & Sugar Summary (shown when logged foods contain nutrient data) */}
       {loggedMicronutrients.hasAny && (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6">
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div>
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -1033,7 +1039,7 @@ export const HomePage: React.FC = () => {
             ].map((item) => (
               <div
                 key={item.label}
-                className="p-3 rounded-xl bg-stone-50/70 dark:bg-slate-900/60 border border-stone-200/70 dark:border-slate-800"
+                className="p-3 rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/60 border border-black/10 dark:border-white/12"
               >
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">{item.label}</div>
                 <div className="mt-1 text-base font-bold font-mono-nums text-slate-900 dark:text-slate-100">
@@ -1076,7 +1082,7 @@ export const HomePage: React.FC = () => {
 
       {/* Quick Log from Favorites & Recent Foods */}
       {quickLogFoods.length > 0 && (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-3.5">
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-3.5">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -1101,7 +1107,7 @@ export const HomePage: React.FC = () => {
                 key={food.id}
                 type="button"
                 onClick={() => openAddFoodModal({ food, date: selectedDate })}
-                className="p-3 rounded-xl border border-stone-200/80 dark:border-slate-800 hover:border-lime-500 bg-stone-50/50 dark:bg-slate-900/50 text-left flex items-center justify-between gap-3 transition-colors"
+                className="p-3 rounded-xl border border-black/10 dark:border-white/12 hover:border-lime-500 bg-stone-50/50 dark:bg-[#090A0C]/50 text-left flex items-center justify-between gap-3 transition-colors"
               >
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
@@ -1111,7 +1117,7 @@ export const HomePage: React.FC = () => {
                     {food.servingName} · {food.calories} kcal · P {food.protein}g
                   </div>
                 </div>
-                <span className="w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-stone-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0">
+                <span className="w-7 h-7 rounded-lg bg-white dark:bg-slate-800 border border-black/10 dark:border-white/15 flex items-center justify-center text-slate-700 dark:text-slate-200 shrink-0">
                   <Plus className="w-3.5 h-3.5" />
                 </span>
               </button>
@@ -1122,7 +1128,7 @@ export const HomePage: React.FC = () => {
 
       {/* Rule-Based Smart Meal Suggestions */}
       {smartRecommendations.length > 0 && (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -1146,7 +1152,7 @@ export const HomePage: React.FC = () => {
             {smartRecommendations.map((rec) => (
               <div
                 key={rec.food.id}
-                className="p-3.5 rounded-xl bg-stone-50/70 dark:bg-slate-900/70 border border-stone-200/70 dark:border-slate-800 flex flex-col justify-between gap-3"
+                className="p-3.5 rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/10 dark:border-white/12 flex flex-col justify-between gap-3"
               >
                 <div>
                   <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 line-clamp-1">
@@ -1163,7 +1169,7 @@ export const HomePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openAddFoodModal({ food: rec.food, date: selectedDate })}
-                  className="w-full min-h-[36px] px-3 rounded-lg bg-white dark:bg-[#121821] border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-100 hover:border-lime-500 inline-flex items-center justify-center gap-1 whitespace-nowrap"
+                  className="w-full min-h-[36px] px-3 rounded-lg bg-white dark:bg-[#111317] border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-800 dark:text-slate-100 hover:border-lime-500 inline-flex items-center justify-center gap-1 whitespace-nowrap"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Quick Log

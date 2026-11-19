@@ -48,13 +48,13 @@ export const RoleSelectionScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F8F6] dark:bg-[#0B0F14] text-[#14181F] dark:text-[#F3F4F6] flex flex-col justify-between px-4 py-6 sm:px-6">
+    <div className="min-h-screen bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] flex flex-col justify-between px-4 py-6 sm:px-6 selection:bg-[#C8FF00] selection:text-black">
       <div className="max-w-4xl w-full mx-auto flex items-center justify-between">
         <CalothrixLogo size="md" />
         <button
           type="button"
           onClick={() => void signOut()}
-          className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+          className="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-[#C8FF00] transition-colors"
         >
           Sign Out
         </button>
@@ -62,16 +62,16 @@ export const RoleSelectionScreen: React.FC = () => {
 
       <form
         onSubmit={handleContinue}
-        className="w-full max-w-3xl mx-auto my-8 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm"
+        className="w-full max-w-3xl mx-auto my-8 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl"
       >
         <div>
-          <span className="text-xs font-semibold text-lime-700 dark:text-lime-400 uppercase tracking-wider">
+          <span className="text-xs font-mono-nums font-semibold text-[#4E6800] dark:text-[#C8FF00] uppercase tracking-[0.16em]">
             Welcome{authDetails?.name ? `, ${authDetails.name}` : ''}
           </span>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          <h1 className="mt-1 text-2xl sm:text-3xl font-display font-extrabold tracking-tight text-[#111317] dark:text-white">
             Choose Your Workspace Role
           </h1>
-          <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
             Select how you want to use CALOTHRIX. You can also adjust your coaching role later in Settings.
           </p>
         </div>
@@ -81,23 +81,23 @@ export const RoleSelectionScreen: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedRole('individual')}
-            className={`p-5 rounded-2xl border text-left transition-all flex flex-col justify-between gap-4 ${
+            className={`p-5 rounded-xl border text-left transition-all flex flex-col justify-between gap-4 ${
               selectedRole === 'individual'
-                ? 'border-lime-500 bg-lime-50/70 dark:bg-lime-950/30 ring-1 ring-lime-500'
-                : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                ? 'border-[#4E6800] dark:border-[#C8FF00] bg-[#C8FF00]/12 dark:bg-[#C8FF00]/10 ring-1 ring-[#4E6800] dark:ring-[#C8FF00]'
+                : 'border-black/12 dark:border-white/12 hover:border-black/30 dark:hover:border-white/25'
             }`}
           >
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black flex items-center justify-center">
                   <ClipboardCheck className="w-5 h-5" />
                 </div>
                 {selectedRole === 'individual' && (
-                  <CheckCircle2 className="w-5 h-5 text-lime-600 dark:text-lime-400" />
+                  <CheckCircle2 className="w-5 h-5 text-[#4E6800] dark:text-[#C8FF00]" />
                 )}
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">
+                <h2 className="text-base font-bold text-[#111317] dark:text-white">
                   Normal User
                 </h2>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -114,23 +114,23 @@ export const RoleSelectionScreen: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedRole('trainer')}
-            className={`p-5 rounded-2xl border text-left transition-all flex flex-col justify-between gap-4 ${
+            className={`p-5 rounded-xl border text-left transition-all flex flex-col justify-between gap-4 ${
               selectedRole === 'trainer'
-                ? 'border-lime-500 bg-lime-50/70 dark:bg-lime-950/30 ring-1 ring-lime-500'
-                : 'border-stone-200 dark:border-slate-800 hover:border-stone-300 dark:hover:border-slate-700'
+                ? 'border-[#4E6800] dark:border-[#C8FF00] bg-[#C8FF00]/12 dark:bg-[#C8FF00]/10 ring-1 ring-[#4E6800] dark:ring-[#C8FF00]'
+                : 'border-black/12 dark:border-white/12 hover:border-black/30 dark:hover:border-white/25'
             }`}
           >
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black flex items-center justify-center">
                   <Users className="w-5 h-5" />
                 </div>
                 {selectedRole === 'trainer' && (
-                  <CheckCircle2 className="w-5 h-5 text-lime-600 dark:text-lime-400" />
+                  <CheckCircle2 className="w-5 h-5 text-[#4E6800] dark:text-[#C8FF00]" />
                 )}
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">
+                <h2 className="text-base font-bold text-[#111317] dark:text-white">
                   Fitness Trainer
                 </h2>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -139,7 +139,7 @@ export const RoleSelectionScreen: React.FC = () => {
               </div>
             </div>
             <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+              <Shield className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
               Separate Trainer Console with Strict Client Privacy
             </div>
           </button>
@@ -147,8 +147,8 @@ export const RoleSelectionScreen: React.FC = () => {
 
         {/* Trainer Quick Setup when Trainer is selected */}
         {selectedRole === 'trainer' && (
-          <div className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-4 sm:p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <div className="rounded-xl border border-black/10 dark:border-white/12 bg-[#F4F3EF]/70 dark:bg-[#090A0C] p-4 sm:p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-[#111317] dark:text-white">
               Trainer Profile Setup
             </h3>
 
@@ -163,7 +163,7 @@ export const RoleSelectionScreen: React.FC = () => {
                   value={trainerName}
                   onChange={(e) => setTrainerName(e.target.value)}
                   placeholder="Coach Alex"
-                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-white dark:bg-[#111317] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
                 />
               </div>
               <div>
@@ -175,7 +175,7 @@ export const RoleSelectionScreen: React.FC = () => {
                   value={trainerBio}
                   onChange={(e) => setTrainerBio(e.target.value)}
                   placeholder="Evidence-based fat loss & strength nutrition"
-                  className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100"
+                  className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-white dark:bg-[#111317] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
                 />
               </div>
             </div>
@@ -194,8 +194,8 @@ export const RoleSelectionScreen: React.FC = () => {
                       onClick={() => toggleSpecialty(spec)}
                       className={`min-h-[34px] px-3 rounded-lg border text-xs font-medium transition-colors ${
                         active
-                          ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500 font-semibold'
-                          : 'bg-white dark:bg-slate-900 border-stone-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                          ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black border-[#111317] dark:border-[#C8FF00] font-semibold'
+                          : 'bg-white dark:bg-[#111317] border-black/12 dark:border-white/12 text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {spec}
@@ -211,7 +211,7 @@ export const RoleSelectionScreen: React.FC = () => {
           <button
             type="submit"
             disabled={submitting}
-            className="min-h-[46px] px-6 rounded-xl bg-lime-500 hover:bg-lime-400 text-slate-950 text-sm font-bold transition-colors inline-flex items-center gap-2 disabled:opacity-60"
+            className="min-h-[46px] px-6 rounded-xl bg-[#C8FF00] hover:bg-[#D9FF4D] text-black text-sm font-bold uppercase tracking-[0.06em] transition-colors inline-flex items-center gap-2 disabled:opacity-60"
           >
             {submitting ? (
               <>
@@ -232,7 +232,7 @@ export const RoleSelectionScreen: React.FC = () => {
         </div>
       </form>
 
-      <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+      <p className="text-center text-xs text-slate-500 dark:text-slate-500">
         CALOTHRIX · Eat Smart. Track Progress. Build Better.
       </p>
     </div>

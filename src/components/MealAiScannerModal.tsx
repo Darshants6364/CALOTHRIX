@@ -185,6 +185,7 @@ export const MealAiScannerModal: React.FC = () => {
   const [preparingPhoto, setPreparingPhoto] = useState(false);
   const [liveCameraActive, setLiveCameraActive] = useState(false);
   const [liveCameraStarting, setLiveCameraStarting] = useState(false);
+  const [liveCameraReady, setLiveCameraReady] = useState(false);
 
   // Voice recording + live SpeechRecognition state
   const [isRecording, setIsRecording] = useState(false);
@@ -218,6 +219,7 @@ export const MealAiScannerModal: React.FC = () => {
 
   const photoVideoRef = useRef<HTMLVideoElement | null>(null);
   const photoStreamRef = useRef<MediaStream | null>(null);
+  const isOpenRef = useRef<boolean>(mealScannerModal.isOpen);
 
   const stopLivePhotoCamera = useCallback(() => {
     if (photoStreamRef.current) {
@@ -229,6 +231,7 @@ export const MealAiScannerModal: React.FC = () => {
     }
     setLiveCameraActive(false);
     setLiveCameraStarting(false);
+    setLiveCameraReady(false);
   }, []);
 
   const stopRecordingTracks = useCallback(() => {
@@ -251,6 +254,7 @@ export const MealAiScannerModal: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    isOpenRef.current = mealScannerModal.isOpen;
     if (!mealScannerModal.isOpen) {
       stopRecordingTracks();
       stopLivePhotoCamera();
@@ -287,6 +291,54 @@ export const MealAiScannerModal: React.FC = () => {
       if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
     };
   }, [audioPreviewUrl, photoPreviewUrl, stopLivePhotoCamera, stopRecordingTracks]);
+
+  // Attach MediaStream only AFTER React commits the <video> mount so first-time permission grant never renders blank
+  useEffect(() => {
+    if (!liveCameraActive) return;
+    const video = photoVideoRef.current;
+    const stream = photoStreamRef.current;
+    if (!video || !stream) return;
+
+    let cancelled = false;
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+    }
+
+    const tryPlay = async () => {
+      if (cancelled) return;
+      try {
+        await video.play();
+      } catch {
+        // Fallback handled by autoPlay + playsInline + muted or event listeners
+      }
+    };
+
+    const handleReady = () => {
+      if (cancelled) return;
+      if (video.videoWidth > 0 || video.readyState >= 2) {
+        setLiveCameraReady(true);
+      }
+      void tryPlay();
+    };
+
+    video.addEventListener('loadedmetadata', handleReady);
+    video.addEventListener('loadeddata', handleReady);
+    video.addEventListener('canplay', handleReady);
+    video.addEventListener('playing', handleReady);
+
+    if (video.readyState >= 2) {
+      setLiveCameraReady(true);
+    }
+    void tryPlay();
+
+    return () => {
+      cancelled = true;
+      video.removeEventListener('loadedmetadata', handleReady);
+      video.removeEventListener('loadeddata', handleReady);
+      video.removeEventListener('canplay', handleReady);
+      video.removeEventListener('playing', handleReady);
+    };
+  }, [liveCameraActive]);
 
   const selectedItems = useMemo(
     () => editableItems.filter((item) => item.selected),
@@ -339,6 +391,7 @@ export const MealAiScannerModal: React.FC = () => {
       return;
     }
 
+    stopLivePhotoCamera();
     setLiveCameraStarting(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -349,23 +402,20 @@ export const MealAiScannerModal: React.FC = () => {
         },
         audio: false,
       });
+
+      if (!isOpenRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
       photoStreamRef.current = stream;
+      setLiveCameraReady(false);
       setLiveCameraActive(true);
       setLiveCameraStarting(false);
-
-      window.requestAnimationFrame(async () => {
-        const video = photoVideoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        try {
-          await video.play();
-        } catch {
-          // Ignore autoplay warning
-        }
-      });
     } catch {
       setLiveCameraStarting(false);
       setLiveCameraActive(false);
+      setLiveCameraReady(false);
       setError('Camera permission denied or unavailable. Use Choose Photo to pick or snap an image.');
     }
   };
@@ -738,11 +788,11 @@ export const MealAiScannerModal: React.FC = () => {
       aria-modal="true"
       aria-label="AI Photo and Voice Meal Analyzer"
     >
-      <div className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col bg-white dark:bg-[#121821] rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      <div className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
         <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3 shrink-0" />
 
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-stone-200 dark:border-slate-800 shrink-0">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-black/10 dark:border-white/12 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-lime-100 dark:bg-lime-950/60 text-lime-700 dark:text-lime-400 flex items-center justify-center shrink-0">
               <Sparkles className="w-4 h-4" />
@@ -765,7 +815,7 @@ export const MealAiScannerModal: React.FC = () => {
                 className={`min-h-[36px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 ${
                   showHistory
                     ? 'border-lime-500 bg-lime-50 dark:bg-lime-950/40 text-lime-800 dark:text-lime-300'
-                    : 'border-stone-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                    : 'border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300'
                 }`}
               >
                 <History className="w-3.5 h-3.5" />
@@ -784,8 +834,8 @@ export const MealAiScannerModal: React.FC = () => {
         </div>
 
         {/* Mode Switcher */}
-        <div className="px-5 pt-3.5 pb-2 border-b border-stone-100 dark:border-slate-800/80 shrink-0">
-          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-stone-100 dark:bg-slate-900">
+        <div className="px-5 pt-3.5 pb-2 border-b border-stone-100 dark:border-white/10 shrink-0">
+          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C]">
             {(
               [
                 { id: 'photo', label: 'Photo Scan', icon: Camera },
@@ -829,7 +879,7 @@ export const MealAiScannerModal: React.FC = () => {
 
           {/* Optional Recent Scans Drawer */}
           {showHistory && recentScans.length > 0 && (
-            <div className="rounded-xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/60 p-4 space-y-2.5">
+            <div className="rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/70 dark:bg-[#090A0C]/60 p-4 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                   Recent Saved Scans (Supabase)
@@ -840,7 +890,7 @@ export const MealAiScannerModal: React.FC = () => {
                 {recentScans.map((scan) => (
                   <div
                     key={scan.id}
-                    className="p-3 rounded-xl bg-white dark:bg-[#121821] border border-stone-200/80 dark:border-slate-800 flex items-center justify-between gap-3"
+                    className="p-3 rounded-xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
@@ -870,18 +920,25 @@ export const MealAiScannerModal: React.FC = () => {
               {mode === 'photo' && (
                 <div className="space-y-3.5">
                   {liveCameraActive ? (
-                    <div className="rounded-2xl overflow-hidden border border-stone-200 dark:border-slate-800 bg-black relative">
+                    <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/12 bg-black relative">
                       <video
                         ref={photoVideoRef}
+                        autoPlay
                         playsInline
                         muted
-                        className="w-full h-64 object-cover"
+                        className="w-full h-64 object-cover bg-black"
                       />
-                      <div className="p-3 bg-white dark:bg-[#121821] border-t border-stone-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                      {!liveCameraReady && (
+                        <div className="absolute inset-x-0 top-0 h-64 flex flex-col items-center justify-center gap-2 bg-black/70 text-white text-xs pointer-events-none">
+                          <Loader2 className="w-5 h-5 animate-spin text-[#C8FF00]" />
+                          <span>Starting camera preview...</span>
+                        </div>
+                      )}
+                      <div className="p-3 bg-white dark:bg-[#111317] border-t border-black/10 dark:border-white/12 flex items-center justify-between gap-2">
                         <button
                           type="button"
                           onClick={stopLivePhotoCamera}
-                          className="min-h-[40px] px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
+                          className="min-h-[40px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
                         >
                           <VideoOff className="w-3.5 h-3.5" />
                           Close Camera
@@ -897,13 +954,13 @@ export const MealAiScannerModal: React.FC = () => {
                       </div>
                     </div>
                   ) : photoPreviewUrl ? (
-                    <div className="rounded-2xl overflow-hidden border border-stone-200 dark:border-slate-800 bg-stone-100 dark:bg-slate-900">
+                    <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/12 bg-stone-100 dark:bg-[#090A0C]">
                       <img
                         src={photoPreviewUrl}
                         alt="Captured meal preview"
                         className="w-full max-h-64 object-cover"
                       />
-                      <div className="px-4 py-2.5 flex items-center justify-between bg-white dark:bg-[#121821] border-t border-stone-200 dark:border-slate-800">
+                      <div className="px-4 py-2.5 flex items-center justify-between bg-white dark:bg-[#111317] border-t border-black/10 dark:border-white/12">
                         <span className="text-xs text-slate-500 dark:text-slate-400">
                           Ready for AI portion &amp; macro breakdown
                         </span>
@@ -918,7 +975,7 @@ export const MealAiScannerModal: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-stone-300 dark:border-slate-700 bg-stone-50/70 dark:bg-slate-900/50 p-6 text-center space-y-4">
+                    <div className="rounded-2xl border border-dashed border-stone-300 dark:border-white/15 bg-stone-50/70 dark:bg-[#090A0C]/50 p-6 text-center space-y-4">
                       <div className="w-12 h-12 rounded-2xl bg-lime-100 dark:bg-lime-950/60 text-lime-700 dark:text-lime-400 flex items-center justify-center mx-auto">
                         {preparingPhoto ? (
                           <Loader2 className="w-6 h-6 animate-spin" />
@@ -951,7 +1008,7 @@ export const MealAiScannerModal: React.FC = () => {
                           Live Camera
                         </button>
 
-                        <label className="min-h-[42px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-semibold text-slate-800 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-2 cursor-pointer">
+                        <label className="min-h-[42px] px-4 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-800 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-2 cursor-pointer">
                           <ImagePlus className="w-4 h-4 text-lime-600 dark:text-lime-400" />
                           <span>Choose / Snap Photo</span>
                           <input
@@ -974,7 +1031,7 @@ export const MealAiScannerModal: React.FC = () => {
                       value={photoNote}
                       onChange={(e) => setPhotoNote(e.target.value)}
                       placeholder="e.g., 2 whole wheat rotis with ghee, 150g paneer curry"
-                      className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                      className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                     />
                   </div>
                 </div>
@@ -982,7 +1039,7 @@ export const MealAiScannerModal: React.FC = () => {
 
               {mode === 'voice' && (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-stone-200 dark:border-slate-800 bg-stone-50/70 dark:bg-slate-900/50 p-6 text-center space-y-4">
+                  <div className="rounded-2xl border border-black/10 dark:border-white/12 bg-stone-50/70 dark:bg-[#090A0C]/50 p-6 text-center space-y-4">
                     <div
                       className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center transition-colors ${
                         isRecording
@@ -1048,7 +1105,7 @@ export const MealAiScannerModal: React.FC = () => {
                         setVoiceTranscript(e.target.value);
                       }}
                       placeholder="Your spoken sentence appears here automatically..."
-                      className="w-full p-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                      className="w-full p-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                     />
                   </div>
 
@@ -1061,7 +1118,7 @@ export const MealAiScannerModal: React.FC = () => {
                       value={voiceContextNote}
                       onChange={(e) => setVoiceContextNote(e.target.value)}
                       placeholder="e.g., Cooked with 1 tsp olive oil"
-                      className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                      className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                     />
                   </div>
                 </div>
@@ -1077,7 +1134,7 @@ export const MealAiScannerModal: React.FC = () => {
                     value={describeText}
                     onChange={(e) => setDescribeText(e.target.value)}
                     placeholder="e.g., 2 masala dosas with 1 bowl sambar, 2 tbsp coconut chutney, and 1 cup filter coffee with low-fat milk"
-                    className="w-full p-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                    className="w-full p-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                   />
                 </div>
               )}
@@ -1121,7 +1178,7 @@ export const MealAiScannerModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={resetInputs}
-                    className="min-h-[34px] px-3 rounded-lg border border-stone-300 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
+                    className="min-h-[34px] px-3 rounded-lg border border-stone-300 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     New Scan
@@ -1150,7 +1207,7 @@ export const MealAiScannerModal: React.FC = () => {
                 ].map((stat) => (
                   <div
                     key={stat.label}
-                    className="p-2.5 rounded-xl bg-stone-50 dark:bg-slate-900 border border-stone-200/80 dark:border-slate-800"
+                    className="p-2.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12"
                   >
                     <div className="text-[10px] text-slate-500 dark:text-slate-400">{stat.label}</div>
                     <div className="text-sm font-bold text-slate-900 dark:text-slate-50 mt-0.5">
@@ -1171,8 +1228,8 @@ export const MealAiScannerModal: React.FC = () => {
                     key={item._id}
                     className={`p-3.5 rounded-xl border transition-colors space-y-2.5 ${
                       item.selected
-                        ? 'border-stone-200 dark:border-slate-800 bg-stone-50/50 dark:bg-slate-900/50'
-                        : 'border-stone-200/50 dark:border-slate-800/40 opacity-55'
+                        ? 'border-black/10 dark:border-white/12 bg-stone-50/50 dark:bg-[#090A0C]/50'
+                        : 'border-black/10/50 dark:border-white/12/40 opacity-55'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
@@ -1186,7 +1243,7 @@ export const MealAiScannerModal: React.FC = () => {
                         type="text"
                         value={item.name}
                         onChange={(e) => updateItemField(item._id, 'name', e.target.value)}
-                        className="flex-1 h-9 px-2.5 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-semibold text-slate-900 dark:text-slate-100"
+                        className="flex-1 h-9 px-2.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-900 dark:text-slate-100"
                       />
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
                         {item.estimatedQuantityDescription}
@@ -1203,7 +1260,7 @@ export const MealAiScannerModal: React.FC = () => {
                           onChange={(e) =>
                             updateItemField(item._id, 'estimatedGrams', Number(e.target.value) || 0)
                           }
-                          className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] font-mono-nums"
+                          className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] font-mono-nums"
                         />
                       </div>
                       <div>
@@ -1215,7 +1272,7 @@ export const MealAiScannerModal: React.FC = () => {
                           onChange={(e) =>
                             updateItemField(item._id, 'calories', Number(e.target.value) || 0)
                           }
-                          className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] font-mono-nums"
+                          className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] font-mono-nums"
                         />
                       </div>
                       <div>
@@ -1228,7 +1285,7 @@ export const MealAiScannerModal: React.FC = () => {
                           onChange={(e) =>
                             updateItemField(item._id, 'protein', Number(e.target.value) || 0)
                           }
-                          className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] font-mono-nums"
+                          className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] font-mono-nums"
                         />
                       </div>
                       <div>
@@ -1241,7 +1298,7 @@ export const MealAiScannerModal: React.FC = () => {
                           onChange={(e) =>
                             updateItemField(item._id, 'carbs', Number(e.target.value) || 0)
                           }
-                          className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] font-mono-nums"
+                          className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] font-mono-nums"
                         />
                       </div>
                       <div>
@@ -1254,7 +1311,7 @@ export const MealAiScannerModal: React.FC = () => {
                           onChange={(e) =>
                             updateItemField(item._id, 'fat', Number(e.target.value) || 0)
                           }
-                          className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] font-mono-nums"
+                          className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] font-mono-nums"
                         />
                       </div>
                       <div>
@@ -1267,7 +1324,7 @@ export const MealAiScannerModal: React.FC = () => {
                           onChange={(e) =>
                             updateItemField(item._id, 'fibre', Number(e.target.value) || 0)
                           }
-                          className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] font-mono-nums"
+                          className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] font-mono-nums"
                         />
                       </div>
                     </div>
@@ -1284,7 +1341,7 @@ export const MealAiScannerModal: React.FC = () => {
                   <select
                     value={mealType}
                     onChange={(e) => setMealType(e.target.value as MealCategory)}
-                    className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                    className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-semibold text-slate-900 dark:text-slate-100"
                   >
                     {MEAL_CATEGORIES.map((m) => (
                       <option key={m.id} value={m.id}>
@@ -1302,7 +1359,7 @@ export const MealAiScannerModal: React.FC = () => {
                     type="date"
                     value={logDate}
                     onChange={(e) => setLogDate(e.target.value)}
-                    className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100"
+                    className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100"
                   />
                 </div>
               </div>

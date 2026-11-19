@@ -3,8 +3,10 @@ import { AuthScreen } from './components/AuthScreen';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { CalothrixLogo } from './components/CalothrixLogo';
 import { FoodEntryModal } from './components/FoodEntryModal';
+import { GoalCelebrationController } from './components/GoalCelebrationModal';
 import { InviteAcceptModal } from './components/InviteAcceptModal';
 import { Layout } from './components/Layout';
+import { MacroShareModal } from './components/MacroShareModal';
 import { MealAiScannerModal } from './components/MealAiScannerModal';
 import { RoleSelectionScreen } from './components/RoleSelectionScreen';
 import { ToastContainer } from './components/ToastContainer';
@@ -99,9 +101,9 @@ const AppShell: React.FC = () => {
 
   if (authMode === 'loading') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8F8F6] dark:bg-[#0B0F14] gap-4">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F3EF] dark:bg-[#090A0C] gap-4">
         <CalothrixLogo size="md" />
-        <p className="text-xs text-slate-500 dark:text-slate-400">Loading your workspace...</p>
+        <p className="text-xs text-[#52555E] dark:text-[#9A9CA3]">Loading your workspace...</p>
       </div>
     );
   }
@@ -155,6 +157,8 @@ const AppShell: React.FC = () => {
       <BarcodeScannerModal />
       <WeightEntryModal />
       <InviteAcceptModal />
+      <GoalCelebrationController />
+      <MacroShareModal />
     </>
   );
 };

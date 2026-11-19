@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Barcode,
+  Camera,
   ChevronDown,
   ChevronUp,
   ExternalLink,
   Globe,
+  Mic,
   Pencil,
   Plus,
   Search,
@@ -16,26 +18,18 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { CustomFoodModal } from '../components/CustomFoodModal';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import {
-  ExternalSourceStatus,
-  fetchExternalSourceStatus,
   lookupBarcodeApi,
   searchGlobalFoodsApi,
   semanticFoodSearchApi,
 } from '../services/globalFoodApiService';
-import {
-  FoodItem,
-  FoodSourceType,
-  GLOBAL_FOOD_CATEGORIES,
-} from '../types';
+import { FoodItem } from '../types';
 import { formatNutrientValue, searchFoods } from '../utils/nutritionUtils';
 
-const CATEGORY_FILTERS: string[] = [
-  'All',
-  'Favorites',
-  'Recent',
-  'My Custom Foods',
-  ...GLOBAL_FOOD_CATEGORIES,
-];
+type DietaryFilterOption = 'all' | 'vegetarian' | 'vegan' | 'eggetarian' | 'non_veg';
+
+const DIETARY_FILTER_STORAGE_KEY = 'calothrix_db_dietary_filter';
+
+const CATEGORY_FILTERS: string[] = ['All', 'Favorites', 'Recent'];
 
 const SEMANTIC_EXAMPLES = [
   'High protein Indian breakfast',
@@ -43,6 +37,48 @@ const SEMANTIC_EXAMPLES = [
   'Foods rich in fibre',
   'Vegetarian protein sources',
 ];
+
+const NON_VEG_MEAT_FISH_REGEX =
+  /\b(chicken|mutton|lamb|goat|beef|pork|fish|salmon|tuna|prawn|prawns|shrimp|crab|seafood|rohu|katla|surmai|hilsa|pomfret|bacon|turkey|duck|ham|sausage|pepperoni|meat|steak|keema|biryani.*chicken|chicken.*biryani)\b/i;
+const EGG_REGEX = /\b(egg|eggs|omelette|omlet|bhurji|egg white|egg yolk)\b/i;
+const DAIRY_HONEY_REGEX =
+  /\b(milk|paneer|cheese|butter|ghee|curd|yogurt|yoghurt|dahi|whey|casein|cream|lassi|kulfi|ice cream|honey|khoya|mawa)\b/i;
+
+function matchesDietaryFilter(food: FoodItem, filter: DietaryFilterOption): boolean {
+  if (filter === 'all') return true;
+
+  const tags = food.dietaryTags || [];
+  const text = `${food.name} ${food.brand || ''} ${food.ingredientsText || ''}`.toLowerCase();
+  const isMeatCategory =
+    food.category === 'Meat and poultry' || food.category === 'Fish and seafood';
+
+  if (filter === 'vegetarian') {
+    if (tags.length > 0) return tags.includes('vegetarian');
+    return !isMeatCategory && !NON_VEG_MEAT_FISH_REGEX.test(text) && !EGG_REGEX.test(text);
+  }
+
+  if (filter === 'vegan') {
+    if (tags.length > 0) return tags.includes('vegan');
+    return (
+      !isMeatCategory &&
+      food.category !== 'Dairy' &&
+      !NON_VEG_MEAT_FISH_REGEX.test(text) &&
+      !EGG_REGEX.test(text) &&
+      !DAIRY_HONEY_REGEX.test(text)
+    );
+  }
+
+  if (filter === 'eggetarian') {
+    if (tags.length > 0) return tags.includes('eggetarian') || tags.includes('vegetarian');
+    return !isMeatCategory && !NON_VEG_MEAT_FISH_REGEX.test(text);
+  }
+
+  // 'non_veg'
+  if (tags.length > 0) {
+    return !tags.includes('vegetarian');
+  }
+  return isMeatCategory || NON_VEG_MEAT_FISH_REGEX.test(text) || EGG_REGEX.test(text);
+}
 
 function getSourceTypeDisplay(food: FoodItem): string {
   if (food.isCustom || food.sourceType === 'personal_custom') return 'Personal Custom';
@@ -58,6 +94,7 @@ export const FoodDatabasePage: React.FC = () => {
     selectedDate,
     openAddFoodModal,
     openBarcodeScannerModal,
+    openMealScannerModal,
     addCustomFood,
     updateCustomFood,
     deleteCustomFood,
@@ -66,29 +103,43 @@ export const FoodDatabasePage: React.FC = () => {
 
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedCountry, setSelectedCountry] = useState('all');
-  const [selectedSourceType, setSelectedSourceType] = useState<'all' | FoodSourceType>('all');
+  const [dietaryFilter, setDietaryFilter] = useState<DietaryFilterOption>(() => {
+    try {
+      const saved = localStorage.getItem(DIETARY_FILTER_STORAGE_KEY);
+      if (
+        saved === 'all' ||
+        saved === 'vegetarian' ||
+        saved === 'vegan' ||
+        saved === 'eggetarian' ||
+        saved === 'non_veg'
+      ) {
+        return saved;
+      }
+    } catch {
+      // Ignore storage read issues
+    }
+    const pref = state.profile.dietaryPreference;
+    return pref === 'omnivore' ? 'all' : pref;
+  });
   const [semanticMode, setSemanticMode] = useState(false);
 
   const [remoteFoods, setRemoteFoods] = useState<FoodItem[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteNote, setRemoteNote] = useState<string>('');
-  const [sourceStatus, setSourceStatus] = useState<ExternalSourceStatus | null>(null);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
   const [customModalOpen, setCustomModalOpen] = useState(false);
   const [editingFood, setEditingFood] = useState<FoodItem | undefined>(undefined);
   const [pendingDeleteFood, setPendingDeleteFood] = useState<FoodItem | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    void fetchExternalSourceStatus().then((status) => {
-      if (mounted && status) setSourceStatus(status);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const handleDietaryFilterChange = (next: DietaryFilterOption) => {
+    setDietaryFilter(next);
+    try {
+      localStorage.setItem(DIETARY_FILTER_STORAGE_KEY, next);
+    } catch {
+      // Ignore storage write issues
+    }
+  };
 
   // Trigger backend global search or semantic search when query changes
   useEffect(() => {
@@ -100,12 +151,7 @@ export const FoodDatabasePage: React.FC = () => {
       return;
     }
 
-    if (
-      selectedCategory === 'Favorites' ||
-      selectedCategory === 'Recent' ||
-      selectedCategory === 'My Custom Foods' ||
-      selectedSourceType === 'personal_custom'
-    ) {
+    if (selectedCategory === 'Favorites' || selectedCategory === 'Recent') {
       setRemoteFoods([]);
       setRemoteLoading(false);
       return;
@@ -120,11 +166,7 @@ export const FoodDatabasePage: React.FC = () => {
           const res = await semanticFoodSearchApi(trimmed);
           if (!cancelled) {
             setRemoteFoods(res.items);
-            setRemoteNote(
-              res.provider === 'supabase_ai'
-                ? 'Semantic matches via Supabase AI (pgvector)'
-                : 'Semantic attribute ranking across verified & global foods'
-            );
+            setRemoteNote('Smart AI matches');
           }
           return;
         }
@@ -148,27 +190,11 @@ export const FoodDatabasePage: React.FC = () => {
 
         const res = await searchGlobalFoodsApi({
           query: trimmed,
-          category: selectedCategory === 'All' ? undefined : selectedCategory,
-          country: selectedCountry === 'all' ? undefined : selectedCountry,
-          source: selectedSourceType === 'all' ? undefined : selectedSourceType,
         });
 
         if (!cancelled) {
           setRemoteFoods(res.items);
-          if (res.sourceMeta) {
-            const parts: string[] = [];
-            if (res.sourceMeta.ifctCount > 0)
-              parts.push(`${res.sourceMeta.ifctCount} IFCT/Ref`);
-            if (res.sourceMeta.offCount > 0)
-              parts.push(`${res.sourceMeta.offCount} Open Food Facts`);
-            if (res.sourceMeta.usdaCount > 0)
-              parts.push(`${res.sourceMeta.usdaCount} USDA FDC`);
-            setRemoteNote(
-              parts.length > 0 ? `Global sources: ${parts.join(' · ')}` : ''
-            );
-          } else {
-            setRemoteNote('');
-          }
+          setRemoteNote('');
         }
       } catch {
         if (!cancelled) {
@@ -184,7 +210,7 @@ export const FoodDatabasePage: React.FC = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, selectedCategory, selectedCountry, selectedSourceType, semanticMode]);
+  }, [query, selectedCategory, semanticMode]);
 
   const filteredLocalFoods = useMemo(
     () =>
@@ -213,8 +239,7 @@ export const FoodDatabasePage: React.FC = () => {
     } else if (
       query.trim() &&
       selectedCategory !== 'Favorites' &&
-      selectedCategory !== 'Recent' &&
-      selectedCategory !== 'My Custom Foods'
+      selectedCategory !== 'Recent'
     ) {
       const seen = new Set(filteredLocalFoods.map((f) => f.id));
       base = [...filteredLocalFoods, ...remoteFoods.filter((r) => !seen.has(r.id))];
@@ -222,50 +247,14 @@ export const FoodDatabasePage: React.FC = () => {
       base = filteredLocalFoods;
     }
 
-    return base.filter((food) => {
-      if (selectedCountry !== 'all') {
-        const c = (food.country || '').toLowerCase();
-        if (selectedCountry === 'India' && !c.includes('india')) return false;
-        if (
-          selectedCountry === 'United States' &&
-          !c.includes('united states') &&
-          !c.includes('usa') &&
-          !c.includes('us')
-        ) {
-          return false;
-        }
-        if (selectedCountry === 'International' && c.includes('india')) return false;
-      }
-
-      if (selectedSourceType !== 'all') {
-        const effectiveSource =
-          food.isCustom ? 'personal_custom' : food.sourceType || 'verified_reference';
-        if (effectiveSource !== selectedSourceType) return false;
-      }
-
-      if (
-        selectedCategory !== 'All' &&
-        selectedCategory !== 'Favorites' &&
-        selectedCategory !== 'Recent' &&
-        selectedCategory !== 'My Custom Foods'
-      ) {
-        // Keep remote semantic/search results only if matching selected category when category filter is active
-        if (!semanticMode && food.category !== selectedCategory) {
-          const localCatMatch = searchFoods([food], '', selectedCategory, [], []);
-          if (localCatMatch.length === 0) return false;
-        }
-      }
-
-      return true;
-    });
+    return base.filter((food) => matchesDietaryFilter(food, dietaryFilter));
   }, [
     allFoods,
+    dietaryFilter,
     filteredLocalFoods,
     query,
     remoteFoods,
     selectedCategory,
-    selectedCountry,
-    selectedSourceType,
     semanticMode,
     state.favoriteFoodIds,
     state.recentFoodIds,
@@ -291,10 +280,20 @@ export const FoodDatabasePage: React.FC = () => {
           <button
             type="button"
             onClick={() => openBarcodeScannerModal({ date: selectedDate })}
-            className="min-h-[44px] px-4 py-2.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-lime-500 transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
           >
-            <Barcode className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+            <Barcode className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
             <span>Scan Barcode</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
+            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+          >
+            <Camera className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+            <Mic className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00] -ml-1" />
+            <span>Photo / Voice AI</span>
           </button>
 
           <button
@@ -303,7 +302,7 @@ export const FoodDatabasePage: React.FC = () => {
               setEditingFood(undefined);
               setCustomModalOpen(true);
             }}
-            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4" />
             Create Custom Food
@@ -313,7 +312,7 @@ export const FoodDatabasePage: React.FC = () => {
 
       {/* Search Bar + Smart Semantic Toggle + Filters */}
       <section className="space-y-3">
-        <div className="flex flex-col sm:flex-row gap-2.5">
+        <div className="sticky top-[calc(52px+env(safe-area-inset-top))] lg:static z-20 bg-[#F4F3EF]/95 dark:bg-[#090A0C]/95 backdrop-blur-md py-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:py-0 sm:bg-transparent flex flex-col sm:flex-row gap-2.5">
           <div className="relative flex-1">
             {semanticMode ? (
               <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -321,7 +320,8 @@ export const FoodDatabasePage: React.FC = () => {
               <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
             )}
             <input
-              type="text"
+              type="search"
+              enterKeyHint="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={
@@ -329,7 +329,7 @@ export const FoodDatabasePage: React.FC = () => {
                   ? 'Describe what you want (e.g., High protein Indian breakfast, rich in fibre)...'
                   : 'Search food name, brand, country, ingredient, or barcode...'
               }
-              className="w-full h-12 pl-11 pr-4 rounded-2xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-12 pl-11 pr-4 rounded-2xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-base sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -339,7 +339,7 @@ export const FoodDatabasePage: React.FC = () => {
             className={`min-h-[48px] px-4 rounded-2xl border text-xs font-semibold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 transition-colors ${
               semanticMode
                 ? 'bg-lime-500 text-slate-950 border-lime-500'
-                : 'bg-white dark:bg-[#121821] border-stone-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800'
+                : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800'
             }`}
           >
             <Sparkles className="w-4 h-4" />
@@ -356,7 +356,7 @@ export const FoodDatabasePage: React.FC = () => {
                 key={example}
                 type="button"
                 onClick={() => setQuery(example)}
-                className="px-2.5 py-1 rounded-lg border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500"
+                className="px-2.5 py-1 rounded-lg border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:border-lime-500"
               >
                 {example}
               </button>
@@ -364,67 +364,45 @@ export const FoodDatabasePage: React.FC = () => {
           </div>
         )}
 
-        {/* Country & Source Filters */}
+        {/* Single Dietary Preference Filter */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="dietary-preference-filter"
+              className="text-xs font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap"
+            >
+              Dietary Preference:
+            </label>
             <select
-              value={selectedCountry}
-              onChange={(e) => setSelectedCountry(e.target.value)}
-              aria-label="Filter by country"
-              className="h-9 px-3 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-xs font-medium text-slate-700 dark:text-slate-200"
+              id="dietary-preference-filter"
+              value={dietaryFilter}
+              onChange={(e) => handleDietaryFilterChange(e.target.value as DietaryFilterOption)}
+              aria-label="Filter by dietary preference"
+              className="h-9 px-3 rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
             >
-              <option value="all">All Countries</option>
-              <option value="India">India (IFCT & Local)</option>
-              <option value="United States">United States</option>
-              <option value="International">International</option>
-            </select>
-
-            <button
-              type="button"
-              onClick={() =>
-                setSelectedCountry((prev) => (prev === 'India' ? 'all' : 'India'))
-              }
-              className={`h-9 px-3 rounded-xl border text-xs font-semibold transition-colors whitespace-nowrap ${
-                selectedCountry === 'India'
-                  ? 'bg-lime-500 text-slate-950 border-lime-500'
-                  : 'bg-white dark:bg-[#121821] border-stone-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-lime-500'
-              }`}
-            >
-              Indian Foods (IFCT & 890…)
-            </button>
-
-            <select
-              value={selectedSourceType}
-              onChange={(e) => setSelectedSourceType(e.target.value as 'all' | FoodSourceType)}
-              aria-label="Filter by source type"
-              className="h-9 px-3 rounded-xl border border-stone-200 dark:border-slate-800 bg-white dark:bg-[#121821] text-xs font-medium text-slate-700 dark:text-slate-200"
-            >
-              <option value="all">All Sources</option>
-              <option value="verified_reference">Verified Reference</option>
-              <option value="branded">Branded Product</option>
-              <option value="community">Community Food</option>
-              <option value="personal_custom">Personal Custom</option>
+              <option value="all">All Foods</option>
+              <option value="vegetarian">Vegetarian</option>
+              <option value="vegan">Vegan</option>
+              <option value="eggetarian">Eggetarian</option>
+              <option value="non_veg">Non-Vegetarian</option>
             </select>
           </div>
 
           <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
             {remoteLoading ? (
-              <span className="inline-flex items-center gap-1 text-lime-700 dark:text-lime-400">
+              <span className="inline-flex items-center gap-1 text-[#4E6800] dark:text-[#C8FF00]">
                 <Globe className="w-3.5 h-3.5 animate-pulse" />
-                Searching global catalogs...
+                Searching...
               </span>
             ) : remoteNote ? (
               <span>{remoteNote}</span>
             ) : (
-              <span>
-                IFCT 2017 · Open Food Facts v2 (ODbL)
-                {sourceStatus?.usdaFdc.configured ? ' · USDA FoodData Central' : ''}
-              </span>
+              <span>{displayedFoods.length} items</span>
             )}
           </div>
         </div>
 
-        {/* Category Pills / Tabs */}
+        {/* Category Tabs (All, Favorites, Recent) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
           {CATEGORY_FILTERS.map((cat) => {
             const active = selectedCategory === cat;
@@ -435,8 +413,8 @@ export const FoodDatabasePage: React.FC = () => {
                 onClick={() => setSelectedCategory(cat)}
                 className={`min-h-[36px] px-3.5 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 border transition-colors ${
                   active
-                    ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500 font-semibold'
-                    : 'bg-white dark:bg-[#121821] border-stone-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
+                    ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black border-[#111317] dark:border-[#C8FF00] font-semibold'
+                    : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
                 }`}
               >
                 {cat}
@@ -448,14 +426,12 @@ export const FoodDatabasePage: React.FC = () => {
 
       {/* Food List */}
       {displayedFoods.length === 0 && !remoteLoading ? (
-        <section className="bg-white dark:bg-[#121821] border border-dashed border-stone-300 dark:border-slate-700 rounded-2xl p-8 text-center">
+        <section className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-8 text-center">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
             No foods match this filter
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {selectedCategory === 'My Custom Foods'
-              ? 'Create your own custom foods once and reuse them any time.'
-              : 'Try another search keyword, barcode number, or create a private custom food.'}
+            Try switching your dietary preference, searching another keyword, or creating a custom food.
           </p>
           <button
             type="button"
@@ -470,7 +446,7 @@ export const FoodDatabasePage: React.FC = () => {
           </button>
         </section>
       ) : (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl divide-y divide-stone-100 dark:divide-slate-800/80 overflow-hidden">
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl divide-y divide-stone-100 dark:divide-slate-800/80 overflow-hidden">
           {displayedFoods.map((food) => {
             const isFav = state.favoriteFoodIds.includes(food.id);
             const isExpanded = Boolean(expandedIds[food.id]);
@@ -618,7 +594,7 @@ export const FoodDatabasePage: React.FC = () => {
 
                 {/* Expanded provenance, ingredients & micronutrients */}
                 {isExpanded && (
-                  <div className="mt-3 ml-0 sm:ml-12 p-3.5 rounded-xl bg-stone-50 dark:bg-slate-900/80 border border-stone-200/80 dark:border-slate-800 text-xs space-y-2">
+                  <div className="mt-3 ml-0 sm:ml-12 p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C]/80 border border-black/10 dark:border-white/12 text-xs space-y-2">
                     {food.barcode && (
                       <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-mono-nums">
                         <Barcode className="w-3.5 h-3.5 text-slate-400" />
@@ -658,7 +634,7 @@ export const FoodDatabasePage: React.FC = () => {
                         )}
                       </div>
                     )}
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-stone-200/70 dark:border-slate-800">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-black/10 dark:border-white/12">
                       <span>
                         License: {food.license || 'Verified Reference'}
                         {food.sourceId ? ` · ID ${food.sourceId}` : ''}
@@ -682,22 +658,6 @@ export const FoodDatabasePage: React.FC = () => {
           })}
         </section>
       )}
-
-      {/* Attribution & API Status Footer */}
-      <section className="rounded-2xl border border-stone-200/80 dark:border-slate-800 bg-white dark:bg-[#121821] p-4 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-        <div className="font-semibold text-slate-700 dark:text-slate-200">
-          Food Data Provenance & Attribution
-        </div>
-        <p>
-          Reference Indian foods incorporate values from ICMR-NIN Indian Food Composition Tables (IFCT 2017). Branded packaged products include Open Food Facts data under the Open Database License (ODbL). Missing external nutrient fields are displayed as Unavailable rather than zero.
-          {sourceStatus && !sourceStatus.usdaFdc.configured && (
-            <span>
-              {' '}
-              Configure <code className="font-mono-nums">USDA_FDC_API_KEY</code> on the server to enable live USDA FoodData Central queries alongside reference staples.
-            </span>
-          )}
-        </p>
-      </section>
 
       <CustomFoodModal
         isOpen={customModalOpen}

@@ -281,7 +281,7 @@ export const TrainerClientDetailPage: React.FC = () => {
           <ArrowLeft className="w-4 h-4" />
           Back to Clients
         </button>
-        <div className="bg-white dark:bg-[#121821] border border-stone-200 dark:border-slate-800 rounded-2xl p-8 text-center text-sm text-slate-500">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-8 text-center text-sm text-slate-500">
           Client record not found or access has been revoked.
         </div>
       </div>
@@ -510,7 +510,7 @@ export const TrainerClientDetailPage: React.FC = () => {
 
         {/* Date Range Filter */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex p-1 rounded-xl bg-stone-200/70 dark:bg-slate-900">
+          <div className="inline-flex p-1 rounded-xl bg-stone-200/70 dark:bg-[#090A0C]">
             {(
               [
                 { id: '7d', label: '7 Days' },
@@ -541,14 +541,14 @@ export const TrainerClientDetailPage: React.FC = () => {
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="h-9 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                className="h-9 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs"
               />
               <span>–</span>
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="h-9 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                className="h-9 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs"
               />
             </div>
           )}
@@ -557,7 +557,7 @@ export const TrainerClientDetailPage: React.FC = () => {
 
       {/* Authorized Profile & Targets Overview */}
       <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">Client Profile</div>
           {relationship.canViewProfile && profile ? (
             <>
@@ -575,7 +575,7 @@ export const TrainerClientDetailPage: React.FC = () => {
           )}
         </div>
 
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">Today Calories</div>
           {relationship.canViewNutrition ? (
             <>
@@ -593,7 +593,7 @@ export const TrainerClientDetailPage: React.FC = () => {
           )}
         </div>
 
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">Today Macros</div>
           {relationship.canViewNutrition ? (
             <>
@@ -611,7 +611,7 @@ export const TrainerClientDetailPage: React.FC = () => {
           )}
         </div>
 
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">Current vs Target</div>
           {relationship.canViewWeight ? (
             <>
@@ -629,7 +629,7 @@ export const TrainerClientDetailPage: React.FC = () => {
           )}
         </div>
 
-        <div className="col-span-2 lg:col-span-1 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-4">
+        <div className="col-span-2 lg:col-span-1 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-[11px] text-slate-500 dark:text-slate-400">Goal Completion</div>
           <div className="mt-1 text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
             {relationship.canViewNutrition ? `${goalCompletionPct}%` : '—'}
@@ -643,7 +643,7 @@ export const TrainerClientDetailPage: React.FC = () => {
       {/* Progress Analytics Charts */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Daily Calories Chart */}
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             Daily Calories vs Target
           </h2>
@@ -659,22 +659,22 @@ export const TrainerClientDetailPage: React.FC = () => {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailySeries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                   <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#121821',
-                      border: '1px solid #1e293b',
+                      backgroundColor: '#14161C',
+                      border: '1px solid rgba(255,255,255,0.14)',
                       borderRadius: '10px',
-                      color: '#f3f4f6',
+                      color: '#F4F3EF',
                       fontSize: '12px',
                     }}
                   />
                   {calGoal > 0 && (
-                    <ReferenceLine y={calGoal} stroke="#84cc16" strokeDasharray="4 4" />
+                    <ReferenceLine y={calGoal} stroke="#C8FF00" strokeDasharray="4 4" />
                   )}
-                  <Bar dataKey="calories" name="Calories (kcal)" fill="#84cc16" radius={[5, 5, 0, 0]} />
+                  <Bar dataKey="calories" name="Calories (kcal)" fill="#C8FF00" radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -682,7 +682,7 @@ export const TrainerClientDetailPage: React.FC = () => {
         </div>
 
         {/* Daily Protein Chart */}
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             Daily Protein Intake (g)
           </h2>
@@ -698,15 +698,15 @@ export const TrainerClientDetailPage: React.FC = () => {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailySeries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                   <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#121821',
-                      border: '1px solid #1e293b',
+                      backgroundColor: '#14161C',
+                      border: '1px solid rgba(255,255,255,0.14)',
                       borderRadius: '10px',
-                      color: '#f3f4f6',
+                      color: '#F4F3EF',
                       fontSize: '12px',
                     }}
                   />
@@ -721,7 +721,7 @@ export const TrainerClientDetailPage: React.FC = () => {
         </div>
 
         {/* Weekly Calorie & Protein Averages */}
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             Weekly Calorie & Protein Averages
           </h2>
@@ -733,20 +733,20 @@ export const TrainerClientDetailPage: React.FC = () => {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={weeklyAverages}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                   <XAxis dataKey="week" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#121821',
-                      border: '1px solid #1e293b',
+                      backgroundColor: '#14161C',
+                      border: '1px solid rgba(255,255,255,0.14)',
                       borderRadius: '10px',
-                      color: '#f3f4f6',
+                      color: '#F4F3EF',
                       fontSize: '12px',
                     }}
                   />
-                  <Bar yAxisId="left" dataKey="avgCalories" name="Avg kcal" fill="#84cc16" radius={[5, 5, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="avgCalories" name="Avg kcal" fill="#C8FF00" radius={[5, 5, 0, 0]} />
                   <Line yAxisId="right" type="monotone" dataKey="avgProtein" name="Avg Protein (g)" stroke="#0ea5e9" strokeWidth={2} />
                 </BarChart>
               </ResponsiveContainer>
@@ -755,7 +755,7 @@ export const TrainerClientDetailPage: React.FC = () => {
         </div>
 
         {/* Weight Progression Chart */}
-        <div className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             Weight Progression (kg)
           </h2>
@@ -771,15 +771,15 @@ export const TrainerClientDetailPage: React.FC = () => {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={weightSeries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                   <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11, fill: '#94a3b8' }} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#121821',
-                      border: '1px solid #1e293b',
+                      backgroundColor: '#14161C',
+                      border: '1px solid rgba(255,255,255,0.14)',
                       borderRadius: '10px',
-                      color: '#f3f4f6',
+                      color: '#F4F3EF',
                       fontSize: '12px',
                     }}
                   />
@@ -787,8 +787,8 @@ export const TrainerClientDetailPage: React.FC = () => {
                     type="monotone"
                     dataKey="weightKg"
                     name="Weight (kg)"
-                    stroke="#84cc16"
-                    fill="#84cc16"
+                    stroke="#C8FF00"
+                    fill="#C8FF00"
                     fillOpacity={0.18}
                     strokeWidth={2}
                   />
@@ -801,7 +801,7 @@ export const TrainerClientDetailPage: React.FC = () => {
 
       {/* Meal Timing & Macro Distribution Breakdown */}
       {relationship.canViewNutrition && mealDistributionSeries.some((m) => m.avgCalories > 0) && (
-        <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-3">
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -815,21 +815,21 @@ export const TrainerClientDetailPage: React.FC = () => {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={mealDistributionSeries}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
                 <XAxis dataKey="meal" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#121821',
-                    border: '1px solid #1e293b',
+                    backgroundColor: '#14161C',
+                    border: '1px solid rgba(255,255,255,0.14)',
                     borderRadius: '10px',
-                    color: '#f3f4f6',
+                    color: '#F4F3EF',
                     fontSize: '12px',
                   }}
                 />
                 <Legend />
-                <Bar yAxisId="left" dataKey="avgCalories" name="Avg Calories (kcal)" fill="#84cc16" radius={[6, 6, 0, 0]} />
+                <Bar yAxisId="left" dataKey="avgCalories" name="Avg Calories (kcal)" fill="#C8FF00" radius={[6, 6, 0, 0]} />
                 <Bar yAxisId="right" dataKey="avgProtein" name="Avg Protein (g)" fill="#0ea5e9" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -840,7 +840,7 @@ export const TrainerClientDetailPage: React.FC = () => {
       {/* Read-Only Today's Food Log + Target Recommendation Composer */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Read-Only Client Food Entries */}
-        <section className="lg:col-span-6 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+        <section className="lg:col-span-6 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <ClipboardList className="w-4 h-4 text-lime-600 dark:text-lime-400" />
@@ -860,7 +860,7 @@ export const TrainerClientDetailPage: React.FC = () => {
               {todayStats.todayEntries.map((entry) => (
                 <div
                   key={entry.id}
-                  className="p-3 rounded-xl border border-stone-200/80 dark:border-slate-800 flex items-center justify-between gap-2 text-xs"
+                  className="p-3 rounded-xl border border-black/10 dark:border-white/12 flex items-center justify-between gap-2 text-xs"
                 >
                   <div className="min-w-0">
                     <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
@@ -885,7 +885,7 @@ export const TrainerClientDetailPage: React.FC = () => {
         </section>
 
         {/* Client Goal Studio: Direct Edit & Apply OR Send Proposal */}
-        <section className="lg:col-span-6 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+        <section className="lg:col-span-6 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -901,7 +901,7 @@ export const TrainerClientDetailPage: React.FC = () => {
             <button
               type="button"
               onClick={handleAutoCalculateFromClientStats}
-              className="min-h-[34px] px-3 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1.5 whitespace-nowrap"
+              className="min-h-[34px] px-3 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1.5 whitespace-nowrap"
             >
               <Calculator className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
               Auto-Calculate
@@ -928,7 +928,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                     setRecGoalSpeed(preset.goalSpeed);
                     setRecPreset(preset.fitnessGoal);
                   }}
-                  className="px-2.5 py-2 rounded-lg border border-stone-200 dark:border-slate-800 hover:border-lime-500 text-left transition-colors"
+                  className="px-2.5 py-2 rounded-lg border border-black/10 dark:border-white/12 hover:border-lime-500 text-left transition-colors"
                 >
                   <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate">
                     {preset.label}
@@ -950,7 +950,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                   required
                   value={recCalories}
                   onChange={(e) => setRecCalories(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-mono-nums"
+                  className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-mono-nums"
                 />
               </div>
               <div>
@@ -960,7 +960,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                   required
                   value={recProtein}
                   onChange={(e) => setRecProtein(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-mono-nums"
+                  className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-mono-nums"
                 />
               </div>
               <div>
@@ -970,7 +970,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                   required
                   value={recCarbs}
                   onChange={(e) => setRecCarbs(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-mono-nums"
+                  className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-mono-nums"
                 />
               </div>
               <div>
@@ -980,7 +980,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                   required
                   value={recFat}
                   onChange={(e) => setRecFat(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-mono-nums"
+                  className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-mono-nums"
                 />
               </div>
               <div>
@@ -990,7 +990,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                   required
                   value={recFibre}
                   onChange={(e) => setRecFibre(e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-mono-nums"
+                  className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-mono-nums"
                 />
               </div>
               <div>
@@ -1001,7 +1001,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                   value={recTargetWeight}
                   onChange={(e) => setRecTargetWeight(e.target.value)}
                   placeholder="Optional"
-                  className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-mono-nums"
+                  className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-mono-nums"
                 />
               </div>
               <div>
@@ -1009,7 +1009,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                 <select
                   value={recFitnessGoal}
                   onChange={(e) => setRecFitnessGoal(e.target.value as FitnessGoalType)}
-                  className="w-full h-10 px-2.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs"
+                  className="w-full h-10 px-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
                 >
                   <option value="fat_loss">Lose Fat</option>
                   <option value="muscle_gain">Build Muscle</option>
@@ -1022,7 +1022,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                 <select
                   value={recGoalSpeed}
                   onChange={(e) => setRecGoalSpeed(e.target.value as GoalSpeed)}
-                  className="w-full h-10 px-2.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs"
+                  className="w-full h-10 px-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
                 >
                   <option value="slow">Slow &amp; Sustainable</option>
                   <option value="moderate">Moderate</option>
@@ -1036,7 +1036,7 @@ export const TrainerClientDetailPage: React.FC = () => {
               value={recRationale}
               onChange={(e) => setRecRationale(e.target.value)}
               placeholder="Coach rationale (e.g., Weight plateaued for 2 weeks; trimming 150 kcal from carbs)"
-              className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs"
+              className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
             />
 
             {goalActionError && (
@@ -1049,7 +1049,7 @@ export const TrainerClientDetailPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={sendingRec}
-                className="min-h-[40px] px-4 rounded-xl border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 disabled:opacity-60"
+                className="min-h-[40px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 inline-flex items-center gap-1.5 disabled:opacity-60"
               >
                 <Send className="w-3.5 h-3.5" />
                 {sendingRec ? 'Sending...' : 'Send as Proposal'}
@@ -1070,11 +1070,11 @@ export const TrainerClientDetailPage: React.FC = () => {
           </form>
 
           {recommendations.length > 0 && (
-            <div className="pt-2 border-t border-stone-100 dark:border-slate-800 space-y-2 max-h-36 overflow-y-auto">
+            <div className="pt-2 border-t border-stone-100 dark:border-white/12 space-y-2 max-h-36 overflow-y-auto">
               {recommendations.map((rec) => (
                 <div
                   key={rec.id}
-                  className="text-xs flex items-center justify-between gap-2 p-2.5 rounded-lg bg-stone-50 dark:bg-slate-900"
+                  className="text-xs flex items-center justify-between gap-2 p-2.5 rounded-lg bg-stone-50 dark:bg-[#090A0C]"
                 >
                   <span className="font-mono-nums">
                     {rec.recommendedCalories} kcal · P{rec.recommendedProtein} C{rec.recommendedCarbs} F{rec.recommendedFat}
@@ -1098,7 +1098,7 @@ export const TrainerClientDetailPage: React.FC = () => {
       </div>
 
       {/* Coach-Defined Client Blueprint & Weekly Action Plan */}
-      <section className="bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4">
+      <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -1126,7 +1126,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                 value={phaseTitle}
                 onChange={(e) => setPhaseTitle(e.target.value)}
                 placeholder="e.g., Phase 1: High-Protein Fat Loss"
-                className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs"
+                className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
               />
             </div>
             <div>
@@ -1138,7 +1138,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                 step="250"
                 value={planWaterMl}
                 onChange={(e) => setPlanWaterMl(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-mono-nums"
+                className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-mono-nums"
               />
             </div>
             <div>
@@ -1150,7 +1150,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                 step="500"
                 value={planStepsTarget}
                 onChange={(e) => setPlanStepsTarget(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs font-mono-nums"
+                className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-mono-nums"
               />
             </div>
           </div>
@@ -1162,7 +1162,7 @@ export const TrainerClientDetailPage: React.FC = () => {
               value={coachSummary}
               onChange={(e) => setCoachSummary(e.target.value)}
               placeholder="Explain focus for the next 2–4 weeks, workout fueling cues, and dining-out strategy..."
-              className="w-full p-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs"
+              className="w-full p-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
             />
           </div>
 
@@ -1177,7 +1177,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                 return (
                   <div
                     key={mg.mealType}
-                    className="p-3 rounded-xl border border-stone-200/80 dark:border-slate-800 bg-stone-50/60 dark:bg-slate-900/50 space-y-2"
+                    className="p-3 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/60 dark:bg-[#090A0C]/50 space-y-2"
                   >
                     <div className="text-xs font-bold text-slate-900 dark:text-slate-100">{label}</div>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -1194,7 +1194,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                               )
                             )
                           }
-                          className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-mono-nums"
+                          className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-mono-nums"
                         />
                       </div>
                       <div>
@@ -1210,7 +1210,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                               )
                             )
                           }
-                          className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-xs font-mono-nums"
+                          className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-mono-nums"
                         />
                       </div>
                     </div>
@@ -1223,7 +1223,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                         )
                       }
                       placeholder="Food guideline..."
-                      className="w-full h-8 px-2 rounded-lg border border-stone-200 dark:border-slate-700 bg-white dark:bg-[#121821] text-[11px]"
+                      className="w-full h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[11px]"
                     />
                   </div>
                 );
@@ -1239,7 +1239,7 @@ export const TrainerClientDetailPage: React.FC = () => {
               rows={3}
               value={actionItemsText}
               onChange={(e) => setActionItemsText(e.target.value)}
-              className="w-full p-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs"
+              className="w-full p-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
             />
           </div>
 
@@ -1258,7 +1258,7 @@ export const TrainerClientDetailPage: React.FC = () => {
 
       {/* Private Trainer Notes & Weekly Check-Ins */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <section className="lg:col-span-6 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+        <section className="lg:col-span-6 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-4">
           <div>
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <MessageSquarePlus className="w-4 h-4 text-lime-600 dark:text-lime-400" />
@@ -1277,7 +1277,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                 <select
                   value={noteCategory}
                   onChange={(e) => setNoteCategory(e.target.value as TrainerNote['category'])}
-                  className="h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs"
+                  className="h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
                 >
                   <option value="nutrition">Nutrition</option>
                   <option value="training">Training</option>
@@ -1289,7 +1289,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   placeholder="Write coaching observation..."
-                  className="flex-1 h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/60 dark:bg-slate-900 text-xs"
+                  className="flex-1 h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
                 />
                 <button
                   type="submit"
@@ -1309,7 +1309,7 @@ export const TrainerClientDetailPage: React.FC = () => {
               notes.map((n) => (
                 <div
                   key={n.id}
-                  className="p-3 rounded-xl border border-stone-200/70 dark:border-slate-800 flex items-start justify-between gap-2"
+                  className="p-3 rounded-xl border border-black/10 dark:border-white/12 flex items-start justify-between gap-2"
                 >
                   <div className="space-y-0.5">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -1334,7 +1334,7 @@ export const TrainerClientDetailPage: React.FC = () => {
         </section>
 
         {/* Weekly Reviews / Check-Ins */}
-        <section className="lg:col-span-6 bg-white dark:bg-[#121821] border border-stone-200/90 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+        <section className="lg:col-span-6 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-4">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-lime-600 dark:text-lime-400" />
             Weekly Check-Ins & Reviews
@@ -1349,7 +1349,7 @@ export const TrainerClientDetailPage: React.FC = () => {
               {clientCheckins.map((chk) => (
                 <div
                   key={chk.id}
-                  className="p-3.5 rounded-xl border border-stone-200/80 dark:border-slate-800 space-y-2 text-xs"
+                  className="p-3.5 rounded-xl border border-black/10 dark:border-white/12 space-y-2 text-xs"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-900 dark:text-slate-100">
@@ -1385,7 +1385,7 @@ export const TrainerClientDetailPage: React.FC = () => {
                           setFeedbackMap((prev) => ({ ...prev, [chk.id]: e.target.value }))
                         }
                         placeholder="Write weekly feedback..."
-                        className="flex-1 h-9 px-3 rounded-lg border border-stone-200 dark:border-slate-700 bg-stone-50 dark:bg-slate-900 text-xs"
+                        className="flex-1 h-9 px-3 rounded-lg border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-xs"
                       />
                       <button
                         type="button"

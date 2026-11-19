@@ -302,28 +302,39 @@ export async function lookupBarcodeFromOpenFoodFacts(barcode: string): Promise<{
   const cleanCode = barcode.replace(/\D/g, '').trim();
   if (!cleanCode) return { item: null, error: 'Invalid barcode' };
 
-  const localMatch = GLOBAL_REFERENCE_FOODS.find((f) => f.barcode === cleanCode);
-  if (localMatch) return { item: localMatch };
+  const candidates = [cleanCode];
+  if (cleanCode.length === 13 && cleanCode.startsWith('0')) {
+    candidates.push(cleanCode.slice(1));
+  } else if (cleanCode.length === 12) {
+    candidates.push(`0${cleanCode}`);
+  }
+
+  for (const code of candidates) {
+    const localMatch = GLOBAL_REFERENCE_FOODS.find((f) => f.barcode === code);
+    if (localMatch) return { item: localMatch };
+  }
 
   const cached = BARCODE_CACHE.get(cleanCode);
   if (cached && cached.expiresAt > Date.now()) {
     return { item: cached.value };
   }
 
-  const isIndianGs1 = cleanCode.startsWith('890');
-  const hosts = isIndianGs1
-    ? ['https://in.openfoodfacts.org', 'https://world.openfoodfacts.org']
-    : ['https://world.openfoodfacts.org', 'https://in.openfoodfacts.org'];
-
   try {
     let lastError: string | undefined;
-    for (const host of hosts) {
-      const res = await fetchOpenFoodFactsProductFromHost(host, cleanCode);
-      if (res.item) {
-        BARCODE_CACHE.set(cleanCode, { value: res.item, expiresAt: Date.now() + CACHE_TTL_MS });
-        return { item: res.item };
+    for (const code of candidates) {
+      const isIndianGs1 = code.startsWith('890');
+      const hosts = isIndianGs1
+        ? ['https://in.openfoodfacts.org', 'https://world.openfoodfacts.org']
+        : ['https://world.openfoodfacts.org', 'https://in.openfoodfacts.org'];
+
+      for (const host of hosts) {
+        const res = await fetchOpenFoodFactsProductFromHost(host, code);
+        if (res.item) {
+          BARCODE_CACHE.set(cleanCode, { value: res.item, expiresAt: Date.now() + CACHE_TTL_MS });
+          return { item: res.item };
+        }
+        if (res.error) lastError = res.error;
       }
-      if (res.error) lastError = res.error;
     }
 
     BARCODE_CACHE.set(cleanCode, { value: null, expiresAt: Date.now() + CACHE_TTL_MS });

@@ -178,10 +178,10 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
       aria-modal="true"
       aria-label={editingFood ? 'Edit custom food' : 'Create custom food'}
     >
-      <div className="w-full sm:max-w-lg bg-white dark:bg-[#121821] rounded-t-3xl sm:rounded-2xl border border-stone-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      <div className="w-full sm:max-w-lg bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
         <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3" />
 
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 dark:border-slate-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-black/10 dark:border-white/12">
           <div>
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
               {editingFood ? 'Edit Custom Food' : 'Add Custom Food'}
@@ -216,7 +216,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Masala Oats Bowl"
-              className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
@@ -230,7 +230,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
                 placeholder="e.g., Homemade / Amul"
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
 
@@ -241,7 +241,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as FoodCategory)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               >
                 {GLOBAL_FOOD_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
@@ -270,7 +270,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     servingName.toLowerCase() === tpl.servingName.toLowerCase()
                       ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500'
-                      : 'border-stone-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                      : 'border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
                   }`}
                 >
                   {tpl.label}
@@ -289,7 +289,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                 value={servingName}
                 onChange={(e) => setServingName(e.target.value)}
                 placeholder="1 bowl / 100 g"
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
             <div>
@@ -302,7 +302,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                 min="1"
                 value={servingWeightGrams}
                 onChange={(e) => setServingWeightGrams(e.target.value)}
-                className="w-full h-11 px-3.5 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
           </div>
@@ -319,7 +319,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                 value={calories}
                 onChange={(e) => setCalories(e.target.value)}
                 placeholder="0"
-                className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
             <div>
@@ -333,7 +333,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                 value={protein}
                 onChange={(e) => setProtein(e.target.value)}
                 placeholder="0"
-                className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
             <div>
@@ -347,7 +347,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                 value={carbs}
                 onChange={(e) => setCarbs(e.target.value)}
                 placeholder="0"
-                className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
             <div>
@@ -361,7 +361,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                 value={fat}
                 onChange={(e) => setFat(e.target.value)}
                 placeholder="0"
-                className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
             <div>
@@ -375,13 +375,13 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                 value={fibre}
                 onChange={(e) => setFibre(e.target.value)}
                 placeholder="0"
-                className="w-full h-11 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                className="w-full h-11 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
               />
             </div>
           </div>
 
           {/* Optional Micronutrients */}
-          <div className="border-t border-stone-100 dark:border-slate-800 pt-3">
+          <div className="border-t border-stone-100 dark:border-white/12 pt-3">
             <button
               type="button"
               onClick={() => setShowOtherNutrients((v) => !v)}
@@ -408,7 +408,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                     value={sugarG}
                     onChange={(e) => setSugarG(e.target.value)}
                     placeholder="—"
-                    className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-xs font-mono-nums text-slate-900 dark:text-slate-100"
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-xs font-mono-nums text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -422,7 +422,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                     value={sodiumMg}
                     onChange={(e) => setSodiumMg(e.target.value)}
                     placeholder="—"
-                    className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-xs font-mono-nums text-slate-900 dark:text-slate-100"
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-xs font-mono-nums text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -436,7 +436,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                     value={potassiumMg}
                     onChange={(e) => setPotassiumMg(e.target.value)}
                     placeholder="—"
-                    className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-xs font-mono-nums text-slate-900 dark:text-slate-100"
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-xs font-mono-nums text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -450,7 +450,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                     value={calciumMg}
                     onChange={(e) => setCalciumMg(e.target.value)}
                     placeholder="—"
-                    className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-xs font-mono-nums text-slate-900 dark:text-slate-100"
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-xs font-mono-nums text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -464,7 +464,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
                     value={ironMg}
                     onChange={(e) => setIronMg(e.target.value)}
                     placeholder="—"
-                    className="w-full h-10 px-3 rounded-xl border border-stone-200 dark:border-slate-700 bg-stone-50/50 dark:bg-slate-900 text-xs font-mono-nums text-slate-900 dark:text-slate-100"
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/50 dark:bg-[#090A0C] text-xs font-mono-nums text-slate-900 dark:text-slate-100"
                   />
                 </div>
               </div>

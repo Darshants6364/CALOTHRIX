@@ -17,6 +17,7 @@ import {
 } from './src/utils/fitnessCalculator.ts';
 import {
   analyzeMealWithGemini,
+  readBarcodeFromImageWithGemini,
   type AnalyzeMealInputMode,
 } from './server/mealAiService.ts';
 
@@ -104,6 +105,28 @@ async function startServer() {
       res.status(500).json({
         item: null,
         error: err instanceof Error ? err.message : 'Barcode lookup failed',
+      });
+    }
+  });
+
+  // Fallback AI Barcode Digit Reader for blurred/glare-covered packaging photos
+  app.post('/api/foods/read-barcode-image', async (req, res) => {
+    try {
+      const body = (req.body || {}) as { mimeType?: string; mediaBase64?: string };
+      if (!body.mediaBase64) {
+        return res.status(400).json({ barcode: null, error: 'Missing image payload.' });
+      }
+      const result = await readBarcodeFromImageWithGemini({
+        mimeType: body.mimeType,
+        mediaBase64: body.mediaBase64,
+      });
+      return res.json(result);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number; status?: number };
+      const status = e.statusCode || e.status || 500;
+      return res.status(status >= 400 && status < 600 ? status : 500).json({
+        barcode: null,
+        error: e.message || 'Could not read barcode from image.',
       });
     }
   });

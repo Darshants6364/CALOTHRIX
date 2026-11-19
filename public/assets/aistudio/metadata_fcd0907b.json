@@ -1,0 +1,8 @@
+{
+  "name": "MacroLog",
+  "description": "An all-in-one personal fitness ecosystem uniting precision nutrition tracking, workouts, body progress, activity, and intelligent coaching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

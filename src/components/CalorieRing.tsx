@@ -42,7 +42,7 @@ export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
             r={radius}
             fill="none"
             strokeWidth={strokeWidth}
-            className="stroke-stone-200/80 dark:stroke-slate-800"
+            className="stroke-stone-200/80 dark:stroke-white/12"
           />
           <circle
             cx={size / 2}
@@ -89,7 +89,7 @@ export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
         </div>
       </div>
 
-      <div className="flex-1 w-full border-t sm:border-t-0 sm:border-l border-stone-200 dark:border-slate-800 pt-4 sm:pt-0 sm:pl-7 space-y-4">
+      <div className="flex-1 w-full border-t sm:border-t-0 sm:border-l border-black/10 dark:border-white/12 pt-4 sm:pt-0 sm:pl-7 space-y-4">
         <div className="grid grid-cols-3 sm:grid-cols-1 gap-3.5">
           <div>
             <div className="text-xs text-slate-500 dark:text-slate-400">Base Goal</div>
@@ -129,7 +129,7 @@ export const CalorieRing: React.FC<CalorieRingProps> = ({ consumed, goal }) => {
         </div>
 
         {hasGoal && (
-          <div className="pt-3 border-t border-stone-100 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
+          <div className="pt-3 border-t border-stone-100 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
             {goal.toLocaleString()} Goal − {consumed.toLocaleString()} Food ={' '}
             <span className="font-semibold text-slate-800 dark:text-slate-200">
               {remaining >= 0 ? `${remaining.toLocaleString()} left` : `${Math.abs(remaining).toLocaleString()} over`}

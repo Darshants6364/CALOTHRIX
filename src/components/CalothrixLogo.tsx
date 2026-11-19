@@ -29,7 +29,7 @@ export const CalothrixLogo: React.FC<CalothrixLogoProps> = ({
           width="36"
           height="36"
           rx="11"
-          className="fill-slate-900 dark:fill-slate-800"
+          className="fill-[#0D0F13] dark:fill-[#14161C]"
         />
         {/* Segmented macro ring */}
         <circle
@@ -41,10 +41,10 @@ export const CalothrixLogo: React.FC<CalothrixLogoProps> = ({
           strokeWidth="2.4"
           className="text-white"
         />
-        {/* Lime Protein Arc */}
+        {/* Electric Lime Protein Arc */}
         <path
           d="M20 6.5 A13.5 13.5 0 0 1 32.8 15.8"
-          stroke="#84CC16"
+          stroke="#C8FF00"
           strokeWidth="2.6"
           strokeLinecap="round"
         />
@@ -69,7 +69,7 @@ export const CalothrixLogo: React.FC<CalothrixLogoProps> = ({
           strokeWidth="2.8"
           strokeLinecap="round"
         />
-        <circle cx="24.5" cy="20" r="2" fill="#84CC16" />
+        <circle cx="24.5" cy="20" r="2" fill="#C8FF00" />
       </svg>
 
       {showWordmark && (
@@ -78,8 +78,8 @@ export const CalothrixLogo: React.FC<CalothrixLogoProps> = ({
             size === 'sm' ? 'text-base' : 'text-xl'
           }`}
         >
-          <span className="text-slate-900 dark:text-white">CALO</span>
-          <span className="text-lime-600 dark:text-lime-400">THRIX</span>
+          <span className="text-[#090A0C] dark:text-[#F4F3EF]">CALO</span>
+          <span className="text-[#4E6800] dark:text-[#C8FF00]">THRIX</span>
         </span>
       )}
     </span>

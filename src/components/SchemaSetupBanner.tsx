@@ -286,7 +286,7 @@ export const SchemaSetupBanner: React.FC = () => {
           <button
             type="button"
             onClick={handleCopy}
-            className="min-h-[38px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-100 inline-flex items-center gap-1.5"
+            className="min-h-[38px] px-3 rounded-xl bg-white dark:bg-[#090A0C] border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-800 dark:text-slate-100 inline-flex items-center gap-1.5"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-lime-600" /> : <Copy className="w-3.5 h-3.5" />}
             {copied ? 'Copied SQL' : 'Copy SQL'}
@@ -296,7 +296,7 @@ export const SchemaSetupBanner: React.FC = () => {
             href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_ID}/sql/new`}
             target="_blank"
             rel="noreferrer"
-            className="min-h-[38px] px-3 rounded-xl bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-100 inline-flex items-center gap-1.5"
+            className="min-h-[38px] px-3 rounded-xl bg-white dark:bg-[#090A0C] border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-800 dark:text-slate-100 inline-flex items-center gap-1.5"
           >
             <span>Open SQL Editor</span>
             <ExternalLink className="w-3.5 h-3.5" />
