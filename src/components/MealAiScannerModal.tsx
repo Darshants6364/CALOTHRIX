@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Camera,
   Check,
+  Download,
   History,
   ImagePlus,
   Loader2,
@@ -13,7 +14,10 @@ import {
   VideoOff,
   X,
 } from 'lucide-react';
+import { openShareStudio } from './MacroShareModal';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { formatShortDate } from '../utils/dateUtils';
+import { round1 } from '../utils/nutritionUtils';
 import {
   analyzeMealViaApi,
   fetchRecentMealScansFromSupabase,
@@ -1364,24 +1368,54 @@ export const MealAiScannerModal: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                type="button"
-                disabled={saving || selectedItems.length === 0}
-                onClick={() => void handleSaveToDiary()}
-                className="w-full min-h-[48px] rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving to Food Diary...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>Add {selectedItems.length} Selected Items to Food Log</span>
-                  </>
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                {mode === 'photo' && (
+                  <button
+                    type="button"
+                    disabled={selectedItems.length === 0}
+                    onClick={() =>
+                      openShareStudio({
+                        mode: 'food',
+                        foodPayload: {
+                          title: analysis.mealTitle || 'AI Photo Scan Meal',
+                          subtitle: `${selectedItems.length} ${
+                            selectedItems.length === 1 ? 'item' : 'items'
+                          } · AI Photo Scan`,
+                          calories: Math.round(selectedTotals.calories),
+                          protein: round1(selectedTotals.protein),
+                          carbs: round1(selectedTotals.carbs),
+                          fat: round1(selectedTotals.fat),
+                          fibre: round1(selectedTotals.fibre),
+                          dateLabel: formatShortDate(logDate),
+                        },
+                      })
+                    }
+                    className="sm:w-auto min-h-[48px] px-4 rounded-xl border border-black/15 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  >
+                    <Download className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+                    <span>Download Full Macros PNG</span>
+                  </button>
                 )}
-              </button>
+
+                <button
+                  type="button"
+                  disabled={saving || selectedItems.length === 0}
+                  onClick={() => void handleSaveToDiary()}
+                  className="flex-1 min-h-[48px] rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-sm font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving to Food Diary...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Add {selectedItems.length} Selected Items to Food Log</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </div>

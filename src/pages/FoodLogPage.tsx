@@ -7,6 +7,7 @@ import {
   Mic,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
   Utensils,
 } from 'lucide-react';
@@ -80,6 +81,42 @@ export const FoodLogPage: React.FC = () => {
         fat: round1(entry.fat),
         fibre: round1(entry.fibre),
         dateLabel: formatShortDate(entry.date),
+      },
+    });
+  };
+
+  const openAiPhotoBatchSticker = (
+    mealLabel: string,
+    batchItems: FoodLogEntry[]
+  ) => {
+    const batchTotals = batchItems.reduce(
+      (acc, item) => ({
+        calories: acc.calories + (item.calories || 0),
+        protein: acc.protein + (item.protein || 0),
+        carbs: acc.carbs + (item.carbs || 0),
+        fat: acc.fat + (item.fat || 0),
+        fibre: acc.fibre + (item.fibre || 0),
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 }
+    );
+
+    const itemNames = batchItems.map((item) => item.foodName).filter(Boolean);
+    const titleSummary =
+      itemNames.length > 0
+        ? itemNames.slice(0, 3).join(', ') + (itemNames.length > 3 ? ` +${itemNames.length - 3}` : '')
+        : `${mealLabel} · AI Photo Scan`;
+
+    openShareStudio({
+      mode: 'food',
+      foodPayload: {
+        title: titleSummary,
+        subtitle: `${batchItems.length} items`,
+        calories: Math.round(batchTotals.calories),
+        protein: round1(batchTotals.protein),
+        carbs: round1(batchTotals.carbs),
+        fat: round1(batchTotals.fat),
+        fibre: round1(batchTotals.fibre),
+        dateLabel: formatShortDate(selectedDate),
       },
     });
   };
@@ -211,6 +248,23 @@ export const FoodLogPage: React.FC = () => {
         {MEAL_CATEGORIES.map((meal) => {
           const { items, totals } = mealBreakdown[meal.id];
 
+          // Group multi-item AI Photo Scan batches so only AI Photo Scan meals expose a full-macros sticker download
+          const aiPhotoBatches: FoodLogEntry[][] = [];
+          const aiBatchMap = new Map<string, FoodLogEntry[]>();
+          for (const entry of items) {
+            if (entry.sourceName === 'AI Photo Scan' || entry.sourceName === 'AI Photo Re-log') {
+              const key = entry.createdAt || 'ai-photo';
+              const group = aiBatchMap.get(key) || [];
+              group.push(entry);
+              aiBatchMap.set(key, group);
+            }
+          }
+          aiBatchMap.forEach((group) => {
+            if (group.length >= 2) {
+              aiPhotoBatches.push(group);
+            }
+          });
+
           return (
             <section
               key={meal.id}
@@ -335,6 +389,57 @@ export const FoodLogPage: React.FC = () => {
                         </div>
                       </div>
                     ))}
+
+                    {aiPhotoBatches.map((batch, idx) => {
+                      const batchTotals = batch.reduce(
+                        (acc, item) => ({
+                          calories: acc.calories + (item.calories || 0),
+                          protein: round1(acc.protein + (item.protein || 0)),
+                          carbs: round1(acc.carbs + (item.carbs || 0)),
+                          fat: round1(acc.fat + (item.fat || 0)),
+                        }),
+                        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+                      );
+                      const batchNames = batch
+                        .map((item) => item.foodName)
+                        .filter(Boolean)
+                        .join(', ');
+
+                      return (
+                        <div
+                          key={batch[0]?.createdAt || `ai-batch-${idx}`}
+                          className="px-5 py-3 bg-lime-500/8 dark:bg-[#C8FF00]/6 flex flex-wrap items-center justify-between gap-2.5 last:rounded-b-2xl"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#4E6800] dark:text-[#C8FF00]">
+                              <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                AI Photo Scan · {batch.length} items
+                              </span>
+                            </div>
+                            <div
+                              title={batchNames}
+                              className="text-xs font-semibold text-slate-900 dark:text-slate-100 mt-0.5 line-clamp-2"
+                            >
+                              {batchNames}
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums mt-0.5">
+                              {Math.round(batchTotals.calories)} kcal · P {batchTotals.protein}g · C{' '}
+                              {batchTotals.carbs}g · F {batchTotals.fat}g
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => openAiPhotoBatchSticker(meal.shortLabel, batch)}
+                            className="min-h-[38px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Full Macros PNG</span>
+                          </button>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </section>

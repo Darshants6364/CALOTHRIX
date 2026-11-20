@@ -495,7 +495,7 @@ export const MacroShareModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Transparent Food Sticker Chooser"
