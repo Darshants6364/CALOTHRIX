@@ -56,6 +56,7 @@ export type FoodState =
   | 'fried'
   | 'roasted'
   | 'steamed'
+  | 'grilled'
   | 'dry'
   | 'parboiled'
   | 'tender'
@@ -225,6 +226,24 @@ export interface FoodItem extends MacroNutrients {
   portions?: FoodPortion[];
   isDiscontinued?: boolean;
   validationIssues?: FoodValidationIssue[];
+  canonicalFamily?: string;
+  version?: number;
+  approvedBy?: string;
+  approvedAt?: string;
+  changeNotes?: string;
+}
+
+export interface FoodVersionRecord {
+  id: string;
+  foodId: string;
+  version: number;
+  verificationStatus: VerificationStatus;
+  foodState: FoodState;
+  changeNotes?: string | null;
+  changedBy?: string | null;
+  foodSnapshot?: Record<string, unknown>;
+  nutrientsSnapshot?: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface FoodLogEntry extends MacroNutrients {
@@ -301,6 +320,9 @@ export interface DatabaseQualitySummary {
   missingFibreCount: number;
   duplicateCount: number;
   inconsistentEnergyCount: number;
+  nccdbCount?: number;
+  discontinuedCount?: number;
+  rawCookedMismatchCount?: number;
   issues: FoodValidationIssue[];
 }
 
@@ -723,23 +745,6 @@ export interface NutritionLabelOcrResult {
   confidence: 'high' | 'moderate' | 'low';
 }
 
-export interface MenuAdvisorDish {
-  dishName: string;
-  estimatedCalories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  proteinPer100Kcal: number;
-  fitRating: 'best_fit' | 'good_fit' | 'moderate_fit';
-  reason: string;
-}
-
-export interface MenuAdvisorResult {
-  restaurantSummary: string;
-  dishes: MenuAdvisorDish[];
-  orderingTip: string;
-}
-
 export interface CoachSuggestionItem {
   title: string;
   calories: number;
@@ -755,4 +760,147 @@ export interface CoachAdviceResult {
   suggestions: CoachSuggestionItem[];
   provider: 'gemini' | 'deterministic';
 }
+
+export type AiTrainingInputMode =
+  | 'photo'
+  | 'voice'
+  | 'text'
+  | 'quick_parse'
+  | 'label_ocr';
+
+export interface AiTrainingItemSnapshot {
+  name: string;
+  estimatedQuantityDescription?: string;
+  estimatedGrams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fibre: number;
+}
+
+export interface AiTrainingPayloadSnapshot {
+  mealTitle: string;
+  detectedDescription: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  totalFibre: number;
+  items: AiTrainingItemSnapshot[];
+}
+
+export interface AiItemCorrectionDiff {
+  aiName: string;
+  userName: string;
+  aiGrams: number;
+  userGrams: number;
+  aiCalories: number;
+  userCalories: number;
+  kcalDelta: number;
+  gramsDelta: number;
+  changedFields: string[];
+}
+
+export interface AiEditDiffSummary {
+  kcalDelta: number;
+  kcalDeltaPct: number;
+  gramsDelta: number;
+  proteinDelta: number;
+  carbsDelta: number;
+  fatDelta: number;
+  editedItemCount: number;
+  totalItemCount: number;
+  editedFields: string[];
+  itemCorrections: AiItemCorrectionDiff[];
+}
+
+export interface AiTrainingEvent {
+  id: string;
+  userId?: string | null;
+  inputMode: AiTrainingInputMode;
+  prepStyle: string;
+  userInputText?: string;
+  imageStoragePath?: string;
+  aiDescription: string;
+  aiRawOutput: AiTrainingPayloadSnapshot;
+  userFinalOutput: AiTrainingPayloadSnapshot;
+  userChanged: boolean;
+  editDiffSummary: AiEditDiffSummary;
+  rewardScore: number;
+  userFeedbackNote?: string;
+  verifiedForTraining: boolean;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  createdAt: string;
+}
+
+export interface AiLearnedPrior {
+  id: string;
+  foodKey: string;
+  displayName: string;
+  inputMode: string;
+  canonicalDescription: string;
+  avgServingGrams: number;
+  avgCalories: number;
+  avgProtein: number;
+  avgCarbs: number;
+  avgFat: number;
+  avgFibre: number;
+  correctionPattern?: string;
+  sampleCount: number;
+  avgRewardScore: number;
+  confidenceWeight: number;
+  isVerifiedShared: boolean;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface AiTrainingRun {
+  id: string;
+  runType: 'auto_daily' | 'auto_feedback' | 'manual_admin' | 'reinforcement_calibration';
+  eventsProcessed: number;
+  verifiedEventsCount: number;
+  editedEventsCount: number;
+  priorsUpdatedCount: number;
+  meanRewardScore: number;
+  meanCalorieMae: number;
+  acceptanceRatePct: number;
+  notes?: string;
+  triggeredBy?: string;
+  createdAt: string;
+}
+
+export interface AiDailyMetricPoint {
+  date: string;
+  totalEvents: number;
+  editedEvents: number;
+  acceptanceRatePct: number;
+  meanRewardScore: number;
+  meanCalorieMae: number;
+}
+
+export interface AiPerformanceInsightsResponse {
+  summary: {
+    totalEvents: number;
+    editedEvents: number;
+    acceptedUneditedEvents: number;
+    verifiedEvents: number;
+    acceptanceRatePct: number;
+    editRatePct: number;
+    meanRewardScore: number;
+    meanCalorieMae: number;
+    meanCalorieMapePct: number;
+    verifiedPriorsCount: number;
+    totalTrainingRuns: number;
+    lastRunAt?: string;
+    modeBreakdown: Record<AiTrainingInputMode, { total: number; edited: number; acceptancePct: number }>;
+    storageBackend: 'supabase' | 'hybrid_fallback';
+  };
+  dailyTrend: AiDailyMetricPoint[];
+  events: AiTrainingEvent[];
+  priors: AiLearnedPrior[];
+  runs: AiTrainingRun[];
+}
+
 

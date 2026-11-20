@@ -5,10 +5,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import {
+  adminVerifyOrUpdateFood,
+  fetchPublicFoodOverrides,
   getExternalFoodSourceStatus,
+  getFoodVersionHistory,
   lookupBarcodeFromOpenFoodFacts,
   scoreSemanticMatch,
   searchGlobalFoods,
+  seedMasterFoodsToSupabase,
 } from './server/foodService.ts';
 import { GLOBAL_REFERENCE_FOODS } from './src/data/globalReferenceFoods.ts';
 import { isDatabaseAdmin } from './src/utils/adminAccess.ts';
@@ -23,15 +27,24 @@ import {
 } from './src/utils/fitnessCalculator.ts';
 import {
   analyzeMealWithGemini,
-  analyzeMenuWithGemini,
   coachChatWithGemini,
   parseNutritionLabelWithGemini,
   readBarcodeFromImageWithGemini,
   type AnalyzeMealInputMode,
   type MealPrepStyle,
 } from './server/mealAiService.ts';
+import {
+  getAdminAiInsightsDashboard,
+  recordAiTrainingEvent,
+  runReinforcementTrainingCycle,
+  updateLearnedPriorSharedStatus,
+  verifyTrainingEventAndPromote,
+} from './server/aiTrainingService.ts';
+import type { AiTrainingInputMode, AiTrainingPayloadSnapshot } from './src/types/index.ts';
 
-async function verifyAdminRequest(req: express.Request): Promise<{ ok: boolean; status: number; error?: string }> {
+async function verifyAdminRequest(
+  req: express.Request
+): Promise<{ ok: boolean; status: number; error?: string; userId?: string; token?: string }> {
   const authHeader = String(req.headers.authorization || '');
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   if (!token) {
@@ -54,7 +67,7 @@ async function verifyAdminRequest(req: express.Request): Promise<{ ok: boolean; 
   if (!isDatabaseAdmin(data.user, null)) {
     return { ok: false, status: 403, error: 'Admin privileges required' };
   }
-  return { ok: true, status: 200 };
+  return { ok: true, status: 200, userId: data.user.id, token };
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -105,13 +118,28 @@ async function startServer() {
     res.json(getExternalFoodSourceStatus());
   });
 
+  // Public Food Overrides (admin-verified updates & discontinued flags from Supabase)
+  app.get('/api/foods/overrides', async (req, res) => {
+    try {
+      const authHeader = String(req.headers.authorization || '');
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : undefined;
+      const items = await fetchPublicFoodOverrides(token);
+      return res.json({ items });
+    } catch {
+      return res.json({ items: [] });
+    }
+  });
+
   // Admin-Only Internal Food Database Quality Audit Report
   app.get('/api/admin/food-quality', async (req, res) => {
     const auth = await verifyAdminRequest(req);
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }
-    return res.json(buildDatabaseQualityReport(GLOBAL_REFERENCE_FOODS));
+    const overrides = await fetchPublicFoodOverrides(auth.token);
+    const overrideMap = new Map(overrides.map((f) => [f.id, f]));
+    const mergedFoods = GLOBAL_REFERENCE_FOODS.map((f) => overrideMap.get(f.id) || f);
+    return res.json(buildDatabaseQualityReport(mergedFoods));
   });
 
   // Admin-Only CSV Export of Database Validation Audit
@@ -120,7 +148,10 @@ async function startServer() {
     if (!auth.ok) {
       return res.status(auth.status).json({ error: auth.error });
     }
-    const csv = exportValidationReportCsv(GLOBAL_REFERENCE_FOODS);
+    const overrides = await fetchPublicFoodOverrides(auth.token);
+    const overrideMap = new Map(overrides.map((f) => [f.id, f]));
+    const mergedFoods = GLOBAL_REFERENCE_FOODS.map((f) => overrideMap.get(f.id) || f);
+    const csv = exportValidationReportCsv(mergedFoods);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader(
       'Content-Disposition',
@@ -129,7 +160,52 @@ async function startServer() {
     return res.send(csv);
   });
 
-  // Unified Global Food Search (IFCT 2017 + USDA FDC + Open Food Facts v2)
+  // Admin-Only Seed / Sync Master Reference Catalog to Supabase Postgres
+  app.post('/api/admin/seed-foods', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const result = await seedMasterFoodsToSupabase(auth.token);
+    if (!result.ok) {
+      return res.status(500).json(result);
+    }
+    return res.json(result);
+  });
+
+  // Admin-Only Verify / Edit Macros / Flag / Discontinue a Food with Version Snapshot
+  app.post('/api/admin/foods/:id/verify', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const foodId = String(req.params.id || '').trim();
+    if (!foodId) {
+      return res.status(400).json({ ok: false, error: 'Missing food ID' });
+    }
+    const body = req.body || {};
+    const result = await adminVerifyOrUpdateFood(foodId, body, auth.userId, auth.token);
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  });
+
+  // Admin-Only Read Food Version History
+  app.get('/api/admin/foods/:id/versions', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const foodId = String(req.params.id || '').trim();
+    const result = await getFoodVersionHistory(foodId, auth.token);
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  });
+
+  // Unified Global Food Search (Postgres Master + IFCT 2017 + USDA FDC + Open Food Facts v2)
   app.get('/api/foods/search', async (req, res) => {
     try {
       const q = String(req.query.q || '');
@@ -138,15 +214,20 @@ async function startServer() {
       const source = String(req.query.source || 'All');
       const barcode = req.query.barcode ? String(req.query.barcode) : undefined;
       const semantic = req.query.semantic === 'true';
+      const authHeader = String(req.headers.authorization || '');
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : undefined;
 
-      const result = await searchGlobalFoods({
-        query: q,
-        category,
-        country,
-        source,
-        barcode,
-        semantic,
-      });
+      const result = await searchGlobalFoods(
+        {
+          query: q,
+          category,
+          country,
+          source,
+          barcode,
+          semantic,
+        },
+        token
+      );
       res.json(result);
     } catch (err) {
       res.status(500).json({
@@ -309,35 +390,6 @@ async function startServer() {
     }
   });
 
-  // Restaurant Menu Macro Advisor
-  app.post('/api/ai/analyze-menu', async (req, res) => {
-    try {
-      const body = (req.body || {}) as {
-        mimeType?: string;
-        mediaBase64?: string;
-        menuText?: string;
-        remainingCalories?: number;
-        remainingProtein?: number;
-        dietaryPreference?: string;
-      };
-      const result = await analyzeMenuWithGemini({
-        mimeType: body.mimeType,
-        mediaBase64: body.mediaBase64,
-        menuText: body.menuText,
-        remainingCalories: Number(body.remainingCalories ?? 600),
-        remainingProtein: Number(body.remainingProtein ?? 35),
-        dietaryPreference: body.dietaryPreference,
-      });
-      return res.json(result);
-    } catch (err) {
-      const e = err as Error & { statusCode?: number; status?: number };
-      const status = e.statusCode || e.status || 500;
-      return res.status(status >= 400 && status < 600 ? status : 500).json({
-        error: e.message || 'Failed to analyze menu.',
-      });
-    }
-  });
-
   // Interactive Nutrition Coach ("Finish My Day" / Rebalance)
   app.post('/api/ai/coach', async (req, res) => {
     try {
@@ -370,6 +422,168 @@ async function startServer() {
       const status = e.statusCode || e.status || 500;
       return res.status(status >= 400 && status < 600 ? status : 500).json({
         error: e.message || 'Coach request failed.',
+      });
+    }
+  });
+
+  // AI Reinforcement Training Event Capture (AI description/output vs User final edited output)
+  app.post('/api/ai/training-event', async (req, res) => {
+    try {
+      const body = (req.body || {}) as {
+        inputMode?: AiTrainingInputMode;
+        prepStyle?: string;
+        userInputText?: string;
+        imageStoragePath?: string;
+        aiDescription?: string;
+        aiRawOutput?: AiTrainingPayloadSnapshot;
+        userFinalOutput?: AiTrainingPayloadSnapshot;
+        userFeedbackNote?: string;
+      };
+
+      if (!body.aiRawOutput || !body.userFinalOutput) {
+        return res.status(400).json({
+          error: 'Both aiRawOutput and userFinalOutput snapshots are required.',
+        });
+      }
+
+      const validModes: AiTrainingInputMode[] = [
+        'photo',
+        'voice',
+        'text',
+        'quick_parse',
+        'label_ocr',
+      ];
+      const inputMode: AiTrainingInputMode = validModes.includes(
+        body.inputMode as AiTrainingInputMode
+      )
+        ? (body.inputMode as AiTrainingInputMode)
+        : 'text';
+
+      const authHeader = String(req.headers.authorization || '');
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : undefined;
+      let userId: string | null = null;
+
+      if (token) {
+        try {
+          const supabaseUrl = (
+            process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
+          ).trim();
+          const anonKey = (
+            process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+            'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
+          ).trim();
+          const sb = createClient(supabaseUrl, anonKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data } = await sb.auth.getUser(token);
+          userId = data?.user?.id || null;
+        } catch {
+          userId = null;
+        }
+      }
+
+      const result = await recordAiTrainingEvent({
+        userId,
+        userToken: token,
+        inputMode,
+        prepStyle: body.prepStyle,
+        userInputText: body.userInputText,
+        imageStoragePath: body.imageStoragePath,
+        aiDescription:
+          body.aiDescription || body.aiRawOutput.mealTitle || 'AI Meal Analysis',
+        aiRawOutput: body.aiRawOutput,
+        userFinalOutput: body.userFinalOutput,
+        userFeedbackNote: body.userFeedbackNote,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to record AI training event.',
+      });
+    }
+  });
+
+  // Admin-Only AI Performance & Reinforcement Training Insights
+  app.get('/api/admin/ai/insights', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    try {
+      const insights = await getAdminAiInsightsDashboard(auth.token);
+      return res.json(insights);
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to load AI insights.',
+      });
+    }
+  });
+
+  // Admin-Only Trigger Reinforcement Self-Training Cycle
+  app.post('/api/admin/ai/train', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    try {
+      const result = await runReinforcementTrainingCycle({
+        runType: 'manual_admin',
+        triggeredBy: auth.userId,
+        userToken: auth.token,
+      });
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : 'Reinforcement training cycle failed.',
+      });
+    }
+  });
+
+  // Admin-Only Verify Training Event & Promote to Shared Dataset
+  app.post('/api/admin/ai/events/:id/verify', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    try {
+      const verified = Boolean((req.body as { verified?: boolean })?.verified);
+      const result = await verifyTrainingEventAndPromote({
+        eventId: req.params.id,
+        verified,
+        adminUserId: auth.userId,
+        userToken: auth.token,
+      });
+      if (!result.ok) {
+        return res.status(404).json({ error: result.error || 'Training event not found.' });
+      }
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to verify training event.',
+      });
+    }
+  });
+
+  // Admin-Only Toggle Shared Status on Learned Prior
+  app.post('/api/admin/ai/priors/:id/share', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    try {
+      const isVerifiedShared = Boolean(
+        (req.body as { isVerifiedShared?: boolean })?.isVerifiedShared
+      );
+      const result = await updateLearnedPriorSharedStatus({
+        priorId: req.params.id,
+        isVerifiedShared,
+        userToken: auth.token,
+      });
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to update shared prior status.',
       });
     }
   });

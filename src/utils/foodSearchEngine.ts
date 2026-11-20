@@ -28,14 +28,18 @@ const ALIAS_EXPANSIONS: Record<string, string[]> = {
   rasam: ['saaru', 'charu', 'tomato pepper rasam', 'rasam'],
   saaru: ['rasam'],
   'curd rice': ['thayir sadam', 'dahi chawal', 'mosaranna', 'perugu annam', 'curd rice'],
-  'thayir sadam': ['curd rice'],
-  'dahi chawal': ['curd rice'],
-  mosaranna: ['curd rice'],
+  'thayir sadam': ['curd rice', 'mosaranna'],
+  'dahi chawal': ['curd rice', 'mosaranna'],
+  mosaranna: ['curd rice', 'thayir sadam', 'dahi chawal'],
+  'perugu annam': ['curd rice', 'mosaranna'],
+  chawal: ['white rice cooked', 'steamed rice', 'cooked rice', 'rice'],
   'lemon rice': ['chitranna', 'elumichai sadam', 'nimmakaya pulihora', 'lemon rice'],
   chitranna: ['lemon rice'],
   'bisibele bath': ['bisi bele bath', 'bisibelebath', 'bisi bele bhath', 'sambar rice'],
   'bisi bele bath': ['bisibele bath'],
   'chicken curry': ['kodi kura', 'murgh curry', 'homestyle chicken curry', 'chicken curry'],
+  'grilled chicken': ['chicken tikka', 'grilled chicken breast', 'roasted chicken'],
+  'chicken tikka': ['grilled chicken', 'tandoori chicken'],
   'egg bhurji': ['anda bhurji', 'scrambled egg masala', 'egg bhurji'],
   'anda bhurji': ['egg bhurji'],
   'paneer bhurji': ['scrambled cottage cheese', 'paneer bhurji'],
@@ -49,7 +53,11 @@ const ALIAS_EXPANSIONS: Record<string, string[]> = {
   moong: ['green gram', 'mung'],
   mung: ['green gram', 'moong'],
   urad: ['black gram', 'uddina'],
-  chana: ['bengal gram', 'chickpea', 'kabuli'],
+  chana: ['bengal gram', 'chickpea', 'kabuli', 'garbanzo'],
+  garbanzo: ['chickpeas', 'kabuli chana', 'chana', 'bengal gram'],
+  'garbanzo beans': ['garbanzo', 'chickpeas cooked', 'boiled chickpeas'],
+  skyr: ['icelandic skyr', 'icelandic yogurt', 'greek yoghurt', 'high protein yogurt'],
+  'icelandic skyr': ['skyr', 'icelandic yogurt'],
   besan: ['bengal gram flour', 'chickpea flour'],
   palak: ['spinach'],
   dahi: ['curd', 'yogurt', 'yoghurt'],
@@ -61,8 +69,9 @@ const ALIAS_EXPANSIONS: Record<string, string[]> = {
   aloo: ['potato'],
   atta: ['whole wheat', 'wheat flour'],
   maida: ['refined wheat flour'],
-  poha: ['rice flakes', 'flattened rice', 'avalakki'],
-  avalakki: ['poha', 'rice flakes'],
+  poha: ['kanda poha', 'rice flakes', 'flattened rice', 'avalakki'],
+  'kanda poha': ['poha', 'avalakki', 'flattened rice cooked'],
+  avalakki: ['poha', 'kanda poha', 'rice flakes'],
   upma: ['uppittu', 'rava upma', 'suji upma'],
   uppittu: ['upma'],
   khichdi: ['khichuri', 'pongal'],
@@ -86,6 +95,7 @@ const STRICT_MODIFIER_TOKENS = [
   'raw',
   'cooked',
   'roasted',
+  'grilled',
   'parboiled',
   'steamed',
   'dry',
@@ -95,6 +105,39 @@ const STRICT_MODIFIER_TOKENS = [
   'mutton',
   'fish',
 ];
+
+/**
+ * Canonical 5-tier source priority:
+ * 1: IFCT 2017 / Verified Cooked Reference
+ * 2: USDA FDC / NCCDB Clinical Reference
+ * 3: Verified Manufacturer / Branded Labels
+ * 4: Community Open Food Facts (ODbL)
+ * 5: Personal Custom Foods
+ */
+export function getCanonicalSourcePriority(food: FoodItem): number {
+  if (food.isCustom || food.sourceType === 'personal_custom') return 5;
+  const src = (food.sourceName || '').toLowerCase();
+  if (
+    src.includes('ifct') ||
+    src.includes('calothrix verified') ||
+    food.id.startsWith('ifct-')
+  ) {
+    return 1;
+  }
+  if (src.includes('usda') || src.includes('nccdb')) {
+    return food.sourceType === 'branded' ? 3 : 2;
+  }
+  if (food.sourceType === 'branded' || src.includes('manufacturer') || src.includes('restaurant') || src.includes('supplement')) {
+    return 3;
+  }
+  if (src.includes('open food facts') || food.sourceType === 'community') {
+    return 4;
+  }
+  if (typeof food.sourcePriority === 'number' && food.sourcePriority >= 1 && food.sourcePriority <= 5) {
+    return food.sourcePriority;
+  }
+  return food.sourceType === 'verified_reference' ? 2 : 4;
+}
 
 function normalizeText(s: string): string {
   return s
@@ -388,12 +431,44 @@ export function scoreFoodMatch(food: FoodItem, rawQuery: string): ScoredFoodMatc
     }
   }
 
-  // 6. Strict Source Priority Bonus (IFCT > Verified Cooked > USDA > Branded > OFF > Custom)
-  const priority = food.sourcePriority ?? (food.isCustom ? 6 : food.sourceType === 'verified_reference' ? 2 : 5);
-  bestScore += Math.max(0, 7 - priority) * 4;
+  // 6. Raw vs cooked collision guard:
+  // If user didn't explicitly ask for raw/dry/uncooked/flour, prioritize cooked/prepared foods over raw agricultural ingredients
+  const queryAsksRawOrDry = /\b(raw|dry|uncooked|flour|atta|grain|powder|whole|seed)\b/i.test(qNorm);
+  const queryAsksPrepared = /\b(cooked|boiled|steamed|grilled|roasted|fried|prepared|curry|tikka|biryani|masala|porridge|oatmeal|bhurji|dosa|roti|idli|sambar)\b/i.test(
+    qNorm
+  );
+  const foodIsRawOrDry = corpus.stateNorm === 'raw' || corpus.stateNorm === 'dry' || corpus.stateNorm === 'dried';
+  const foodIsPrepared = [
+    'cooked',
+    'boiled',
+    'steamed',
+    'grilled',
+    'roasted',
+    'fried',
+    'prepared',
+    'fermented',
+  ].includes(corpus.stateNorm);
+
+  if (queryAsksRawOrDry) {
+    if (foodIsRawOrDry) bestScore += 80;
+    else if (foodIsPrepared) bestScore -= 55;
+  } else if (queryAsksPrepared) {
+    if (foodIsPrepared) bestScore += 75;
+    else if (foodIsRawOrDry) bestScore -= 65;
+  } else {
+    // Ambiguous everyday queries (e.g. "rice", "chicken", "oats", "dal", "chana"):
+    // Rank prepared/cooked staples ahead of raw IFCT agricultural commodities while keeping raw available below
+    if (foodIsPrepared) bestScore += 60;
+    else if (foodIsRawOrDry) bestScore -= 55;
+  }
+
+  // 7. Strict 5-Tier Source Priority Bonus (IFCT/Cooked Ref > USDA/NCCDB > Branded > OFF > Custom)
+  const priority = getCanonicalSourcePriority(food);
+  bestScore += Math.max(0, 6 - priority) * 5;
 
   // Penalize needs_review slightly relative to verified when identical match
   if (food.verificationStatus === 'needs_review') bestScore -= 6;
+  if (food.isDiscontinued) bestScore -= 250;
 
   return { food, score: bestScore, matchReason };
 }
@@ -406,21 +481,22 @@ export function searchFoodsIntelligent(
     favoriteIds?: string[];
     recentIds?: string[];
     limit?: number;
+    includeDiscontinued?: boolean;
   }
 ): FoodItem[] {
   const category = options?.category || 'All';
+  const includeDiscontinued = Boolean(options?.includeDiscontinued);
   const favoriteSet = options?.favoriteIds?.length ? new Set(options.favoriteIds) : null;
   const recentSet = options?.recentIds?.length ? new Set(options.recentIds) : null;
 
-  const categoryFiltered =
-    category === 'All'
-      ? foods
-      : foods.filter((food) => {
-          if (category === 'Favorites') return favoriteSet ? favoriteSet.has(food.id) : false;
-          if (category === 'Recent') return recentSet ? recentSet.has(food.id) : false;
-          if (category === 'My Custom Foods' || category === 'Custom') return food.isCustom;
-          return food.category === category;
-        });
+  const categoryFiltered = foods.filter((food) => {
+    if (!includeDiscontinued && food.isDiscontinued) return false;
+    if (category === 'All') return true;
+    if (category === 'Favorites') return favoriteSet ? favoriteSet.has(food.id) : false;
+    if (category === 'Recent') return recentSet ? recentSet.has(food.id) : false;
+    if (category === 'My Custom Foods' || category === 'Custom') return food.isCustom;
+    return food.category === category;
+  });
 
   const q = query.trim();
   if (!q) {
@@ -437,8 +513,8 @@ export function searchFoodsIntelligent(
 
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    const pa = a.food.sourcePriority ?? 6;
-    const pb = b.food.sourcePriority ?? 6;
+    const pa = getCanonicalSourcePriority(a.food);
+    const pb = getCanonicalSourcePriority(b.food);
     if (pa !== pb) return pa - pb;
     return a.food.name.localeCompare(b.food.name);
   });

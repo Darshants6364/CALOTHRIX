@@ -228,6 +228,59 @@ export function formatNutrientValue(
   return `${value}${unitSuffix}`;
 }
 
+export function getNutrientCompleteness(food: FoodItem): {
+  macroPresent: number;
+  macroTotal: number;
+  microPresent: number;
+  microTotal: number;
+  completenessPct: number;
+  missingMacroKeys: Array<'calories' | 'protein' | 'carbs' | 'fat' | 'fibre'>;
+} {
+  const macroKeys: Array<'calories' | 'protein' | 'carbs' | 'fat' | 'fibre'> = [
+    'calories',
+    'protein',
+    'carbs',
+    'fat',
+    'fibre',
+  ];
+  const missingSet = new Set(food.missingFields || []);
+  const raw = food.rawNutrients;
+  const missingMacroKeys = macroKeys.filter((k) => {
+    if (missingSet.has(k)) return true;
+    if (raw && raw[k] === null) return true;
+    return !Number.isFinite(food[k]);
+  });
+  const macroPresent = macroKeys.length - missingMacroKeys.length;
+
+  const microKeys: Array<keyof NonNullable<FoodItem['micronutrients']>> = [
+    'sugarG',
+    'saturatedFatG',
+    'sodiumMg',
+    'potassiumMg',
+    'calciumMg',
+    'ironMg',
+    'vitaminCMg',
+    'zincMg',
+  ];
+  const micros = food.micronutrients || {};
+  const microPresent = microKeys.filter((k) => {
+    const val = micros[k];
+    return typeof val === 'number' && Number.isFinite(val);
+  }).length;
+
+  const totalFields = macroKeys.length + microKeys.length;
+  const completenessPct = Math.round(((macroPresent + microPresent) / totalFields) * 100);
+
+  return {
+    macroPresent,
+    macroTotal: macroKeys.length,
+    microPresent,
+    microTotal: microKeys.length,
+    completenessPct,
+    missingMacroKeys,
+  };
+}
+
 export function normalizeLegacyCategory(cat: string): string {
   switch (cat) {
     case 'Indian Staples':

@@ -374,12 +374,18 @@ export function buildDatabaseQualityReport(foods: FoodItem[]): DatabaseQualitySu
   let missingCarbsCount = 0;
   let missingFatCount = 0;
   let missingFibreCount = 0;
+  let nccdbCount = 0;
+  let discontinuedCount = 0;
 
   for (const f of validatedFoods) {
     const src = (f.sourceName || '').toLowerCase();
+    if (f.isDiscontinued) discontinuedCount++;
     if (f.isCustom || f.sourceType === 'personal_custom') customCount++;
     else if (src.includes('ifct') || f.id.startsWith('ifct-')) ifctCount++;
-    else if (src.includes('usda')) usdaCount++;
+    else if (src.includes('nccdb')) {
+      nccdbCount++;
+      usdaCount++;
+    } else if (src.includes('usda')) usdaCount++;
     else if (src.includes('open food facts')) openFoodFactsCount++;
     else if (f.sourceType === 'branded') brandedCount++;
 
@@ -414,6 +420,9 @@ export function buildDatabaseQualityReport(foods: FoodItem[]): DatabaseQualitySu
   const inconsistentEnergyCount = allIssues.filter(
     (i) => i.code === 'energy_inconsistency'
   ).length;
+  const rawCookedMismatchCount = allIssues.filter(
+    (i) => i.code === 'raw_cooked_unspecified'
+  ).length;
 
   return {
     totalRecords: validatedFoods.length,
@@ -433,6 +442,9 @@ export function buildDatabaseQualityReport(foods: FoodItem[]): DatabaseQualitySu
     missingFibreCount,
     duplicateCount,
     inconsistentEnergyCount,
+    nccdbCount,
+    discontinuedCount,
+    rawCookedMismatchCount,
     issues: allIssues,
   };
 }

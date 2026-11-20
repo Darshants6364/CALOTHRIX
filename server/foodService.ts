@@ -2,15 +2,22 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
   FoodCategory,
   FoodItem,
+  FoodPortion,
   FoodSourceType,
   FoodState,
   FoodValidationIssue,
+  FoodVersionRecord,
   Micronutrients,
   NutrientFieldKey,
   RawNutrientValues,
+  VerificationStatus,
 } from '../src/types/index.ts';
 import { GLOBAL_REFERENCE_FOODS } from '../src/data/globalReferenceFoods.ts';
-import { scoreFoodMatch, searchFoodsIntelligent } from '../src/utils/foodSearchEngine.ts';
+import {
+  getCanonicalSourcePriority,
+  scoreFoodMatch,
+  searchFoodsIntelligent,
+} from '../src/utils/foodSearchEngine.ts';
 import {
   calculateAtwaterCaloriesPer100g,
   deriveVerificationStatus,
@@ -25,7 +32,14 @@ interface CachedValue<T> {
 
 const SEARCH_CACHE = new Map<string, CachedValue<GlobalSearchResponse>>();
 const BARCODE_CACHE = new Map<string, CachedValue<FoodItem | null>>();
+let OVERRIDES_CACHE: CachedValue<FoodItem[]> | null = null;
 const CACHE_TTL_MS = 15 * 60 * 1000;
+
+function clearFoodCaches(): void {
+  SEARCH_CACHE.clear();
+  BARCODE_CACHE.clear();
+  OVERRIDES_CACHE = null;
+}
 
 let serverSupabaseClient: SupabaseClient | null = null;
 function getServerSupabase(userAccessToken?: string): SupabaseClient | null {
@@ -73,6 +87,7 @@ export interface GlobalSearchResponse {
   items: FoodItem[];
   sourceMeta: {
     ifctCount: number;
+    dbCount?: number;
     offCount: number;
     usdaCount: number;
     offError?: string;
@@ -186,7 +201,8 @@ function inferFoodStateFromText(name: string, categories = ''): FoodState {
   const text = `${name} ${categories}`.toLowerCase();
   if (/\braw\b|\buncooked\b/.test(text)) return 'raw';
   if (/\bdeep fried\b|\bfried\b/.test(text)) return 'fried';
-  if (/\broasted\b|\btoasted\b|\bbaked\b|\bgrilled\b/.test(text)) return 'roasted';
+  if (/\bgrilled\b|\bcharbroiled\b|\btandoor|\btikka\b/.test(text)) return 'grilled';
+  if (/\broasted\b|\btoasted\b|\bbaked\b/.test(text)) return 'roasted';
   if (/\bboiled\b/.test(text)) return 'boiled';
   if (/\bsteamed\b/.test(text)) return 'steamed';
   if (/\bcooked\b|\bprepared\b/.test(text)) return 'cooked';
@@ -374,7 +390,7 @@ function normalizeOpenFoodFactsProduct(raw: Record<string, unknown>): FoodItem |
     sourceType,
     sourceName: 'Open Food Facts',
     sourceId: code,
-    sourcePriority: 5,
+    sourcePriority: 4,
     sourceUrl: `https://world.openfoodfacts.org/product/${encodeURIComponent(code)}`,
     license: 'ODbL (Open Database License)',
     dataQuality: missingFields.length === 0 ? 'moderate' : 'moderate',
@@ -450,7 +466,11 @@ async function readBarcodeFromSupabaseCache(barcode: string): Promise<FoodItem |
       sourceType: data.brand ? 'branded' : 'community',
       sourceName: String(data.source_name || 'Open Food Facts'),
       sourceId: barcode,
-      sourcePriority: 5,
+      sourcePriority: String(data.source_name || '').toLowerCase().includes('open food facts')
+        ? 4
+        : data.brand
+        ? 3
+        : 4,
       sourceUrl: data.source_url || undefined,
       verificationStatus: (data.verification_status as FoodItem['verificationStatus']) || 'needs_review',
       lastUpdated: data.last_validated_at ? String(data.last_validated_at).slice(0, 10) : undefined,
@@ -778,7 +798,7 @@ async function searchUsdaFoodDataCentral(query: string): Promise<{
         sourceName: `USDA FoodData Central (${f.dataType || 'Reference'})`,
         sourceId: String(f.fdcId),
         foodCode: String(f.fdcId),
-        sourcePriority: isBranded ? 4 : 3,
+        sourcePriority: isBranded ? 3 : 2,
         sourceUrl: `https://fdc.nal.usda.gov/fdc-app.html#/food-details/${f.fdcId}/nutrients`,
         license: 'USDA Public Domain (CC0)',
         dataQuality: isBranded ? 'moderate' : 'high',
@@ -796,6 +816,810 @@ async function searchUsdaFoodDataCentral(query: string): Promise<{
       items: [],
       configured: true,
       error: err instanceof Error ? err.message : 'USDA FDC request failed',
+    };
+  }
+}
+
+function mapSourceIdToSourceType(sourceId: string, sourceName: string, isCustom: boolean): FoodSourceType {
+  if (isCustom || sourceId === 'user_custom') return 'personal_custom';
+  if (
+    sourceId === 'ifct_2017' ||
+    sourceId === 'ifct_cooked_verified' ||
+    sourceId === 'usda_fdc' ||
+    sourceId === 'nccdb_clinical' ||
+    sourceName.includes('IFCT') ||
+    sourceName.includes('USDA') ||
+    sourceName.includes('NCCDB')
+  ) {
+    return 'verified_reference';
+  }
+  if (sourceId === 'manufacturer_verified') return 'branded';
+  return 'community';
+}
+
+function mapSourceIdForFood(food: FoodItem): string {
+  const name = (food.sourceName || '').toLowerCase();
+  if (food.isCustom || food.sourceType === 'personal_custom') return 'user_custom';
+  if (name.includes('ifct')) return 'ifct_2017';
+  if (name.includes('nccdb')) return 'nccdb_clinical';
+  if (name.includes('usda')) return 'usda_fdc';
+  if (food.sourceType === 'verified_reference') return 'ifct_cooked_verified';
+  if (food.sourceType === 'branded') return 'manufacturer_verified';
+  return 'open_food_facts';
+}
+
+const CANONICAL_SOURCE_ROWS = [
+  {
+    id: 'ifct_2017',
+    source_name: 'ICMR-NIN IFCT 2017',
+    source_priority: 1,
+    authority_level: 'scientific_reference',
+    base_url: 'https://ifct2017.com/',
+    license: 'ICMR-NIN Reference Attribution',
+    notes: 'Tier 1: Indian raw agricultural ingredients & proximate composition master',
+  },
+  {
+    id: 'ifct_cooked_verified',
+    source_name: 'Calothrix Verified Indian Cooked Reference',
+    source_priority: 1,
+    authority_level: 'verified_cooked',
+    base_url: null,
+    license: 'ICMR-NIN IFCT 2017 Derived',
+    notes: 'Tier 1: Verified cooked Indian & global dishes with yield and retention',
+  },
+  {
+    id: 'usda_fdc',
+    source_name: 'USDA FoodData Central',
+    source_priority: 2,
+    authority_level: 'usda_fdc',
+    base_url: 'https://fdc.nal.usda.gov/',
+    license: 'USDA Public Domain (CC0)',
+    notes: 'Tier 2: USDA Foundation & SR Legacy reference foods',
+  },
+  {
+    id: 'nccdb_clinical',
+    source_name: 'NCCDB Clinical Reference',
+    source_priority: 2,
+    authority_level: 'nccdb_clinical',
+    base_url: 'https://nutritiondata.self.com/',
+    license: 'Clinical Nutrition Reference',
+    notes: 'Tier 2: Clinical food composition database with complete micronutrient profiles',
+  },
+  {
+    id: 'manufacturer_verified',
+    source_name: 'Verified Manufacturer Nutrition Label',
+    source_priority: 3,
+    authority_level: 'manufacturer_label',
+    base_url: null,
+    license: 'Manufacturer Label Attribution',
+    notes: 'Tier 3: Verified manufacturer & restaurant nutrition panels',
+  },
+  {
+    id: 'open_food_facts',
+    source_name: 'Open Food Facts',
+    source_priority: 4,
+    authority_level: 'community_open_data',
+    base_url: 'https://in.openfoodfacts.org/',
+    license: 'ODbL (Open Database License)',
+    notes: 'Tier 4: Community packaged barcode database (890 GS1 India prioritized)',
+  },
+  {
+    id: 'user_custom',
+    source_name: 'Personal Custom Food',
+    source_priority: 5,
+    authority_level: 'user_provided',
+    base_url: null,
+    license: 'Private User Data',
+    notes: 'Tier 5: User-created unverified custom foods',
+  },
+];
+
+function mapMasterRowToFoodItem(row: Record<string, unknown>): FoodItem {
+  const calRaw = parseNullableNumber(row.calories_kcal);
+  const proRaw = parseNullableNumber(row.protein_g);
+  const carbRaw = parseNullableNumber(row.carbohydrate_g);
+  const fatRaw = parseNullableNumber(row.fat_g);
+  const fibRaw = parseNullableNumber(row.total_dietary_fibre_g);
+  const energyKjRaw = parseNullableNumber(row.energy_kj);
+  const insFibRaw = parseNullableNumber(row.insoluble_fibre_g);
+  const solFibRaw = parseNullableNumber(row.soluble_fibre_g);
+  const waterRaw = parseNullableNumber(row.water_g);
+  const ashRaw = parseNullableNumber(row.ash_g);
+
+  const missingFields: NutrientFieldKey[] = [];
+  if (calRaw === null) missingFields.push('calories');
+  if (proRaw === null) missingFields.push('protein');
+  if (carbRaw === null) missingFields.push('carbs');
+  if (fatRaw === null) missingFields.push('fat');
+  if (fibRaw === null) missingFields.push('fibre');
+
+  const rawNutrients: RawNutrientValues = {
+    energyKj: energyKjRaw,
+    calories: calRaw,
+    protein: proRaw,
+    carbs: carbRaw,
+    fat: fatRaw,
+    fibre: fibRaw,
+    insolubleFibre: insFibRaw,
+    solubleFibre: solFibRaw,
+    water: waterRaw,
+    ash: ashRaw,
+  };
+
+  const sourceIdStr = String(row.source_id || 'ifct_cooked_verified');
+  const sourceNameStr = String(row.source_name || 'Calothrix Master Catalog');
+  const isCustom = Boolean(row.is_custom);
+  const sourceType = mapSourceIdToSourceType(sourceIdStr, sourceNameStr, isCustom);
+
+  const aliasesRaw = Array.isArray(row.aliases) ? row.aliases : [];
+  const aliases = aliasesRaw.map(String).filter(Boolean);
+
+  const portionsRaw = Array.isArray(row.portions) ? (row.portions as FoodPortion[]) : [];
+
+  const baseFood: FoodItem = {
+    id: String(row.id),
+    name: String(row.food_name || ''),
+    brand: row.brand ? String(row.brand) : undefined,
+    country: row.country ? String(row.country) : 'India',
+    barcode: row.barcode ? String(row.barcode) : undefined,
+    ingredientsText: row.ingredients_text ? String(row.ingredients_text) : undefined,
+    foodGroup: row.food_group ? String(row.food_group) : undefined,
+    foodCode: row.original_source_code ? String(row.original_source_code) : undefined,
+    sourceId: row.original_source_code ? String(row.original_source_code) : String(row.id),
+    sourceName: sourceNameStr,
+    sourceType,
+    sourceUrl: row.source_url ? String(row.source_url) : undefined,
+    license: row.license ? String(row.license) : undefined,
+    sourcePriority:
+      typeof row.source_priority === 'number'
+        ? row.source_priority
+        : getCanonicalSourcePriority({
+            id: String(row.id),
+            sourceType,
+            sourceName: sourceNameStr,
+            isCustom,
+          } as FoodItem),
+    category: (row.category as FoodCategory) || 'International foods',
+    foodState: (row.food_state as FoodState) || 'prepared',
+    canonicalFamily: row.canonical_family ? String(row.canonical_family) : undefined,
+    measurementBasis:
+      row.measurement_basis === 'per_serving' || row.measurement_basis === 'per_100ml'
+        ? row.measurement_basis
+        : 'per_100g',
+    servingName: row.serving_name ? String(row.serving_name) : '100 g',
+    servingWeightGrams: parseNullableNumber(row.serving_weight_grams) ?? 100,
+    liquidDensityGPerMl: parseNullableNumber(row.liquid_density_g_per_ml),
+    dietaryTags: Array.isArray(row.dietary_tags) ? (row.dietary_tags as FoodItem['dietaryTags']) : undefined,
+    calories: calRaw ?? 0,
+    protein: proRaw ?? 0,
+    carbs: carbRaw ?? 0,
+    fat: fatRaw ?? 0,
+    fibre: fibRaw ?? 0,
+    energyKj: energyKjRaw,
+    insolubleFibreG: insFibRaw,
+    solubleFibreG: solFibRaw,
+    waterG: waterRaw,
+    ashG: ashRaw,
+    carbohydrateBasis:
+      row.carbohydrate_basis === 'available' ||
+      row.carbohydrate_basis === 'total_by_difference' ||
+      row.carbohydrate_basis === 'unknown'
+        ? row.carbohydrate_basis
+        : 'available',
+    atwaterCalories: parseNullableNumber(row.atwater_calories_kcal),
+    rawNutrients,
+    missingFields: missingFields.length > 0 ? missingFields : undefined,
+    micronutrients:
+      row.micronutrients && typeof row.micronutrients === 'object'
+        ? (row.micronutrients as Micronutrients)
+        : undefined,
+    aliases: aliases.length > 0 ? aliases : undefined,
+    portions: portionsRaw.length > 0 ? portionsRaw : undefined,
+    isCustom,
+    isDiscontinued: Boolean(row.is_discontinued),
+    verificationStatus: (row.verification_status as VerificationStatus) || 'verified',
+    dataQuality: sourceType === 'verified_reference' ? 'high' : 'moderate',
+    version: typeof row.version === 'number' ? row.version : 1,
+    changeNotes: row.change_notes ? String(row.change_notes) : undefined,
+    lastUpdated: row.last_updated ? String(row.last_updated).slice(0, 10) : undefined,
+  };
+
+  const issues = validateFoodRecord(baseFood);
+  const per100 = getNutrientsPer100g(baseFood);
+  return {
+    ...baseFood,
+    atwaterCalories:
+      baseFood.atwaterCalories ??
+      calculateAtwaterCaloriesPer100g(per100, baseFood.carbohydrateBasis || 'available'),
+    validationIssues: issues,
+  };
+}
+
+async function searchSupabaseFoodsMaster(
+  options: GlobalSearchOptions,
+  userAccessToken?: string
+): Promise<FoodItem[]> {
+  const sb = getServerSupabase(userAccessToken);
+  if (!sb) return [];
+  try {
+    const { data, error } = await sb.rpc('search_foods_master', {
+      search_query: options.query || '',
+      filter_category: options.category && options.category !== 'All' ? options.category : null,
+      filter_country: options.country && options.country !== 'All' ? options.country : null,
+      max_results: 45,
+    });
+    if (error || !Array.isArray(data)) return [];
+    return data.map((row) => mapMasterRowToFoodItem(row as Record<string, unknown>));
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchPublicFoodOverrides(userAccessToken?: string): Promise<FoodItem[]> {
+  if (OVERRIDES_CACHE && OVERRIDES_CACHE.expiresAt > Date.now()) {
+    return OVERRIDES_CACHE.value;
+  }
+  const sb = getServerSupabase(userAccessToken);
+  if (!sb) return [];
+  try {
+    const { data, error } = await sb
+      .from('foods')
+      .select(
+        `
+        id, source_id, original_source_code, source_url, food_name, brand, country, barcode,
+        food_group, category, food_state, canonical_family, measurement_basis, serving_name,
+        serving_weight_grams, liquid_density_g_per_ml, dietary_tags, ingredients_text,
+        verification_status, is_custom, is_discontinued, version, change_notes, last_updated,
+        food_sources(source_name, source_priority, license),
+        food_nutrients(energy_kj, calories_kcal, atwater_calories_kcal, protein_g, fat_g, carbohydrate_g, carbohydrate_basis, total_dietary_fibre_g, insoluble_fibre_g, soluble_fibre_g, water_g, ash_g, micronutrients),
+        food_aliases(alias_name),
+        food_portions(id, food_id, portion_name, size_variant, gram_or_ml_weight, unit_type, measurement_method, source_reference, confidence_level, is_default)
+      `
+      )
+      .or('version.gt.1,is_discontinued.eq.true,approved_at.not.is.null')
+      .limit(200);
+
+    if (error || !Array.isArray(data)) return [];
+
+    const mapped = data.map((raw: Record<string, unknown>) => {
+      const src = (raw.food_sources || {}) as Record<string, unknown>;
+      const nut = Array.isArray(raw.food_nutrients)
+        ? ((raw.food_nutrients[0] || {}) as Record<string, unknown>)
+        : ((raw.food_nutrients || {}) as Record<string, unknown>);
+      const aliases = Array.isArray(raw.food_aliases)
+        ? (raw.food_aliases as Array<{ alias_name?: string }>).map((a) => a.alias_name).filter(Boolean)
+        : [];
+      const portions = Array.isArray(raw.food_portions)
+        ? (raw.food_portions as Array<Record<string, unknown>>).map((p) => ({
+            id: String(p.id),
+            foodId: String(p.food_id),
+            portionName: String(p.portion_name),
+            sizeVariant: p.size_variant as FoodPortion['sizeVariant'],
+            gramOrMlWeight: Number(p.gram_or_ml_weight),
+            unitType: p.unit_type as FoodPortion['unitType'],
+            measurementMethod: String(p.measurement_method || 'standardized_indian_household'),
+            sourceReference: String(p.source_reference || 'Calothrix Admin Curated'),
+            confidenceLevel: (p.confidence_level as FoodPortion['confidenceLevel']) || 'high',
+            isDefault: Boolean(p.is_default),
+          }))
+        : [];
+
+      return mapMasterRowToFoodItem({
+        ...raw,
+        source_name: src.source_name,
+        source_priority: src.source_priority,
+        license: src.license,
+        ...nut,
+        aliases,
+        portions,
+      });
+    });
+
+    OVERRIDES_CACHE = { value: mapped, expiresAt: Date.now() + 60 * 1000 };
+    return mapped;
+  } catch {
+    return [];
+  }
+}
+
+export async function seedMasterFoodsToSupabase(userAccessToken?: string): Promise<{
+  ok: boolean;
+  seededFoods: number;
+  skippedAdminEdited: number;
+  error?: string;
+}> {
+  const sb = getServerSupabase(userAccessToken);
+  if (!sb) {
+    return { ok: false, seededFoods: 0, skippedAdminEdited: 0, error: 'Supabase client unavailable' };
+  }
+
+  try {
+    const { error: srcErr } = await sb
+      .from('food_sources')
+      .upsert(CANONICAL_SOURCE_ROWS, { onConflict: 'id' });
+    if (srcErr) {
+      return { ok: false, seededFoods: 0, skippedAdminEdited: 0, error: srcErr.message };
+    }
+
+    // Preserve any food records already modified by admins in Supabase (version > 1)
+    const { data: editedRows } = await sb.from('foods').select('id').gt('version', 1);
+    const adminEditedIds = new Set(
+      Array.isArray(editedRows) ? editedRows.map((r: { id: string }) => r.id) : []
+    );
+
+    const targets = GLOBAL_REFERENCE_FOODS.filter((f) => !adminEditedIds.has(f.id));
+    const BATCH_SIZE = 100;
+    let seededCount = 0;
+
+    for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+      const batch = targets.slice(i, i + BATCH_SIZE);
+      const batchIds = batch.map((f) => f.id);
+
+      const foodRows = batch.map((f) => ({
+        id: f.id,
+        source_id: mapSourceIdForFood(f),
+        original_source_code: f.foodCode || f.sourceId || null,
+        source_url: f.sourceUrl || null,
+        food_name: f.name,
+        brand: f.brand || null,
+        country: f.country || 'India',
+        barcode: f.barcode || null,
+        food_group: f.foodGroup || null,
+        category: f.category,
+        food_state: f.foodState || 'prepared',
+        canonical_family: f.canonicalFamily || null,
+        measurement_basis: f.measurementBasis || 'per_100g',
+        serving_name: f.servingName || '100 g',
+        serving_weight_grams: f.servingWeightGrams || 100,
+        liquid_density_g_per_ml: f.liquidDensityGPerMl ?? null,
+        dietary_tags: f.dietaryTags || [],
+        ingredients_text: f.ingredientsText || null,
+        verification_status: f.verificationStatus || 'verified',
+        is_custom: Boolean(f.isCustom),
+        is_discontinued: Boolean(f.isDiscontinued),
+        version: f.version || 1,
+        raw_source_snapshot: {
+          id: f.id,
+          name: f.name,
+          foodCode: f.foodCode || null,
+          sourceName: f.sourceName || null,
+          rawNutrients: f.rawNutrients || null,
+        },
+        last_updated: new Date().toISOString(),
+      }));
+
+      const { error: foodErr } = await sb.from('foods').upsert(foodRows, { onConflict: 'id' });
+      if (foodErr) {
+        return {
+          ok: false,
+          seededFoods: seededCount,
+          skippedAdminEdited: adminEditedIds.size,
+          error: foodErr.message,
+        };
+      }
+
+      const nutrientRows = batch.map((f) => {
+        const per100 = getNutrientsPer100g(f);
+        const basis =
+          f.carbohydrateBasis ||
+          ((f.sourceName || '').toLowerCase().includes('usda') ? 'total_by_difference' : 'available');
+        const atwater = calculateAtwaterCaloriesPer100g(per100, basis);
+        return {
+          food_id: f.id,
+          energy_kj: f.rawNutrients?.energyKj ?? f.energyKj ?? null,
+          calories_kcal: per100.calories,
+          atwater_calories_kcal: atwater,
+          protein_g: per100.protein,
+          fat_g: per100.fat,
+          carbohydrate_g: per100.carbs,
+          available_carbohydrate_g: basis === 'available' ? per100.carbs : null,
+          carbohydrate_basis: basis,
+          total_dietary_fibre_g: per100.fibre,
+          insoluble_fibre_g: f.rawNutrients?.insolubleFibre ?? f.insolubleFibreG ?? null,
+          soluble_fibre_g: f.rawNutrients?.solubleFibre ?? f.solubleFibreG ?? null,
+          water_g: f.rawNutrients?.water ?? f.waterG ?? null,
+          ash_g: f.rawNutrients?.ash ?? f.ashG ?? null,
+          micronutrients: f.micronutrients || {},
+          updated_at: new Date().toISOString(),
+        };
+      });
+
+      const { error: nutErr } = await sb
+        .from('food_nutrients')
+        .upsert(nutrientRows, { onConflict: 'food_id' });
+      if (nutErr) {
+        return {
+          ok: false,
+          seededFoods: seededCount,
+          skippedAdminEdited: adminEditedIds.size,
+          error: nutErr.message,
+        };
+      }
+
+      // Replace aliases & portions cleanly for idempotency
+      await sb.from('food_aliases').delete().in('food_id', batchIds);
+      const aliasRows: Array<{
+        food_id: string;
+        alias_name: string;
+        alias_type: string;
+        language_region: string | null;
+      }> = [];
+      for (const f of batch) {
+        const seen = new Set<string>();
+        for (const rawAlias of f.aliases || []) {
+          const clean = rawAlias.trim();
+          if (!clean) continue;
+          const lower = clean.toLowerCase();
+          if (seen.has(lower)) continue;
+          seen.add(lower);
+          aliasRows.push({
+            food_id: f.id,
+            alias_name: clean,
+            alias_type: 'common',
+            language_region: f.country || null,
+          });
+        }
+      }
+      if (aliasRows.length > 0) {
+        await sb.from('food_aliases').insert(aliasRows);
+      }
+
+      await sb.from('food_portions').delete().in('food_id', batchIds);
+      const allowedUnits = new Set([
+        'g',
+        'ml',
+        'piece',
+        'cup',
+        'bowl',
+        'katori',
+        'tbsp',
+        'tsp',
+        'glass',
+        'plate',
+        'scoop',
+        'slice',
+      ]);
+      const portionRows: Array<Record<string, unknown>> = [];
+      for (const f of batch) {
+        for (const p of f.portions || []) {
+          if (!Number.isFinite(p.gramOrMlWeight) || p.gramOrMlWeight <= 0) continue;
+          portionRows.push({
+            food_id: f.id,
+            portion_name: p.portionName,
+            size_variant:
+              p.sizeVariant === 'small' ||
+              p.sizeVariant === 'medium' ||
+              p.sizeVariant === 'large' ||
+              p.sizeVariant === 'standard'
+                ? p.sizeVariant
+                : 'standard',
+            gram_or_ml_weight: p.gramOrMlWeight,
+            unit_type: allowedUnits.has(p.unitType) ? p.unitType : 'g',
+            measurement_method: p.measurementMethod || 'standardized_indian_household',
+            source_reference: p.sourceReference || 'Calothrix Reference',
+            confidence_level:
+              p.confidenceLevel === 'high' || p.confidenceLevel === 'moderate' || p.confidenceLevel === 'low'
+                ? p.confidenceLevel
+                : 'high',
+            is_default: Boolean(p.isDefault),
+          });
+        }
+      }
+      if (portionRows.length > 0) {
+        await sb.from('food_portions').insert(portionRows);
+      }
+
+      seededCount += batch.length;
+    }
+
+    clearFoodCaches();
+    return {
+      ok: true,
+      seededFoods: seededCount,
+      skippedAdminEdited: adminEditedIds.size,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      seededFoods: 0,
+      skippedAdminEdited: 0,
+      error: err instanceof Error ? err.message : 'Master seed failed',
+    };
+  }
+}
+
+export interface AdminVerifyFoodPayload {
+  verificationStatus: VerificationStatus;
+  foodState?: FoodState;
+  canonicalFamily?: string | null;
+  isDiscontinued?: boolean;
+  changeNotes?: string;
+  nutrients?: {
+    calories: number | null;
+    protein: number | null;
+    carbs: number | null;
+    fat: number | null;
+    fibre: number | null;
+    energyKj?: number | null;
+  };
+}
+
+export async function adminVerifyOrUpdateFood(
+  foodId: string,
+  payload: AdminVerifyFoodPayload,
+  adminUserId?: string,
+  userAccessToken?: string
+): Promise<{ ok: boolean; item?: FoodItem; version?: number; error?: string }> {
+  const sb = getServerSupabase(userAccessToken);
+  if (!sb) return { ok: false, error: 'Supabase unavailable' };
+
+  const localBase = GLOBAL_REFERENCE_FOODS.find((f) => f.id === foodId);
+
+  // Check if food already exists in DB
+  const { data: dbRow } = await sb
+    .from('foods')
+    .select(
+      `
+      id, source_id, original_source_code, source_url, food_name, brand, country, barcode,
+      food_group, category, food_state, canonical_family, measurement_basis, serving_name,
+      serving_weight_grams, liquid_density_g_per_ml, dietary_tags, ingredients_text,
+      verification_status, is_custom, is_discontinued, version, change_notes, last_updated,
+      food_sources(source_name, source_priority, license),
+      food_nutrients(energy_kj, calories_kcal, atwater_calories_kcal, protein_g, fat_g, carbohydrate_g, carbohydrate_basis, total_dietary_fibre_g, insoluble_fibre_g, soluble_fibre_g, water_g, ash_g, micronutrients),
+      food_aliases(alias_name),
+      food_portions(id, food_id, portion_name, size_variant, gram_or_ml_weight, unit_type, measurement_method, source_reference, confidence_level, is_default)
+    `
+    )
+    .eq('id', foodId)
+    .maybeSingle();
+
+  let currentFood: FoodItem | undefined = localBase;
+  if (dbRow) {
+    const raw = dbRow as Record<string, unknown>;
+    const src = (raw.food_sources || {}) as Record<string, unknown>;
+    const nut = Array.isArray(raw.food_nutrients)
+      ? ((raw.food_nutrients[0] || {}) as Record<string, unknown>)
+      : ((raw.food_nutrients || {}) as Record<string, unknown>);
+    const aliases = Array.isArray(raw.food_aliases)
+      ? (raw.food_aliases as Array<{ alias_name?: string }>).map((a) => a.alias_name).filter(Boolean)
+      : [];
+    currentFood = mapMasterRowToFoodItem({
+      ...raw,
+      source_name: src.source_name,
+      source_priority: src.source_priority,
+      license: src.license,
+      ...nut,
+      aliases,
+      portions: [],
+    });
+  }
+
+  if (!currentFood) {
+    return { ok: false, error: `Food '${foodId}' not found in reference catalog or Postgres` };
+  }
+
+  const nextVersion = (currentFood.version || 1) + 1;
+  const nowIso = new Date().toISOString();
+  const prevPer100 = getNutrientsPer100g(currentFood);
+
+  const nextCalories = payload.nutrients ? payload.nutrients.calories : prevPer100.calories;
+  const nextProtein = payload.nutrients ? payload.nutrients.protein : prevPer100.protein;
+  const nextCarbs = payload.nutrients ? payload.nutrients.carbs : prevPer100.carbs;
+  const nextFat = payload.nutrients ? payload.nutrients.fat : prevPer100.fat;
+  const nextFibre = payload.nutrients ? payload.nutrients.fibre : prevPer100.fibre;
+  const nextEnergyKj =
+    payload.nutrients && payload.nutrients.energyKj !== undefined
+      ? payload.nutrients.energyKj
+      : currentFood.rawNutrients?.energyKj ?? currentFood.energyKj ?? null;
+
+  const missingFields: NutrientFieldKey[] = [];
+  if (nextCalories === null) missingFields.push('calories');
+  if (nextProtein === null) missingFields.push('protein');
+  if (nextCarbs === null) missingFields.push('carbs');
+  if (nextFat === null) missingFields.push('fat');
+  if (nextFibre === null) missingFields.push('fibre');
+
+  const basis =
+    currentFood.carbohydrateBasis ||
+    ((currentFood.sourceName || '').toLowerCase().includes('usda')
+      ? 'total_by_difference'
+      : 'available');
+
+  const nextRawNutrients: RawNutrientValues = {
+    ...(currentFood.rawNutrients || {}),
+    energyKj: nextEnergyKj,
+    calories: nextCalories,
+    protein: nextProtein,
+    carbs: nextCarbs,
+    fat: nextFat,
+    fibre: nextFibre,
+  };
+
+  const atwater = calculateAtwaterCaloriesPer100g(
+    {
+      protein: nextProtein,
+      carbs: nextCarbs,
+      fat: nextFat,
+      fibre: nextFibre,
+    },
+    basis
+  );
+
+  const nextFoodState = payload.foodState || currentFood.foodState || 'prepared';
+  const nextCanonicalFamily =
+    payload.canonicalFamily !== undefined
+      ? payload.canonicalFamily || undefined
+      : currentFood.canonicalFamily;
+  const nextIsDiscontinued =
+    payload.isDiscontinued !== undefined
+      ? payload.isDiscontinued
+      : Boolean(currentFood.isDiscontinued);
+
+  const updatedFood: FoodItem = {
+    ...currentFood,
+    foodState: nextFoodState,
+    canonicalFamily: nextCanonicalFamily,
+    verificationStatus: payload.verificationStatus,
+    isDiscontinued: nextIsDiscontinued,
+    version: nextVersion,
+    approvedBy: adminUserId,
+    approvedAt: nowIso,
+    changeNotes: payload.changeNotes || currentFood.changeNotes,
+    lastUpdated: nowIso.slice(0, 10),
+    measurementBasis: payload.nutrients ? 'per_100g' : currentFood.measurementBasis,
+    servingName: payload.nutrients ? '100 g' : currentFood.servingName,
+    servingWeightGrams: payload.nutrients ? 100 : currentFood.servingWeightGrams,
+    calories: nextCalories ?? 0,
+    protein: nextProtein ?? 0,
+    carbs: nextCarbs ?? 0,
+    fat: nextFat ?? 0,
+    fibre: nextFibre ?? 0,
+    energyKj: nextEnergyKj,
+    atwaterCalories: atwater,
+    rawNutrients: nextRawNutrients,
+    missingFields: missingFields.length > 0 ? missingFields : undefined,
+  };
+  updatedFood.validationIssues = validateFoodRecord(updatedFood);
+
+  try {
+    const sourceRowId = mapSourceIdForFood(updatedFood);
+    await sb
+      .from('food_sources')
+      .upsert(CANONICAL_SOURCE_ROWS.filter((s) => s.id === sourceRowId), { onConflict: 'id' });
+
+    const { error: foodUpsertErr } = await sb.from('foods').upsert(
+      {
+        id: updatedFood.id,
+        source_id: sourceRowId,
+        original_source_code: updatedFood.foodCode || updatedFood.sourceId || null,
+        source_url: updatedFood.sourceUrl || null,
+        food_name: updatedFood.name,
+        brand: updatedFood.brand || null,
+        country: updatedFood.country || 'India',
+        barcode: updatedFood.barcode || null,
+        food_group: updatedFood.foodGroup || null,
+        category: updatedFood.category,
+        food_state: updatedFood.foodState,
+        canonical_family: updatedFood.canonicalFamily || null,
+        measurement_basis: updatedFood.measurementBasis || 'per_100g',
+        serving_name: updatedFood.servingName || '100 g',
+        serving_weight_grams: updatedFood.servingWeightGrams || 100,
+        liquid_density_g_per_ml: updatedFood.liquidDensityGPerMl ?? null,
+        dietary_tags: updatedFood.dietaryTags || [],
+        ingredients_text: updatedFood.ingredientsText || null,
+        verification_status: updatedFood.verificationStatus,
+        is_custom: Boolean(updatedFood.isCustom),
+        is_discontinued: Boolean(updatedFood.isDiscontinued),
+        version: nextVersion,
+        approved_by: adminUserId || null,
+        approved_at: nowIso,
+        change_notes: payload.changeNotes || null,
+        last_updated: nowIso,
+      },
+      { onConflict: 'id' }
+    );
+
+    if (foodUpsertErr) {
+      return { ok: false, error: foodUpsertErr.message };
+    }
+
+    const { error: nutErr } = await sb.from('food_nutrients').upsert(
+      {
+        food_id: updatedFood.id,
+        energy_kj: nextEnergyKj,
+        calories_kcal: nextCalories,
+        atwater_calories_kcal: atwater,
+        protein_g: nextProtein,
+        fat_g: nextFat,
+        carbohydrate_g: nextCarbs,
+        available_carbohydrate_g: basis === 'available' ? nextCarbs : null,
+        carbohydrate_basis: basis,
+        total_dietary_fibre_g: nextFibre,
+        insoluble_fibre_g: updatedFood.insolubleFibreG ?? null,
+        soluble_fibre_g: updatedFood.solubleFibreG ?? null,
+        water_g: updatedFood.waterG ?? null,
+        ash_g: updatedFood.ashG ?? null,
+        micronutrients: updatedFood.micronutrients || {},
+        updated_at: nowIso,
+      },
+      { onConflict: 'food_id' }
+    );
+
+    if (nutErr) {
+      return { ok: false, error: nutErr.message };
+    }
+
+    await sb.from('food_versions').insert({
+      food_id: updatedFood.id,
+      version: nextVersion,
+      verification_status: updatedFood.verificationStatus || 'verified',
+      food_state: updatedFood.foodState || 'prepared',
+      change_notes: payload.changeNotes || `Admin updated status to ${updatedFood.verificationStatus}`,
+      changed_by: adminUserId || null,
+      food_snapshot: updatedFood,
+      nutrients_snapshot: nextRawNutrients,
+      portions_snapshot: updatedFood.portions || [],
+    });
+
+    await sb.from('food_validation_logs').insert({
+      food_id: updatedFood.id,
+      check_code: 'admin_verification_action',
+      severity: payload.verificationStatus === 'needs_review' ? 'warning' : 'info',
+      message:
+        payload.changeNotes ||
+        `Admin set status=${payload.verificationStatus}, state=${nextFoodState}, v${nextVersion}`,
+      details: {
+        version: nextVersion,
+        isDiscontinued: nextIsDiscontinued,
+        canonicalFamily: nextCanonicalFamily || null,
+        missingFields,
+      },
+      resolved: payload.verificationStatus === 'verified' || payload.verificationStatus === 'enriched',
+    });
+
+    clearFoodCaches();
+    return { ok: true, item: updatedFood, version: nextVersion };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Failed to verify food',
+    };
+  }
+}
+
+export async function getFoodVersionHistory(
+  foodId: string,
+  userAccessToken?: string
+): Promise<{ ok: boolean; versions: FoodVersionRecord[]; error?: string }> {
+  const sb = getServerSupabase(userAccessToken);
+  if (!sb) return { ok: false, versions: [], error: 'Supabase unavailable' };
+  try {
+    const { data, error } = await sb
+      .from('food_versions')
+      .select(
+        'id, food_id, version, verification_status, food_state, change_notes, changed_by, created_at, nutrients_snapshot'
+      )
+      .eq('food_id', foodId)
+      .order('version', { ascending: false })
+      .limit(25);
+    if (error) return { ok: false, versions: [], error: error.message };
+    const versions: FoodVersionRecord[] = (data || []).map((row: Record<string, unknown>) => ({
+      id: String(row.id),
+      foodId: String(row.food_id),
+      version: Number(row.version || 1),
+      verificationStatus: row.verification_status as VerificationStatus,
+      foodState: row.food_state as FoodState,
+      changeNotes: row.change_notes ? String(row.change_notes) : undefined,
+      changedBy: row.changed_by ? String(row.changed_by) : undefined,
+      createdAt: String(row.created_at),
+      nutrientsSnapshot: (row.nutrients_snapshot || {}) as Record<string, unknown>,
+    }));
+    return { ok: true, versions };
+  } catch (err) {
+    return {
+      ok: false,
+      versions: [],
+      error: err instanceof Error ? err.message : 'Failed to load version history',
     };
   }
 }
@@ -885,14 +1709,13 @@ function normalizeDedupKey(food: FoodItem): string {
 
 function computeMacroCompleteness(food: FoodItem): number {
   let score = 0;
-  if (food.calories > 0) score += 20;
+  if (food.calories > 0 && !food.missingFields?.includes('calories')) score += 20;
   if (food.protein >= 0 && !food.missingFields?.includes('protein')) score += 12;
   if (food.carbs >= 0 && !food.missingFields?.includes('carbs')) score += 12;
   if (food.fat >= 0 && !food.missingFields?.includes('fat')) score += 12;
   if (food.fibre > 0 || !food.missingFields?.includes('fibre')) score += 6;
   if (food.verificationStatus === 'verified') score += 18;
   if (food.verificationStatus === 'needs_review') score -= 22;
-  // Penalize sparse 0-calorie external junk unless it's water/tea/black coffee
   const isZeroCalDrink = /water|black coffee|green tea|black tea|americano|zero/i.test(food.name);
   if (food.calories === 0 && food.protein === 0 && food.carbs === 0 && food.fat === 0 && !isZeroCalDrink) {
     score -= 80;
@@ -906,17 +1729,33 @@ export function dedupeAndRankGlobalFoods(
   country?: string,
   semantic?: boolean
 ): FoodItem[] {
+  // Merge exact IDs first so DB-edited / discontinued rows override static rows
+  const byId = new Map<string, FoodItem>();
+  for (const food of candidates) {
+    const existing = byId.get(food.id);
+    if (!existing) {
+      byId.set(food.id, food);
+      continue;
+    }
+    const existingVer = existing.version || 1;
+    const nextVer = food.version || 1;
+    if (nextVer > existingVer || (food.isDiscontinued && !existing.isDiscontinued)) {
+      byId.set(food.id, food);
+    }
+  }
+
   const dedupMap = new Map<string, FoodItem>();
 
-  for (const food of candidates) {
+  for (const food of byId.values()) {
+    if (food.isDiscontinued) continue;
     const key = normalizeDedupKey(food);
     const existing = dedupMap.get(key);
     if (!existing) {
       dedupMap.set(key, food);
       continue;
     }
-    const existingPriority = existing.sourcePriority ?? 6;
-    const nextPriority = food.sourcePriority ?? 6;
+    const existingPriority = getCanonicalSourcePriority(existing);
+    const nextPriority = getCanonicalSourcePriority(food);
     const existingComp = computeMacroCompleteness(existing);
     const nextComp = computeMacroCompleteness(food);
     if (nextPriority < existingPriority || (nextPriority === existingPriority && nextComp > existingComp)) {
@@ -935,8 +1774,8 @@ export function dedupeAndRankGlobalFoods(
       : scoreFoodMatch(food, query)?.score ?? 0;
 
     const completeness = computeMacroCompleteness(food);
-    const priority = food.sourcePriority ?? 6;
-    const priorityBonus = Math.max(0, 7 - priority) * 8;
+    const priority = getCanonicalSourcePriority(food);
+    const priorityBonus = Math.max(0, 6 - priority) * 10;
     const countryBonus =
       preferredCountry && food.country?.toLowerCase() === preferredCountry
         ? 18
@@ -961,7 +1800,8 @@ export function dedupeAndRankGlobalFoods(
 }
 
 export async function searchGlobalFoods(
-  options: GlobalSearchOptions
+  options: GlobalSearchOptions,
+  userAccessToken?: string
 ): Promise<GlobalSearchResponse> {
   const query = options.query.trim();
   const category = options.category?.trim();
@@ -971,11 +1811,12 @@ export async function searchGlobalFoods(
 
   if (isBarcodeQuery) {
     const code = (options.barcode || query).replace(/\D/g, '');
-    const { item, error } = await lookupBarcodeFromOpenFoodFacts(code);
+    const { item, error } = await lookupBarcodeFromOpenFoodFacts(code, userAccessToken);
     return {
-      items: item ? [item] : [],
+      items: item && !item.isDiscontinued ? [item] : [],
       sourceMeta: {
         ifctCount: item?.sourceName?.includes('IFCT') ? 1 : 0,
+        dbCount: 0,
         offCount: item?.sourceName?.includes('Open Food Facts') ? 1 : 0,
         usdaCount: 0,
         offError: error,
@@ -996,8 +1837,13 @@ export async function searchGlobalFoods(
     return cached.value;
   }
 
-  // 1. Local Verified DB using intelligent identification engine (alias, regional, fuzzy typo, state distinction, strict source hierarchy)
-  const preFiltered = GLOBAL_REFERENCE_FOODS.filter((food) => {
+  // Pull recent admin overrides (including discontinued IDs) so local catalog stays synchronized
+  const overrides = await fetchPublicFoodOverrides(userAccessToken);
+  const overrideById = new Map(overrides.map((f) => [f.id, f]));
+
+  // 1. Local Verified DB with overrides applied
+  const preFiltered = GLOBAL_REFERENCE_FOODS.map((f) => overrideById.get(f.id) || f).filter((food) => {
+    if (food.isDiscontinued) return false;
     if (category && category !== 'All' && food.category !== category) return false;
     if (country && country !== 'All' && food.country !== country) return false;
     if (sourceFilter && sourceFilter !== 'All' && food.sourceType !== sourceFilter) return false;
@@ -1015,7 +1861,7 @@ export async function searchGlobalFoods(
     localMatches = searchFoodsIntelligent(preFiltered, query, { limit: 45 });
   }
 
-  // 2. External APIs (only queried after local verified DB when query >= 2 chars)
+  // 2. Supabase Postgres Master Search + External APIs in parallel
   const shouldQueryExternal =
     query.length >= 2 &&
     (!sourceFilter ||
@@ -1032,45 +1878,41 @@ export async function searchGlobalFoods(
         .trim() || query
     : query;
 
-  let offItems: FoodItem[] = [];
-  let offError: string | undefined;
-  let usdaItems: FoodItem[] = [];
-  let usdaError: string | undefined;
+  const [dbItems, offRes, usdaRes] = await Promise.all([
+    searchSupabaseFoodsMaster(options, userAccessToken),
+    shouldQueryExternal && sourceFilter !== 'verified_reference'
+      ? searchOpenFoodFacts(externalQuery, country)
+      : Promise.resolve({ items: [] as FoodItem[], error: undefined }),
+    shouldQueryExternal && sourceFilter !== 'community'
+      ? searchUsdaFoodDataCentral(externalQuery)
+      : Promise.resolve({
+          items: [] as FoodItem[],
+          configured: Boolean(getUsdaApiKey()),
+          error: undefined,
+        }),
+  ]);
+
+  const offItems = offRes.items;
+  const offError = offRes.error;
+  const usdaItems = usdaRes.items;
+  const usdaError = usdaRes.error;
   const usdaConfigured = Boolean(getUsdaApiKey());
-
-  if (shouldQueryExternal) {
-    const [offRes, usdaRes] = await Promise.all([
-      sourceFilter === 'verified_reference'
-        ? Promise.resolve({ items: [] as FoodItem[], error: undefined })
-        : searchOpenFoodFacts(externalQuery, country),
-      sourceFilter === 'community'
-        ? Promise.resolve({
-            items: [] as FoodItem[],
-            configured: usdaConfigured,
-            error: undefined,
-          })
-        : searchUsdaFoodDataCentral(externalQuery),
-    ]);
-
-    offItems = offRes.items;
-    offError = offRes.error;
-    usdaItems = usdaRes.items;
-    usdaError = usdaRes.error;
-  }
 
   const applyPostFilters = (list: FoodItem[]) =>
     list.filter((food) => {
+      if (food.isDiscontinued) return false;
       if (category && category !== 'All' && food.category !== category) return false;
       if (sourceFilter && sourceFilter !== 'All' && food.sourceType !== sourceFilter) return false;
       return true;
     });
 
+  const filteredDb = applyPostFilters(dbItems);
   const filteredUsda = applyPostFilters(usdaItems);
   const filteredOff = applyPostFilters(offItems);
 
-  // Unified cross-source relevance re-ranking & deduplication while enforcing source priority & completeness
+  // Unified cross-source relevance re-ranking & deduplication while enforcing 5-tier priority & completeness
   const merged = dedupeAndRankGlobalFoods(
-    [...localMatches, ...filteredUsda, ...filteredOff],
+    [...filteredDb, ...localMatches, ...filteredUsda, ...filteredOff],
     query,
     country,
     Boolean(options.semantic)
@@ -1079,6 +1921,7 @@ export async function searchGlobalFoods(
     items: merged,
     sourceMeta: {
       ifctCount: localMatches.length,
+      dbCount: filteredDb.length,
       offCount: filteredOff.length,
       usdaCount: filteredUsda.length,
       offError,

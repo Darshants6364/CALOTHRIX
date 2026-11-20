@@ -5,10 +5,9 @@ import type {
   CoachSuggestionItem,
   MealAiAnalysisResult,
   MealCategory,
-  MenuAdvisorDish,
-  MenuAdvisorResult,
   NutritionLabelOcrResult,
 } from '../src/types/index.ts';
+import { getReinforcementPromptContext } from './aiTrainingService.ts';
 
 export type AnalyzeMealInputMode = 'photo' | 'voice' | 'text';
 export type MealPrepStyle = 'homemade_low_oil' | 'standard' | 'restaurant_rich';
@@ -241,8 +240,15 @@ export async function analyzeMealWithGemini(
 
   parts.push({ text: instructionPrompt });
 
-  const systemInstruction =
-    'You are a precision clinical & sports nutritionist. Return realistic food weights and nutrition estimates grounded in USDA FoodData Central and Indian ICMR-NIN IFCT 2017 data. Ensure item calories match (protein*4 + carbs*4 + fat*9) closely. Return strictly valid JSON matching the schema.';
+  const reinforcementContext = await getReinforcementPromptContext(
+    contextNote || resolvedTranscript || req.mode
+  );
+  const systemInstruction = [
+    'You are a precision clinical & sports nutritionist. Return realistic food weights and nutrition estimates grounded in USDA FoodData Central and Indian ICMR-NIN IFCT 2017 data. Ensure item calories match (protein*4 + carbs*4 + fat*9) closely. Return strictly valid JSON matching the schema.',
+    reinforcementContext,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 
   const responseSchema = {
     type: Type.OBJECT,
@@ -538,6 +544,14 @@ export async function parseNutritionLabelWithGemini(req: {
   ];
   let lastError: unknown;
 
+  const reinforcementContext = await getReinforcementPromptContext('nutrition label ocr');
+  const labelSystemInstruction = [
+    'You are a precision food label OCR extractor. Read FSSAI (India), US FDA, and EU Nutrition Facts tables accurately without inventing numbers.',
+    reinforcementContext,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
   for (const attempt of attempts) {
     try {
       const response = await withTimeout(
@@ -552,8 +566,7 @@ export async function parseNutritionLabelWithGemini(req: {
             ],
           },
           config: {
-            systemInstruction:
-              'You are a precision food label OCR extractor. Read FSSAI (India), US FDA, and EU Nutrition Facts tables accurately without inventing numbers.',
+            systemInstruction: labelSystemInstruction,
             thinkingConfig: { thinkingLevel: attempt.thinkingLevel },
             responseMimeType: 'application/json',
             responseSchema,
@@ -603,148 +616,6 @@ export async function parseNutritionLabelWithGemini(req: {
     sugarG: parsed.sugarG !== undefined ? normalizeNumber(parsed.sugarG, 1) : undefined,
     sodiumMg: parsed.sodiumMg !== undefined ? Math.round(normalizeNumber(parsed.sodiumMg, 0)) : undefined,
     confidence,
-  };
-}
-
-export async function analyzeMenuWithGemini(req: {
-  mimeType?: string;
-  mediaBase64?: string;
-  menuText?: string;
-  remainingCalories: number;
-  remainingProtein: number;
-  dietaryPreference?: string;
-}): Promise<MenuAdvisorResult> {
-  const ai = getGeminiClient();
-  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
-  const rawBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
-
-  if (rawBase64) {
-    parts.push({
-      inlineData: {
-        mimeType: req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg',
-        data: rawBase64,
-      },
-    });
-  }
-
-  const textDesc = (req.menuText || '').trim();
-  if (!rawBase64 && !textDesc) {
-    const err = new Error('Upload a restaurant menu photo or paste dishes to analyze.');
-    (err as Error & { statusCode?: number }).statusCode = 400;
-    throw err;
-  }
-
-  parts.push({
-    text: `Analyze this restaurant menu${textDesc ? ` / dish list: "${textDesc}"` : ''}. The user has ~${Math.round(req.remainingCalories)} kcal and ~${Math.round(req.remainingProtein)}g protein remaining today. Dietary preference: ${req.dietaryPreference || 'omnivore'}. Recommend the top 4-6 best-fitting dishes ranked by protein density (protein per 100 kcal) and macro fit, respecting their dietary preference.`,
-  });
-
-  const responseSchema = {
-    type: Type.OBJECT,
-    properties: {
-      restaurantSummary: { type: Type.STRING },
-      orderingTip: { type: Type.STRING },
-      dishes: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            dishName: { type: Type.STRING },
-            estimatedCalories: { type: Type.NUMBER },
-            protein: { type: Type.NUMBER },
-            carbs: { type: Type.NUMBER },
-            fat: { type: Type.NUMBER },
-            proteinPer100Kcal: { type: Type.NUMBER },
-            fitRating: { type: Type.STRING, description: 'best_fit, good_fit, or moderate_fit' },
-            reason: { type: Type.STRING },
-          },
-          required: [
-            'dishName',
-            'estimatedCalories',
-            'protein',
-            'carbs',
-            'fat',
-            'proteinPer100Kcal',
-            'fitRating',
-            'reason',
-          ],
-        },
-      },
-    },
-    required: ['restaurantSummary', 'orderingTip', 'dishes'],
-  };
-
-  let responseText = '';
-  const attempts: Array<{ model: string; thinkingLevel: ThinkingLevel; timeoutMs: number }> = [
-    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, timeoutMs: 12000 },
-    { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW, timeoutMs: 14000 },
-  ];
-  let lastError: unknown;
-
-  for (const attempt of attempts) {
-    try {
-      const response = await withTimeout(
-        ai.models.generateContent({
-          model: attempt.model,
-          contents: { parts },
-          config: {
-            systemInstruction:
-              'You are a dining-out sports nutrition coach. Identify high-protein, calorie-smart restaurant menu choices accurately without inventing exotic dishes not on the menu.',
-            thinkingConfig: { thinkingLevel: attempt.thinkingLevel },
-            responseMimeType: 'application/json',
-            responseSchema,
-          },
-        }),
-        attempt.timeoutMs,
-        'Menu analysis timed out.'
-      );
-      const txt = (response.text || '').trim();
-      if (txt) {
-        responseText = txt;
-        break;
-      }
-    } catch (err) {
-      lastError = err;
-      const details = extractGeminiErrorDetails(err);
-      if (!details.retryable) {
-        const fatal = new Error(details.message);
-        (fatal as Error & { statusCode?: number }).statusCode = details.statusCode;
-        throw fatal;
-      }
-    }
-  }
-
-  if (!responseText) {
-    const details = extractGeminiErrorDetails(lastError);
-    const wrapped = new Error(details.message);
-    (wrapped as Error & { statusCode?: number }).statusCode = details.statusCode;
-    throw wrapped;
-  }
-
-  const parsed = JSON.parse(responseText) as Record<string, unknown>;
-  const rawDishes = Array.isArray(parsed.dishes) ? parsed.dishes : [];
-  const dishes: MenuAdvisorDish[] = rawDishes.map((d) => {
-    const row = (d || {}) as Record<string, unknown>;
-    const kcal = Math.max(1, Math.round(normalizeNumber(row.estimatedCalories, 0)));
-    const protein = normalizeNumber(row.protein, 1);
-    const fitRaw = String(row.fitRating || 'good_fit');
-    const fitRating: MenuAdvisorDish['fitRating'] =
-      fitRaw === 'best_fit' || fitRaw === 'moderate_fit' ? fitRaw : 'good_fit';
-    return {
-      dishName: String(row.dishName || 'Menu Dish').trim(),
-      estimatedCalories: kcal,
-      protein,
-      carbs: normalizeNumber(row.carbs, 1),
-      fat: normalizeNumber(row.fat, 1),
-      proteinPer100Kcal: Math.round(((protein / kcal) * 100) * 10) / 10,
-      fitRating,
-      reason: String(row.reason || '').trim(),
-    };
-  });
-
-  return {
-    restaurantSummary: String(parsed.restaurantSummary || 'Menu nutrition breakdown').trim(),
-    orderingTip: String(parsed.orderingTip || 'Ask for sauces/dressings on the side and double protein where possible.').trim(),
-    dishes: dishes.sort((a, b) => b.proteinPer100Kcal - a.proteinPer100Kcal),
   };
 }
 

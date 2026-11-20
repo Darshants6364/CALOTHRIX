@@ -236,7 +236,7 @@ export function calculateRecipeNutrition(
     isCustom: true,
     sourceType: 'personal_custom',
     sourceName: `Calothrix Recipe Engine (${prepTag})`,
-    sourcePriority: 2,
+    sourcePriority: 5,
     verificationStatus: 'estimated',
     dataQuality: 'user_entered',
     portions: [

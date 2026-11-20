@@ -5,7 +5,6 @@ import {
   BookmarkCheck,
   Camera,
   Check,
-  ChefHat,
   Clock,
   Globe,
   Mic,
@@ -33,6 +32,7 @@ import {
   formatFoodQuantity,
   formatNutrientValue,
   getEntriesForDate,
+  getNutrientCompleteness,
   sumMacros,
 } from '../utils/nutritionUtils';
 import { searchFoodsIntelligent } from '../utils/foodSearchEngine';
@@ -41,10 +41,6 @@ import {
   getLastUsedPortion,
   getPortionsForFood,
 } from '../utils/portionEngine';
-import {
-  calculateRecipeNutrition,
-  INDIAN_RECIPE_TEMPLATES,
-} from '../utils/recipeEngine';
 
 function getSourceTypeLabel(sourceType?: FoodSourceType, isCustom?: boolean): string {
   if (isCustom || sourceType === 'personal_custom') return 'Personal Custom';
@@ -116,7 +112,7 @@ const FoodEntryModalContent: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<
-    'all' | 'india' | 'recent' | 'favorites' | 'meals' | 'recipe' | 'custom'
+    'all' | 'india' | 'recent' | 'favorites' | 'meals' | 'custom'
   >('all');
   const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
   const [inputMode, setInputMode] = useState<'grams' | 'ml' | 'servings'>('grams');
@@ -132,17 +128,6 @@ const FoodEntryModalContent: React.FC = () => {
   // Multi-Add Meal Tray
   const [trayItems, setTrayItems] = useState<TrayItem[]>([]);
   const [trayMealName, setTrayMealName] = useState('');
-
-  // Recipe Builder State
-  const [recipeName, setRecipeName] = useState('');
-  const [recipeSearch, setRecipeSearch] = useState('');
-  const [recipeIngredients, setRecipeIngredients] = useState<
-    Array<{ food: FoodItem; rawWeightGrams: string }>
-  >([]);
-  const [recipeYieldFactor, setRecipeYieldFactor] = useState<string>('0.95');
-  const [recipeServingsCount, setRecipeServingsCount] = useState<string>('4');
-  const [recipePrepStyle, setRecipePrepStyle] = useState<'homemade' | 'restaurant'>('homemade');
-  const [recipeError, setRecipeError] = useState('');
 
   // Debounced live global search (Open Food Facts / USDA / IFCT)
   const [remoteFoods, setRemoteFoods] = useState<FoodItem[]>([]);
@@ -166,7 +151,6 @@ const FoodEntryModalContent: React.FC = () => {
     if (!foodModal.isOpen) return;
     setError('');
     setCustomError('');
-    setRecipeError('');
     setCreatingCustom(false);
     setSearchQuery('');
     setRemoteFoods([]);
@@ -331,7 +315,9 @@ const FoodEntryModalContent: React.FC = () => {
           country: filterTab === 'india' ? 'India' : undefined,
         });
         if (!cancelled) {
-          setRemoteFoods(res.items.filter((item) => !localFoodIdSet.has(item.id)));
+          setRemoteFoods(
+            res.items.filter((item) => !item.isDiscontinued && !localFoodIdSet.has(item.id))
+          );
         }
       } catch {
         if (!cancelled) setRemoteFoods([]);
@@ -347,10 +333,11 @@ const FoodEntryModalContent: React.FC = () => {
   }, [creatingCustom, filterTab, foodModal.isOpen, localFoodIdSet, searchQuery, selectedFood]);
 
   const filteredLocalFoods = useMemo(() => {
+    const activeFoods = allFoods.filter((f) => !f.isDiscontinued);
     const preFiltered =
       filterTab === 'all'
-        ? allFoods
-        : allFoods.filter((f) => {
+        ? activeFoods
+        : activeFoods.filter((f) => {
             if (filterTab === 'india') return (f.country || '').toLowerCase().includes('india');
             if (filterTab === 'favorites') return favoriteSet.has(f.id);
             if (filterTab === 'recent') return recentSet.has(f.id);
@@ -378,6 +365,23 @@ const FoodEntryModalContent: React.FC = () => {
     const seen = new Set(filteredLocalFoods.map((f) => f.id));
     return [...filteredLocalFoods, ...remoteFoods.filter((r) => !seen.has(r.id))];
   }, [filterTab, filteredLocalFoods, remoteFoods]);
+
+  const selectedCompleteness = useMemo(
+    () => (selectedFood ? getNutrientCompleteness(selectedFood) : null),
+    [selectedFood]
+  );
+
+  const familyVariants = useMemo(() => {
+    if (!selectedFood?.canonicalFamily) return [];
+    return allFoods
+      .filter(
+        (f) =>
+          !f.isDiscontinued &&
+          f.canonicalFamily === selectedFood.canonicalFamily &&
+          f.id !== selectedFood.id
+      )
+      .slice(0, 6);
+  }, [allFoods, selectedFood]);
 
   const foodPortions = useMemo(
     () => (selectedFood ? getPortionsForFood(selectedFood) : []),
@@ -449,30 +453,6 @@ const FoodEntryModalContent: React.FC = () => {
     const fatLeft = Math.round((state.goals.fat - (targetDateMacros.fat + trayMacros.fat)) * 10) / 10;
     return { calLeft, proLeft, carbLeft, fatLeft };
   }, [state.goals, targetDateMacros, trayMacros]);
-
-  const recipeSearchResults = useMemo(() => {
-    const q = recipeSearch.trim();
-    if (!q) return allFoods.slice(0, 8);
-    return searchFoodsIntelligent(allFoods, q, { limit: 12 });
-  }, [allFoods, recipeSearch]);
-
-  const recipeLivePreview = useMemo(() => {
-    const validIngs = recipeIngredients
-      .map((i) => ({ food: i.food, rawWeightGrams: parseFloat(i.rawWeightGrams) || 0 }))
-      .filter((i) => i.rawWeightGrams > 0);
-    if (!recipeName.trim() || validIngs.length === 0) return null;
-    try {
-      return calculateRecipeNutrition({
-        name: recipeName.trim(),
-        ingredients: validIngs,
-        cookingYieldFactor: Math.max(0.2, parseFloat(recipeYieldFactor) || 1),
-        servingsCount: Math.max(1, parseFloat(recipeServingsCount) || 1),
-        preparationStyle: recipePrepStyle,
-      });
-    } catch {
-      return null;
-    }
-  }, [recipeIngredients, recipeName, recipePrepStyle, recipeServingsCount, recipeYieldFactor]);
 
   if (!foodModal.isOpen) return null;
 
@@ -573,26 +553,6 @@ const FoodEntryModalContent: React.FC = () => {
 
   const handleLogCombo = (combo: SavedMealCombo) => {
     logSavedMealCombo(combo, mealType, date);
-    closeFoodModal();
-  };
-
-  const handleSaveRecipeAndLog = () => {
-    if (!recipeLivePreview) {
-      setRecipeError('Enter a recipe name and add at least one ingredient with weight > 0 g.');
-      return;
-    }
-    const saved = addCustomFood(recipeLivePreview.asFoodItem);
-    const srvGrams = Math.max(
-      1,
-      Math.round((recipeLivePreview.finalCookedWeightGrams / recipeLivePreview.servingsCount) * 10) / 10
-    );
-    addFoodEntry({
-      food: saved,
-      quantityGrams: srvGrams,
-      mealType,
-      date,
-      unitLabel: `1 serving (${srvGrams} g)`,
-    });
     closeFoodModal();
   };
 
@@ -926,10 +886,10 @@ const FoodEntryModalContent: React.FC = () => {
             </div>
           </form>
         ) : !selectedFood ? (
-          /* Step 1 & 2: Search, Meals, Recipe & Select Food */
+          /* Step 1 & 2: Search, Meals & Select Food */
           <div className="flex flex-col flex-1 min-h-0">
             <div className="sticky top-0 z-20 px-4 sm:px-5 pt-3.5 pb-3 space-y-2.5 border-b border-stone-100 dark:border-white/10 bg-white dark:bg-[#111317] shrink-0">
-              {filterTab !== 'meals' && filterTab !== 'recipe' && (
+              {filterTab !== 'meals' && (
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
@@ -946,7 +906,7 @@ const FoodEntryModalContent: React.FC = () => {
 
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1 p-1 bg-stone-100 dark:bg-[#090A0C] rounded-xl overflow-x-auto no-scrollbar">
-                  {(['all', 'india', 'recent', 'favorites', 'meals', 'recipe', 'custom'] as const).map((tab) => (
+                  {(['all', 'india', 'recent', 'favorites', 'meals', 'custom'] as const).map((tab) => (
                     <button
                       key={tab}
                       type="button"
@@ -963,8 +923,6 @@ const FoodEntryModalContent: React.FC = () => {
                         ? 'India'
                         : tab === 'meals'
                         ? `Meals${savedMeals.length > 0 ? ` (${savedMeals.length})` : ''}`
-                        : tab === 'recipe'
-                        ? 'Recipe'
                         : tab}
                     </button>
                   ))}
@@ -1082,189 +1040,6 @@ const FoodEntryModalContent: React.FC = () => {
                     </div>
                   ))
                 )}
-              </div>
-            ) : filterTab === 'recipe' ? (
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
-                {recipeError && (
-                  <div className="p-3 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-300 text-xs font-medium">
-                    {recipeError}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                      Recipe Name
-                    </label>
-                    <input
-                      type="text"
-                      value={recipeName}
-                      onChange={(e) => setRecipeName(e.target.value)}
-                      placeholder="e.g., Homestyle Chicken Curry"
-                      className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                      Cooking Style & Yield
-                    </label>
-                    <select
-                      value={recipeYieldFactor}
-                      onChange={(e) => setRecipeYieldFactor(e.target.value)}
-                      className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100"
-                    >
-                      {INDIAN_RECIPE_TEMPLATES.map((tpl) => (
-                        <option key={tpl.id} value={String(tpl.cookingYieldFactor)}>
-                          {tpl.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                      Servings in Batch
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={recipeServingsCount}
-                      onChange={(e) => setRecipeServingsCount(e.target.value)}
-                      className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                      Prep Tag
-                    </label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {(['homemade', 'restaurant'] as const).map((style) => (
-                        <button
-                          key={style}
-                          type="button"
-                          onClick={() => setRecipePrepStyle(style)}
-                          className={`h-10 rounded-xl text-xs font-semibold capitalize border ${
-                            recipePrepStyle === style
-                              ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black border-transparent'
-                              : 'border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300'
-                          }`}
-                        >
-                          {style}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                    Add Raw Ingredients
-                  </label>
-                  <input
-                    type="search"
-                    value={recipeSearch}
-                    onChange={(e) => setRecipeSearch(e.target.value)}
-                    placeholder="Search ingredient to add (e.g. chicken breast, onion, oil)..."
-                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100"
-                  />
-                  {recipeSearch.trim().length > 0 && (
-                    <div className="mt-1.5 max-h-36 overflow-y-auto rounded-xl border border-black/10 dark:border-white/12 divide-y divide-black/6 dark:divide-white/8">
-                      {recipeSearchResults.map((ing) => (
-                        <button
-                          key={ing.id}
-                          type="button"
-                          onClick={() => {
-                            setRecipeIngredients((prev) => [
-                              ...prev,
-                              { food: ing, rawWeightGrams: '100' },
-                            ]);
-                            setRecipeSearch('');
-                          }}
-                          className="w-full px-3 py-2 text-left text-xs hover:bg-stone-100 dark:hover:bg-white/5 flex items-center justify-between gap-2"
-                        >
-                          <span className="font-medium text-slate-900 dark:text-slate-100 truncate">
-                            {ing.name}
-                          </span>
-                          <span className="text-[11px] font-mono-nums text-slate-400 shrink-0">
-                            {ing.calories} kcal / {ing.servingWeightGrams}g
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {recipeIngredients.length > 0 && (
-                  <div className="space-y-2">
-                    {recipeIngredients.map((item, idx) => (
-                      <div
-                        key={`${item.food.id}-${idx}`}
-                        className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/8 dark:border-white/10"
-                      >
-                        <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate flex-1">
-                          {item.food.name}
-                        </span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <input
-                            type="number"
-                            min="1"
-                            step="any"
-                            value={item.rawWeightGrams}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setRecipeIngredients((prev) =>
-                                prev.map((row, i) => (i === idx ? { ...row, rawWeightGrams: val } : row))
-                              );
-                            }}
-                            className="w-20 h-8 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-mono-nums text-right"
-                          />
-                          <span className="text-[11px] text-slate-400">g</span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRecipeIngredients((prev) => prev.filter((_, i) => i !== idx))
-                            }
-                            className="p-1 text-slate-400 hover:text-rose-500"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {recipeLivePreview && (
-                  <div className="p-3.5 rounded-xl bg-[#C8FF00]/10 border border-[#C8FF00]/30 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-[#4E6800] dark:text-[#C8FF00] inline-flex items-center gap-1.5">
-                        <ChefHat className="w-3.5 h-3.5" />
-                        Per Serving ({Math.round(recipeLivePreview.finalCookedWeightGrams / recipeLivePreview.servingsCount)} g cooked)
-                      </span>
-                      <span className="font-bold font-mono-nums text-slate-900 dark:text-slate-100">
-                        {Math.round(recipeLivePreview.totalBatch.calories / recipeLivePreview.servingsCount)} kcal
-                      </span>
-                    </div>
-                    <div className="text-[11px] font-mono-nums text-slate-600 dark:text-slate-300">
-                      P {Math.round((recipeLivePreview.totalBatch.protein / recipeLivePreview.servingsCount) * 10) / 10}g ·
-                      C {Math.round((recipeLivePreview.totalBatch.carbs / recipeLivePreview.servingsCount) * 10) / 10}g ·
-                      F {Math.round((recipeLivePreview.totalBatch.fat / recipeLivePreview.servingsCount) * 10) / 10}g ·
-                      Fibre {Math.round((recipeLivePreview.totalBatch.fibre / recipeLivePreview.servingsCount) * 10) / 10}g
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleSaveRecipeAndLog}
-                  disabled={!recipeLivePreview}
-                  className="w-full min-h-[44px] rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold disabled:opacity-45"
-                >
-                  Save Recipe to My Foods & Log 1 Serving
-                </button>
               </div>
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain divide-y divide-stone-100 dark:divide-white/10 px-2 py-1">
@@ -1445,6 +1220,12 @@ const FoodEntryModalContent: React.FC = () => {
                   >
                     {getVerificationBadgeInfo(selectedFood.verificationStatus).label}
                   </span>
+                  {selectedCompleteness && (
+                    <span className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/10 text-[10px] font-mono-nums text-slate-600 dark:text-slate-300">
+                      {selectedCompleteness.macroPresent}/{selectedCompleteness.macroTotal} macros ·{' '}
+                      {selectedCompleteness.microPresent}/{selectedCompleteness.microTotal} micros
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Ref basis: {selectedFood.servingName} (
@@ -1455,6 +1236,27 @@ const FoodEntryModalContent: React.FC = () => {
                   {getSourceTypeLabel(selectedFood.sourceType, selectedFood.isCustom)}
                   {selectedFood.sourceName ? ` · ${selectedFood.sourceName}` : ''}
                 </p>
+                {familyVariants.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      Other forms / variants:
+                    </span>
+                    {familyVariants.map((variant) => (
+                      <button
+                        key={variant.id}
+                        type="button"
+                        onClick={() => handleSelectFood(variant)}
+                        className="px-2 py-0.5 rounded-lg border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-[11px] text-slate-700 dark:text-slate-200 hover:border-lime-500 transition-colors"
+                      >
+                        <span className="capitalize font-medium">{variant.foodState || 'variant'}</span>
+                        {' · '}
+                        <span className="font-mono-nums">
+                          {variant.missingFields?.includes('calories') ? 'Unavailable' : `${variant.calories} kcal`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               {!editing && (
                 <button

@@ -1,10 +1,17 @@
 import { supabase } from '../lib/supabaseClient';
-import type { FoodItem, WeeklySummaryResult } from '../types';
+import type {
+  FoodItem,
+  FoodState,
+  FoodVersionRecord,
+  VerificationStatus,
+  WeeklySummaryResult,
+} from '../types';
 
 export interface GlobalFoodSearchResult {
   items: FoodItem[];
   sourceMeta?: {
     ifctCount: number;
+    dbCount?: number;
     offCount: number;
     usdaCount: number;
     offError?: string;
@@ -178,5 +185,131 @@ export async function fetchWeeklyAiSummaryApi(payload: {
     return (await res.json()) as WeeklySummaryResult;
   } catch {
     return null;
+  }
+}
+
+export async function fetchFoodOverridesApi(): Promise<FoodItem[]> {
+  try {
+    const authHeaders = await getAccessTokenHeader();
+    const res = await fetch('/api/foods/overrides', { headers: authHeaders });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { items?: FoodItem[] };
+    return Array.isArray(json.items) ? json.items : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function seedMasterFoodsApi(): Promise<{
+  ok: boolean;
+  seededFoods: number;
+  skippedAdminEdited: number;
+  error?: string;
+}> {
+  try {
+    const authHeaders = await getAccessTokenHeader();
+    const res = await fetch('/api/admin/seed-foods', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+    });
+    const json = (await res.json()) as {
+      ok?: boolean;
+      seededFoods?: number;
+      skippedAdminEdited?: number;
+      error?: string;
+    };
+    return {
+      ok: res.ok && Boolean(json.ok),
+      seededFoods: json.seededFoods ?? 0,
+      skippedAdminEdited: json.skippedAdminEdited ?? 0,
+      error: json.error,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      seededFoods: 0,
+      skippedAdminEdited: 0,
+      error: err instanceof Error ? err.message : 'Seed request failed',
+    };
+  }
+}
+
+export interface VerifyFoodRequestPayload {
+  verificationStatus: VerificationStatus;
+  foodState?: FoodState;
+  canonicalFamily?: string | null;
+  isDiscontinued?: boolean;
+  changeNotes?: string;
+  nutrients?: {
+    calories: number | null;
+    protein: number | null;
+    carbs: number | null;
+    fat: number | null;
+    fibre: number | null;
+    energyKj?: number | null;
+  };
+}
+
+export async function verifyAdminFoodApi(
+  foodId: string,
+  payload: VerifyFoodRequestPayload
+): Promise<{ ok: boolean; item?: FoodItem; version?: number; error?: string }> {
+  try {
+    const authHeaders = await getAccessTokenHeader();
+    const res = await fetch(`/api/admin/foods/${encodeURIComponent(foodId)}/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify(payload),
+    });
+    const json = (await res.json()) as {
+      ok?: boolean;
+      item?: FoodItem;
+      version?: number;
+      error?: string;
+    };
+    return {
+      ok: res.ok && Boolean(json.ok),
+      item: json.item,
+      version: json.version,
+      error: json.error,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Verification request failed',
+    };
+  }
+}
+
+export async function fetchFoodVersionsApi(
+  foodId: string
+): Promise<{ ok: boolean; versions: FoodVersionRecord[]; error?: string }> {
+  try {
+    const authHeaders = await getAccessTokenHeader();
+    const res = await fetch(`/api/admin/foods/${encodeURIComponent(foodId)}/versions`, {
+      headers: authHeaders,
+    });
+    const json = (await res.json()) as {
+      ok?: boolean;
+      versions?: FoodVersionRecord[];
+      error?: string;
+    };
+    return {
+      ok: res.ok && Boolean(json.ok),
+      versions: Array.isArray(json.versions) ? json.versions : [],
+      error: json.error,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      versions: [],
+      error: err instanceof Error ? err.message : 'Failed to load version history',
+    };
   }
 }

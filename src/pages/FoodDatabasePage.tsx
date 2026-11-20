@@ -14,6 +14,7 @@ import {
   Sparkles,
   Star,
   Trash2,
+  X,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { CustomFoodModal } from '../components/CustomFoodModal';
@@ -24,7 +25,11 @@ import {
   semanticFoodSearchApi,
 } from '../services/globalFoodApiService';
 import { FoodItem } from '../types';
-import { formatNutrientValue, searchFoods } from '../utils/nutritionUtils';
+import {
+  formatNutrientValue,
+  getNutrientCompleteness,
+  searchFoods,
+} from '../utils/nutritionUtils';
 import { getPortionsForFood } from '../utils/portionEngine';
 
 const DATABASE_PAGE_SIZE = 40;
@@ -114,6 +119,7 @@ function getVerificationPill(status?: FoodItem['verificationStatus']): {
 
 interface FoodDatabaseRowProps {
   food: FoodItem;
+  familyVariants: FoodItem[];
   isFav: boolean;
   isExpanded: boolean;
   onToggleFavorite: (foodId: string) => void;
@@ -127,6 +133,7 @@ interface FoodDatabaseRowProps {
 const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
   ({
     food,
+    familyVariants,
     isFav,
     isExpanded,
     onToggleFavorite,
@@ -138,6 +145,7 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
   }) => {
     const sourceLabel = getSourceTypeDisplay(food);
     const badge = getVerificationPill(food.verificationStatus);
+    const completeness = getNutrientCompleteness(food);
     const isExternalApiResult =
       !food.isCustom && (food.id.startsWith('off-') || food.id.startsWith('usda-'));
     const portions = isExpanded ? getPortionsForFood(food) : [];
@@ -150,6 +158,7 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
       food.solubleFibreG != null ||
       food.insolubleFibreG != null ||
       food.waterG != null ||
+      familyVariants.length > 0 ||
       (food.aliases && food.aliases.length > 0);
 
     return (
@@ -306,6 +315,41 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
         {/* Expanded provenance, ingredients, IFCT proximate composition & micronutrients */}
         {isExpanded && (
           <div className="mt-3 ml-0 sm:ml-12 p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C]/80 border border-black/10 dark:border-white/12 text-xs space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-black/8 dark:border-white/10">
+              <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 font-mono-nums">
+                Nutrient Completeness: <strong>{completeness.macroPresent}/{completeness.macroTotal}</strong> macros ·{' '}
+                <strong>{completeness.microPresent}/{completeness.microTotal}</strong> micros
+              </span>
+              {completeness.missingMacroKeys.length > 0 && (
+                <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                  Unavailable (NULL): {completeness.missingMacroKeys.join(', ')}
+                </span>
+              )}
+            </div>
+
+            {familyVariants.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                  Other forms / variants:
+                </span>
+                {familyVariants.map((variant) => (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    onClick={() => onQuickAdd(variant)}
+                    title={`Quick add ${variant.name}`}
+                    className="px-2 py-0.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[11px] text-slate-700 dark:text-slate-200 hover:border-lime-500 transition-colors"
+                  >
+                    <span className="capitalize font-medium">{variant.foodState || 'variant'}</span>
+                    {' · '}
+                    <span className="font-mono-nums">
+                      {variant.missingFields?.includes('calories') ? 'Unavailable' : `${variant.calories} kcal`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-600 dark:text-slate-300 font-mono-nums">
               {food.energyKj != null && <span>Energy: {food.energyKj} kJ</span>}
               {food.atwaterCalories != null && (
@@ -547,32 +591,49 @@ export const FoodDatabasePage: React.FC = () => {
     [state.favoriteFoodIds]
   );
 
+  const activeFoods = useMemo(
+    () => allFoods.filter((f) => !f.isDiscontinued),
+    [allFoods]
+  );
+
+  const familyMap = useMemo(() => {
+    const map = new Map<string, FoodItem[]>();
+    for (const f of activeFoods) {
+      if (!f.canonicalFamily) continue;
+      const arr = map.get(f.canonicalFamily) || [];
+      arr.push(f);
+      map.set(f.canonicalFamily, arr);
+    }
+    return map;
+  }, [activeFoods]);
+
   const filteredLocalFoods = useMemo(
     () =>
       searchFoods(
-        allFoods,
+        activeFoods,
         deferredQuery,
         selectedCategory,
         state.favoriteFoodIds,
         state.recentFoodIds
       ),
-    [allFoods, deferredQuery, selectedCategory, state.favoriteFoodIds, state.recentFoodIds]
+    [activeFoods, deferredQuery, selectedCategory, state.favoriteFoodIds, state.recentFoodIds]
   );
 
   const displayedFoods = useMemo(() => {
     const trimmedDeferred = deferredQuery.trim();
+    const validRemote = remoteFoods.filter((r) => !r.isDiscontinued);
     let base: FoodItem[];
     if (semanticMode && trimmedDeferred) {
-      const seen = new Set(remoteFoods.map((f) => f.id));
+      const seen = new Set(validRemote.map((f) => f.id));
       const localMatches = filteredLocalFoods.filter((f) => !seen.has(f.id));
-      base = [...remoteFoods, ...localMatches];
+      base = [...validRemote, ...localMatches];
     } else if (
       trimmedDeferred &&
       selectedCategory !== 'Favorites' &&
       selectedCategory !== 'Recent'
     ) {
       const seen = new Set(filteredLocalFoods.map((f) => f.id));
-      base = [...filteredLocalFoods, ...remoteFoods.filter((r) => !seen.has(r.id))];
+      base = [...filteredLocalFoods, ...validRemote.filter((r) => !seen.has(r.id))];
     } else {
       base = filteredLocalFoods;
     }
@@ -820,20 +881,28 @@ export const FoodDatabasePage: React.FC = () => {
         </section>
       ) : (
         <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl divide-y divide-stone-100 dark:divide-slate-800/80 overflow-hidden">
-          {visibleFoods.map((food) => (
-            <FoodDatabaseRow
-              key={food.id}
-              food={food}
-              isFav={favoriteSet.has(food.id)}
-              isExpanded={Boolean(expandedIds[food.id])}
-              onToggleFavorite={toggleFavoriteFood}
-              onToggleExpand={toggleExpand}
-              onSaveExternal={saveExternalFoodToMyFoods}
-              onEditCustom={handleEditCustomFood}
-              onDeleteCustom={handleDeleteCustomFood}
-              onQuickAdd={handleQuickAddFood}
-            />
-          ))}
+          {visibleFoods.map((food) => {
+            const siblings = food.canonicalFamily
+              ? (familyMap.get(food.canonicalFamily) || [])
+                  .filter((f) => f.id !== food.id)
+                  .slice(0, 6)
+              : [];
+            return (
+              <FoodDatabaseRow
+                key={food.id}
+                food={food}
+                familyVariants={siblings}
+                isFav={favoriteSet.has(food.id)}
+                isExpanded={Boolean(expandedIds[food.id])}
+                onToggleFavorite={toggleFavoriteFood}
+                onToggleExpand={toggleExpand}
+                onSaveExternal={saveExternalFoodToMyFoods}
+                onEditCustom={handleEditCustomFood}
+                onDeleteCustom={handleDeleteCustomFood}
+                onQuickAdd={handleQuickAddFood}
+              />
+            );
+          })}
 
           {hasMoreFoods && (
             <div ref={loadMoreRef} className="px-4 py-4 flex items-center justify-center bg-stone-50/40 dark:bg-white/[0.02]">

@@ -10,6 +10,7 @@ import {
   Scale,
   Settings,
   ShieldCheck,
+  Sparkles,
   Sun,
   Target,
   Users,
@@ -50,6 +51,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     activeTab,
     setActiveTab,
     openAddFoodModal,
+    openMealScannerModal,
     selectAccountRole,
     exitGuestModeToAuth,
     signOut,
@@ -61,7 +63,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const desktopNavItems: NavItem[] = isAdmin
     ? [
         ...ALL_NAV_ITEMS,
-        { id: 'admin-quality', label: 'DB Quality Audit', mobileLabel: 'Audit', icon: ShieldCheck },
+        { id: 'admin-quality', label: 'AI Performance', mobileLabel: 'AI Stats', icon: ShieldCheck },
       ]
     : ALL_NAV_ITEMS;
 
@@ -112,14 +114,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             Eat Smart. Track Progress. Build Better.
           </p>
 
-          <button
-            type="button"
-            onClick={() => openAddFoodModal()}
-            className="mt-4 w-full min-h-[42px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            Add Food
-          </button>
+          <div className="mt-4 space-y-2">
+            <button
+              type="button"
+              onClick={() => openMealScannerModal({ mode: 'photo' })}
+              className="w-full min-h-[42px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap"
+            >
+              <Sparkles className="w-4 h-4" />
+              AI Meal Logger
+            </button>
+            <button
+              type="button"
+              onClick={() => openAddFoodModal()}
+              className="w-full min-h-[38px] px-4 rounded-xl border border-black/10 dark:border-white/15 bg-transparent text-slate-700 dark:text-slate-200 text-xs font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Search Food
+            </button>
+          </div>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Main navigation">

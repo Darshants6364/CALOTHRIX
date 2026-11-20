@@ -7,6 +7,7 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
   SUPABASE_URL,
 } from '../lib/supabaseClient';
+import { fetchFoodOverridesApi } from '../services/globalFoodApiService';
 import {
   exportFoodAndWeightAsCsv,
   exportStateAsJson,
@@ -74,6 +75,7 @@ export type AuthMode = 'loading' | 'unauthenticated' | 'guest' | 'authenticated'
 
 const GUEST_MODE_KEY = 'calothrix_guest_mode_v1';
 const GUEST_USER_ID = 'guest-local-user';
+const ADMIN_OVERRIDES_STORAGE_KEY = 'calothrix_admin_food_overrides_v1';
 
 interface FoodModalState {
   isOpen: boolean;
@@ -91,7 +93,7 @@ interface WeightModalState {
 
 interface MealScannerModalState {
   isOpen: boolean;
-  initialMode: 'photo' | 'voice' | 'text' | 'label' | 'menu';
+  initialMode: 'photo' | 'voice' | 'text' | 'label';
   initialMeal: MealCategory;
   targetDate: string;
 }
@@ -150,7 +152,7 @@ interface MacroLogContextValue {
   // AI Meal Photo / Voice Scanner Controls
   mealScannerModal: MealScannerModalState;
   openMealScannerModal: (options?: {
-    mode?: 'photo' | 'voice' | 'text' | 'label' | 'menu';
+    mode?: 'photo' | 'voice' | 'text' | 'label';
     meal?: MealCategory;
     date?: string;
   }) => void;
@@ -206,6 +208,7 @@ interface MacroLogContextValue {
   ) => void;
   deleteCustomFood: (foodId: string) => void;
   toggleFavoriteFood: (foodId: string) => void;
+  applyAdminFoodOverride: (food: FoodItem) => void;
   // Goals Actions
   updateGoals: (goals: Omit<NutritionGoals, 'userId' | 'updatedAt'>) => void;
   // Weight Actions
@@ -307,6 +310,14 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [dailyWaterGoalMl, setDailyWaterGoalMlState] = useState<number>(2500);
   const [activeBurnKcalByDate, setActiveBurnKcalByDate] = useState<Record<string, number>>({});
   const [savedMeals, setSavedMeals] = useState<SavedMealCombo[]>([]);
+  const [adminFoodOverrides, setAdminFoodOverrides] = useState<Record<string, FoodItem>>(() => {
+    try {
+      const raw = localStorage.getItem(ADMIN_OVERRIDES_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, FoodItem>) : {};
+    } catch {
+      return {};
+    }
+  });
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateKey());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -703,6 +714,22 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     window.addEventListener('message', handleOAuthMessage);
 
+    void fetchFoodOverridesApi().then((items) => {
+      if (!mounted || items.length === 0) return;
+      setAdminFoodOverrides((prev) => {
+        const next = { ...prev };
+        for (const item of items) {
+          next[item.id] = item;
+        }
+        try {
+          localStorage.setItem(ADMIN_OVERRIDES_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          // Ignore storage quota issues
+        }
+        return next;
+      });
+    });
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
@@ -868,10 +895,24 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [notify]);
 
-  const allFoods = useMemo(
-    () => [...state.customFoods, ...DEFAULT_FOODS],
-    [state.customFoods]
-  );
+  const applyAdminFoodOverride = useCallback((food: FoodItem) => {
+    setAdminFoodOverrides((prev) => {
+      const next = { ...prev, [food.id]: food };
+      try {
+        localStorage.setItem(ADMIN_OVERRIDES_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Ignore storage quota issues
+      }
+      return next;
+    });
+  }, []);
+
+  const allFoods = useMemo(() => {
+    const mergedDefaults = DEFAULT_FOODS.map((f) => adminFoodOverrides[f.id] ?? f);
+    const defaultIds = new Set(DEFAULT_FOODS.map((f) => f.id));
+    const extraOverrides = Object.values(adminFoodOverrides).filter((f) => !defaultIds.has(f.id));
+    return [...state.customFoods, ...extraOverrides, ...mergedDefaults];
+  }, [adminFoodOverrides, state.customFoods]);
 
   const selectedDateEntries = useMemo(
     () => getEntriesForDate(state.foodEntries, selectedDate),
@@ -925,7 +966,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const openMealScannerModal = useCallback(
-    (options?: { mode?: 'photo' | 'voice' | 'text' | 'label' | 'menu'; meal?: MealCategory; date?: string }) => {
+    (options?: { mode?: 'photo' | 'voice' | 'text' | 'label'; meal?: MealCategory; date?: string }) => {
       setMealScannerModal({
         isOpen: true,
         initialMode: options?.mode ?? 'photo',
@@ -1242,7 +1283,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         category: food.category || 'Custom',
         sourceType: 'personal_custom',
         sourceName: isRecipe ? food.sourceName : 'Personal Custom Food',
-        sourcePriority: isRecipe ? 2 : 6,
+        sourcePriority: 5,
         verificationStatus: isRecipe ? 'estimated' : 'user_provided',
         foodState: food.foodState || 'prepared',
         measurementBasis:
@@ -2038,6 +2079,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateCustomFood,
       deleteCustomFood,
       toggleFavoriteFood,
+      applyAdminFoodOverride,
       updateGoals,
       addWeightEntry,
       updateWeightEntry,
@@ -2122,6 +2164,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateCustomFood,
       deleteCustomFood,
       toggleFavoriteFood,
+      applyAdminFoodOverride,
       updateGoals,
       addWeightEntry,
       updateWeightEntry,

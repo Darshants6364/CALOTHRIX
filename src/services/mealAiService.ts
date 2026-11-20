@@ -1,11 +1,15 @@
 import { supabase } from '../lib/supabaseClient';
 import {
   AiMealScanRecord,
+  AiPerformanceInsightsResponse,
+  AiTrainingEvent,
+  AiTrainingInputMode,
+  AiTrainingPayloadSnapshot,
+  AiTrainingRun,
   AnalyzedMealItem,
   CoachAdviceResult,
   MealAiAnalysisResult,
   MealCategory,
-  MenuAdvisorResult,
   NutritionLabelOcrResult,
 } from '../types';
 
@@ -65,28 +69,6 @@ export async function scanNutritionLabelViaApi(params: {
   };
   if (!res.ok) {
     throw new Error(data.error || `Label scan failed (${res.status})`);
-  }
-  return data;
-}
-
-export async function analyzeMenuViaApi(params: {
-  mimeType?: string;
-  mediaBase64?: string;
-  menuText?: string;
-  remainingCalories: number;
-  remainingProtein: number;
-  dietaryPreference?: string;
-}): Promise<MenuAdvisorResult> {
-  const res = await fetch('/api/ai/analyze-menu', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-  const data = (await res.json().catch(() => ({}))) as MenuAdvisorResult & {
-    error?: string;
-  };
-  if (!res.ok) {
-    throw new Error(data.error || `Menu analysis failed (${res.status})`);
   }
   return data;
 }
@@ -224,4 +206,121 @@ function mapScanRow(row: Record<string, unknown>): AiMealScanRecord {
     loggedToDiary: Boolean(row.logged_to_diary),
     createdAt: String(row.created_at || new Date().toISOString()),
   };
+}
+
+async function getAccessTokenHeader(): Promise<Record<string, string>> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+  } catch {
+    // Ignore session lookup errors for guest mode
+  }
+  return {};
+}
+
+export async function recordAiTrainingEventApi(params: {
+  inputMode: AiTrainingInputMode;
+  prepStyle?: string;
+  userInputText?: string;
+  imageStoragePath?: string;
+  aiDescription: string;
+  aiRawOutput: AiTrainingPayloadSnapshot;
+  userFinalOutput: AiTrainingPayloadSnapshot;
+  userFeedbackNote?: string;
+}): Promise<{ ok: boolean; event?: AiTrainingEvent } | null> {
+  try {
+    const authHeader = await getAccessTokenHeader();
+    const res = await fetch('/api/ai/training-event', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeader,
+      },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as { ok: boolean; event?: AiTrainingEvent };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAdminAiInsightsApi(): Promise<AiPerformanceInsightsResponse> {
+  const authHeader = await getAccessTokenHeader();
+  const res = await fetch('/api/admin/ai/insights', {
+    headers: { ...authHeader },
+  });
+  const data = (await res.json().catch(() => ({}))) as AiPerformanceInsightsResponse & {
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Failed to load AI insights (${res.status})`);
+  }
+  return data;
+}
+
+export async function triggerAdminAiTrainingApi(): Promise<{
+  ok: boolean;
+  run: AiTrainingRun;
+  priorsUpdated: number;
+}> {
+  const authHeader = await getAccessTokenHeader();
+  const res = await fetch('/api/admin/ai/train', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    ok: boolean;
+    run: AiTrainingRun;
+    priorsUpdated: number;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Reinforcement training failed (${res.status})`);
+  }
+  return data;
+}
+
+export async function verifyAdminAiEventApi(
+  eventId: string,
+  verified: boolean
+): Promise<{ ok: boolean; event?: AiTrainingEvent }> {
+  const authHeader = await getAccessTokenHeader();
+  const res = await fetch(`/api/admin/ai/events/${encodeURIComponent(eventId)}/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: JSON.stringify({ verified }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    ok: boolean;
+    event?: AiTrainingEvent;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Failed to verify event (${res.status})`);
+  }
+  return data;
+}
+
+export async function toggleAdminAiPriorShareApi(
+  priorId: string,
+  isVerifiedShared: boolean
+): Promise<{ ok: boolean }> {
+  const authHeader = await getAccessTokenHeader();
+  const res = await fetch(`/api/admin/ai/priors/${encodeURIComponent(priorId)}/share`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader },
+    body: JSON.stringify({ isVerifiedShared }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    ok: boolean;
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Failed to update shared status (${res.status})`);
+  }
+  return data;
 }
