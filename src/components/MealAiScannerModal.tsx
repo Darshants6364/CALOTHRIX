@@ -352,11 +352,11 @@ export const MealAiScannerModal: React.FC = () => {
   const selectedTotals = useMemo(() => {
     return selectedItems.reduce(
       (acc, item) => ({
-        calories: acc.calories + Math.round(item.calories || 0),
-        protein: Math.round((acc.protein + (item.protein || 0)) * 10) / 10,
-        carbs: Math.round((acc.carbs + (item.carbs || 0)) * 10) / 10,
-        fat: Math.round((acc.fat + (item.fat || 0)) * 10) / 10,
-        fibre: Math.round((acc.fibre + (item.fibre || 0)) * 10) / 10,
+        calories: acc.calories + Math.max(0, Math.round(item.calories || 0)),
+        protein: round1(acc.protein + Math.max(0, round1(item.protein || 0))),
+        carbs: round1(acc.carbs + Math.max(0, round1(item.carbs || 0))),
+        fat: round1(acc.fat + Math.max(0, round1(item.fat || 0))),
+        fibre: round1(acc.fibre + Math.max(0, round1(item.fibre || 0))),
       }),
       { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 }
     );

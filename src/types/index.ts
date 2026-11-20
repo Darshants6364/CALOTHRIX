@@ -49,6 +49,108 @@ export type FoodSourceType =
 
 export type NutrientFieldKey = 'calories' | 'protein' | 'carbs' | 'fat' | 'fibre';
 
+export type FoodState =
+  | 'raw'
+  | 'cooked'
+  | 'boiled'
+  | 'fried'
+  | 'roasted'
+  | 'steamed'
+  | 'dry'
+  | 'parboiled'
+  | 'tender'
+  | 'fresh'
+  | 'ripe'
+  | 'dried'
+  | 'puffed'
+  | 'mature'
+  | 'fermented'
+  | 'prepared'
+  | string;
+
+export type MeasurementBasis = 'per_100g' | 'per_serving' | 'per_100ml';
+
+export type VerificationStatus =
+  | 'verified'
+  | 'enriched'
+  | 'estimated'
+  | 'user_provided'
+  | 'needs_review';
+
+export type CarbohydrateBasis = 'available' | 'total_by_difference' | 'unknown';
+
+export type PortionUnitType =
+  | 'g'
+  | 'ml'
+  | 'piece'
+  | 'cup'
+  | 'bowl'
+  | 'katori'
+  | 'tbsp'
+  | 'tsp'
+  | 'glass'
+  | 'plate'
+  | 'scoop'
+  | 'slice';
+
+export interface FoodPortion {
+  id: string;
+  foodId?: string;
+  portionName: string;
+  sizeVariant?: 'small' | 'medium' | 'large' | 'standard';
+  gramOrMlWeight: number;
+  unitType: PortionUnitType;
+  measurementMethod: string;
+  sourceReference: string;
+  confidenceLevel: 'high' | 'moderate' | 'low';
+  isDefault?: boolean;
+}
+
+export interface RawNutrientValues {
+  energyKj?: number | null;
+  calories?: number | null;
+  protein?: number | null;
+  carbs?: number | null;
+  fat?: number | null;
+  fibre?: number | null;
+  insolubleFibre?: number | null;
+  solubleFibre?: number | null;
+  water?: number | null;
+  ash?: number | null;
+}
+
+export interface EnrichedNutrientRecord {
+  value: number;
+  sourceName: string;
+  sourceId?: string;
+  notes?: string;
+}
+
+export type ValidationSeverity = 'info' | 'warning' | 'error';
+
+export type ValidationCheckCode =
+  | 'duplicate_code'
+  | 'duplicate_food_record'
+  | 'missing_nutrient'
+  | 'negative_value'
+  | 'unit_range_error'
+  | 'proximate_sum_anomaly'
+  | 'energy_inconsistency'
+  | 'serving_consistency_error'
+  | 'raw_cooked_unspecified'
+  | 'source_unverified'
+  | 'discontinued_product';
+
+export interface FoodValidationIssue {
+  foodId: string;
+  foodName: string;
+  sourceName: string;
+  code: ValidationCheckCode;
+  severity: ValidationSeverity;
+  message: string;
+  details?: Record<string, string | number | boolean | null>;
+}
+
 export interface Micronutrients {
   sugarG?: number | null;
   saturatedFatG?: number | null;
@@ -100,6 +202,29 @@ export interface FoodItem extends MacroNutrients {
   micronutrients?: Micronutrients;
   dietaryTags?: DietaryTag[];
   createdAt?: string;
+  // Enhanced nutrition intelligence metadata
+  foodCode?: string;
+  foodGroup?: string;
+  foodState?: FoodState;
+  measurementBasis?: MeasurementBasis;
+  liquidDensityGPerMl?: number | null;
+  verificationStatus?: VerificationStatus;
+  sourcePriority?: number;
+  lastUpdated?: string;
+  energyKj?: number | null;
+  atwaterCalories?: number | null;
+  waterG?: number | null;
+  ashG?: number | null;
+  insolubleFibreG?: number | null;
+  solubleFibreG?: number | null;
+  carbohydrateBasis?: CarbohydrateBasis;
+  rawNutrients?: RawNutrientValues;
+  enrichedNutrients?: Partial<Record<NutrientFieldKey, EnrichedNutrientRecord>>;
+  aliases?: string[];
+  regionalNames?: string[];
+  portions?: FoodPortion[];
+  isDiscontinued?: boolean;
+  validationIssues?: FoodValidationIssue[];
 }
 
 export interface FoodLogEntry extends MacroNutrients {
@@ -114,8 +239,69 @@ export interface FoodLogEntry extends MacroNutrients {
   servingName: string;
   sourceName?: string;
   sourceType?: FoodSourceType;
+  unitLabel?: string;
+  measurementBasis?: MeasurementBasis;
+  verificationStatus?: VerificationStatus;
+  foodState?: FoodState;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RecipeIngredientInput {
+  food: FoodItem;
+  rawWeightGrams: number;
+  ediblePortionFactor?: number; // default 1.0 (e.g., 0.72 for bone-in chicken, 0.85 for peeled veg)
+  retentionFactor?: number; // default 1.0 (macro retention during cooking)
+  isCookingFat?: boolean;
+}
+
+export interface RecipeCalculationOptions {
+  name: string;
+  category?: FoodCategory;
+  preparationStyle: 'homemade' | 'restaurant';
+  ingredients: RecipeIngredientInput[];
+  cookingYieldFactor?: number; // e.g., 2.5 for boiled rice/dal, 0.82 for curry evaporation
+  finalCookedWeightGrams?: number; // explicit cooked weight overrides yieldFactor * rawEdibleWeight
+  servingsCount?: number;
+  notes?: string;
+}
+
+export interface CalculatedRecipeResult {
+  name: string;
+  preparationStyle: 'homemade' | 'restaurant';
+  rawTotalWeightGrams: number;
+  rawEdibleWeightGrams: number;
+  finalCookedWeightGrams: number;
+  cookingYieldFactor: number;
+  servingsCount: number;
+  per100g: MacroNutrients & {
+    insolubleFibreG: number | null;
+    solubleFibreG: number | null;
+    missingFields: NutrientFieldKey[];
+  };
+  totalBatch: MacroNutrients;
+  asFoodItem: FoodItem;
+}
+
+export interface DatabaseQualitySummary {
+  totalRecords: number;
+  ifctCount: number;
+  usdaCount: number;
+  openFoodFactsCount: number;
+  brandedCount: number;
+  customCount: number;
+  verifiedCount: number;
+  enrichedCount: number;
+  estimatedCount: number;
+  userProvidedCount: number;
+  needsReviewCount: number;
+  missingProteinCount: number;
+  missingCarbsCount: number;
+  missingFatCount: number;
+  missingFibreCount: number;
+  duplicateCount: number;
+  inconsistentEnergyCount: number;
+  issues: FoodValidationIssue[];
 }
 
 export type GoalPreset = 'fat_loss' | 'maintenance' | 'muscle_gain' | 'recomposition' | 'custom';
@@ -235,7 +421,8 @@ export type NavTab =
   | 'progress'
   | 'weight'
   | 'goals'
-  | 'profile';
+  | 'profile'
+  | 'admin-quality';
 
 export type TrainerNavTab =
   | 'overview'

@@ -10,10 +10,13 @@ import {
   FoodLogEntry,
   FoodRestriction,
   FoodSourceType,
+  FoodState,
   MacroLogPersistedState,
+  MeasurementBasis,
   Micronutrients,
   NutritionGoals,
   UserProfile,
+  VerificationStatus,
   WeightEntry,
   WeightGoal,
   WorkoutIntensity,
@@ -333,8 +336,16 @@ export async function loadUserStateFromSupabase(
     fat: Number(row.fat),
     fibre: Number(row.fibre ?? 0),
     isCustom: true,
-    sourceType: 'personal_custom',
-    sourceName: 'Personal Custom Food',
+    sourceType: (row.source_type as FoodSourceType) || 'personal_custom',
+    sourceName: row.source_name || 'Personal Custom Food',
+    sourceId: row.source_id || undefined,
+    sourceUrl: row.source_url || undefined,
+    foodState: (row.food_state as FoodState) || 'prepared',
+    measurementBasis:
+      (row.measurement_basis as MeasurementBasis) ||
+      (Number(row.serving_weight_grams) === 100 ? 'per_100g' : 'per_serving'),
+    verificationStatus:
+      (row.verification_status as VerificationStatus) || 'user_provided',
     dataQuality: 'user_entered',
     micronutrients: (row.other_nutrients as Micronutrients) || undefined,
     createdAt: row.created_at,
@@ -357,6 +368,10 @@ export async function loadUserStateFromSupabase(
     fibre: Number(row.fibre ?? 0),
     sourceName: row.source_name || undefined,
     sourceType: (row.source_type as FoodSourceType) || undefined,
+    unitLabel: row.unit_label || undefined,
+    measurementBasis: (row.measurement_basis as MeasurementBasis) || undefined,
+    verificationStatus: (row.verification_status as VerificationStatus) || undefined,
+    foodState: (row.food_state as FoodState) || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -506,36 +521,67 @@ export async function insertFoodEntryDb(entry: FoodLogEntry): Promise<DbMutation
     ...corePayload,
     source_name: entry.sourceName || null,
     source_type: entry.sourceType || null,
+    unit_label: entry.unitLabel || null,
+    measurement_basis: entry.measurementBasis || null,
+    verification_status: entry.verificationStatus || null,
+    food_state: entry.foodState || null,
   };
 
   const { error } = await supabase.from('food_entries').insert(extendedPayload);
   if (error && isMissingColumnError(error)) {
-    const fallback = await supabase.from('food_entries').insert(corePayload);
-    return formatDbError(fallback.error);
+    const legacyExtended = {
+      ...corePayload,
+      source_name: entry.sourceName || null,
+      source_type: entry.sourceType || null,
+    };
+    const fallback1 = await supabase.from('food_entries').insert(legacyExtended);
+    if (fallback1.error && isMissingColumnError(fallback1.error)) {
+      const fallback2 = await supabase.from('food_entries').insert(corePayload);
+      return formatDbError(fallback2.error);
+    }
+    return formatDbError(fallback1.error);
   }
   return formatDbError(error);
 }
 
 export async function updateFoodEntryDb(entry: FoodLogEntry): Promise<DbMutationResult> {
+  const coreUpdate = {
+    date: entry.date,
+    meal_type: entry.mealType,
+    food_id: entry.foodId,
+    food_name: entry.foodName,
+    quantity_grams: entry.quantityGrams,
+    servings_count: entry.servingsCount,
+    serving_name: entry.servingName,
+    calories: entry.calories,
+    protein: entry.protein,
+    carbs: entry.carbs,
+    fat: entry.fat,
+    fibre: entry.fibre,
+    updated_at: entry.updatedAt,
+  };
+
+  const extendedUpdate = {
+    ...coreUpdate,
+    unit_label: entry.unitLabel || null,
+    measurement_basis: entry.measurementBasis || null,
+    verification_status: entry.verificationStatus || null,
+    food_state: entry.foodState || null,
+  };
+
   const { error } = await supabase
     .from('food_entries')
-    .update({
-      date: entry.date,
-      meal_type: entry.mealType,
-      food_id: entry.foodId,
-      food_name: entry.foodName,
-      quantity_grams: entry.quantityGrams,
-      servings_count: entry.servingsCount,
-      serving_name: entry.servingName,
-      calories: entry.calories,
-      protein: entry.protein,
-      carbs: entry.carbs,
-      fat: entry.fat,
-      fibre: entry.fibre,
-      updated_at: entry.updatedAt,
-    })
+    .update(extendedUpdate)
     .eq('id', entry.id)
     .eq('user_id', entry.userId);
+  if (error && isMissingColumnError(error)) {
+    const fallback = await supabase
+      .from('food_entries')
+      .update(coreUpdate)
+      .eq('id', entry.id)
+      .eq('user_id', entry.userId);
+    return formatDbError(fallback.error);
+  }
   return formatDbError(error);
 }
 
@@ -574,12 +620,27 @@ export async function insertCustomFoodDb(
     ...corePayload,
     brand: food.brand || null,
     other_nutrients: food.micronutrients || {},
+    food_state: food.foodState || 'prepared',
+    measurement_basis: food.measurementBasis || 'per_serving',
+    verification_status: food.verificationStatus || 'user_provided',
+    source_name: food.sourceName || 'Personal Custom Food',
+    source_id: food.sourceId || null,
+    source_url: food.sourceUrl || null,
   };
 
   const { error } = await supabase.from('custom_foods').insert(extendedPayload);
   if (error && isMissingColumnError(error)) {
-    const fallback = await supabase.from('custom_foods').insert(corePayload);
-    return formatDbError(fallback.error);
+    const legacyExt = {
+      ...corePayload,
+      brand: food.brand || null,
+      other_nutrients: food.micronutrients || {},
+    };
+    const fallback1 = await supabase.from('custom_foods').insert(legacyExt);
+    if (fallback1.error && isMissingColumnError(fallback1.error)) {
+      const fallback2 = await supabase.from('custom_foods').insert(corePayload);
+      return formatDbError(fallback2.error);
+    }
+    return formatDbError(fallback1.error);
   }
   return formatDbError(error);
 }
@@ -727,3 +788,75 @@ export async function syncLocalStateToSupabase(
 
   return { ok: true };
 }
+
+export async function saveRecipeToSupabase(
+  userId: string,
+  recipeId: string,
+  calculation: {
+    name: string;
+    preparationStyle: 'homemade' | 'restaurant';
+    rawTotalWeightGrams: number;
+    cookingYieldFactor: number;
+    finalCookedWeightGrams: number;
+    servingsCount: number;
+    asFoodItem: { category?: string };
+  },
+  ingredients: Array<{
+    food: { id: string; name: string };
+    rawWeightGrams: number;
+    ediblePortionFactor?: number;
+    retentionFactor?: number;
+    isCookingFat?: boolean;
+  }>
+): Promise<DbMutationResult> {
+  const now = new Date().toISOString();
+  const { error: recipeErr } = await supabase.from('recipes').upsert({
+    id: recipeId,
+    user_id: userId,
+    name: calculation.name,
+    category: calculation.asFoodItem.category || 'Homemade foods',
+    preparation_style: calculation.preparationStyle,
+    raw_total_weight_g: calculation.rawTotalWeightGrams,
+    cooking_yield_factor: calculation.cookingYieldFactor,
+    final_cooked_weight_g: calculation.finalCookedWeightGrams,
+    servings_count: calculation.servingsCount,
+    verification_status: 'estimated',
+    created_at: now,
+    updated_at: now,
+  });
+
+  if (recipeErr) return formatDbError(recipeErr);
+
+  const validIngs = ingredients.filter((i) => i.rawWeightGrams > 0);
+  if (validIngs.length > 0) {
+    await supabase.from('recipe_ingredients').delete().eq('recipe_id', recipeId);
+    const { error: ingErr } = await supabase.from('recipe_ingredients').insert(
+      validIngs.map((ing, idx) => ({
+        recipe_id: recipeId,
+        food_id: ing.food.id,
+        ingredient_name: ing.food.name,
+        raw_weight_g: ing.rawWeightGrams,
+        edible_portion_factor: ing.ediblePortionFactor ?? 1,
+        retention_factor: ing.retentionFactor ?? 1,
+        is_cooking_fat: Boolean(ing.isCookingFat),
+        sort_order: idx,
+      }))
+    );
+    if (ingErr) return formatDbError(ingErr);
+  }
+
+  return { ok: true };
+}
+
+export async function fetchUserRecipesFromSupabase(userId: string) {
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('*, recipe_ingredients(*)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    return { ok: false, recipes: [], errorMessage: error.message };
+  }
+  return { ok: true, recipes: data || [] };
+}
+

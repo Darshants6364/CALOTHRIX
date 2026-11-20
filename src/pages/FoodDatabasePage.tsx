@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Barcode,
+  BookmarkPlus,
   Camera,
   ChevronDown,
   ChevronUp,
@@ -24,6 +25,7 @@ import {
 } from '../services/globalFoodApiService';
 import { FoodItem } from '../types';
 import { formatNutrientValue, searchFoods } from '../utils/nutritionUtils';
+import { getPortionsForFood } from '../utils/portionEngine';
 
 type DietaryFilterOption = 'all' | 'vegetarian' | 'vegan' | 'eggetarian' | 'non_veg';
 
@@ -81,10 +83,31 @@ function matchesDietaryFilter(food: FoodItem, filter: DietaryFilterOption): bool
 }
 
 function getSourceTypeDisplay(food: FoodItem): string {
+  if (food.isCustom && (food.sourceName || '').includes('Recipe Engine')) return 'Calculated Recipe';
   if (food.isCustom || food.sourceType === 'personal_custom') return 'Personal Custom';
   if (food.sourceType === 'branded') return 'Branded Product';
   if (food.sourceType === 'community') return 'Community Food';
   return 'Verified Reference';
+}
+
+function getVerificationPill(status?: FoodItem['verificationStatus']): {
+  label: string;
+  cls: string;
+} {
+  switch (status) {
+    case 'verified':
+      return { label: 'Verified', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' };
+    case 'enriched':
+      return { label: 'Enriched', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' };
+    case 'estimated':
+      return { label: 'Estimated', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' };
+    case 'user_provided':
+      return { label: 'User Provided', cls: 'bg-slate-500/15 text-slate-600 dark:text-slate-300' };
+    case 'needs_review':
+      return { label: 'Needs Review', cls: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' };
+    default:
+      return { label: 'Verified', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' };
+  }
 }
 
 export const FoodDatabasePage: React.FC = () => {
@@ -96,6 +119,7 @@ export const FoodDatabasePage: React.FC = () => {
     openBarcodeScannerModal,
     openMealScannerModal,
     addCustomFood,
+    saveExternalFoodToMyFoods,
     updateCustomFood,
     deleteCustomFood,
     toggleFavoriteFood,
@@ -451,11 +475,20 @@ export const FoodDatabasePage: React.FC = () => {
             const isFav = state.favoriteFoodIds.includes(food.id);
             const isExpanded = Boolean(expandedIds[food.id]);
             const sourceLabel = getSourceTypeDisplay(food);
+            const badge = getVerificationPill(food.verificationStatus);
+            const isExternalApiResult =
+              !food.isCustom && (food.id.startsWith('off-') || food.id.startsWith('usda-'));
+            const portions = isExpanded ? getPortionsForFood(food) : [];
             const hasDetails =
               Boolean(food.ingredientsText) ||
               Boolean(food.barcode) ||
               Boolean(food.micronutrients && Object.keys(food.micronutrients).length > 0) ||
-              Boolean(food.license);
+              Boolean(food.license) ||
+              Boolean(food.foodCode || food.sourceId) ||
+              food.solubleFibreG != null ||
+              food.insolubleFibreG != null ||
+              food.waterG != null ||
+              (food.aliases && food.aliases.length > 0);
 
             return (
               <div
@@ -476,10 +509,18 @@ export const FoodDatabasePage: React.FC = () => {
                     </button>
 
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-baseline gap-x-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                           {food.name}
                         </h3>
+                        {food.foodState && (
+                          <span className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/10 text-[10px] font-medium capitalize text-slate-600 dark:text-slate-300">
+                            {food.foodState}
+                          </span>
+                        )}
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}>
+                          {badge.label}
+                        </span>
                         {food.brand && (
                           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                             {food.brand}
@@ -520,6 +561,12 @@ export const FoodDatabasePage: React.FC = () => {
                             <span>{food.sourceName}</span>
                           </>
                         )}
+                        {(food.foodCode || food.sourceId) && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono-nums">{food.foodCode || food.sourceId}</span>
+                          </>
+                        )}
                         {food.country && (
                           <>
                             <span aria-hidden="true">·</span>
@@ -557,6 +604,18 @@ export const FoodDatabasePage: React.FC = () => {
                       )}
                     </div>
 
+                    {isExternalApiResult && (
+                      <button
+                        type="button"
+                        onClick={() => saveExternalFoodToMyFoods(food)}
+                        title="Save verified external food to My Foods"
+                        className="min-h-[38px] px-2.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-medium text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <BookmarkPlus className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+                        Save
+                      </button>
+                    )}
+
                     {food.isCustom && (
                       <>
                         <button
@@ -592,9 +651,27 @@ export const FoodDatabasePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Expanded provenance, ingredients & micronutrients */}
+                {/* Expanded provenance, ingredients, IFCT proximate composition & micronutrients */}
                 {isExpanded && (
                   <div className="mt-3 ml-0 sm:ml-12 p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C]/80 border border-black/10 dark:border-white/12 text-xs space-y-2">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-600 dark:text-slate-300 font-mono-nums">
+                      {food.energyKj != null && <span>Energy: {food.energyKj} kJ</span>}
+                      {food.atwaterCalories != null && (
+                        <span>Atwater check: {food.atwaterCalories} kcal/100g</span>
+                      )}
+                      {food.waterG != null && <span>Moisture/Water: {food.waterG}g</span>}
+                      {food.ashG != null && <span>Ash: {food.ashG}g</span>}
+                      {food.solubleFibreG != null && (
+                        <span>Soluble Fibre: {food.solubleFibreG}g</span>
+                      )}
+                      {food.insolubleFibreG != null && (
+                        <span>Insoluble Fibre: {food.insolubleFibreG}g</span>
+                      )}
+                      {food.liquidDensityGPerMl != null && (
+                        <span>Density: {food.liquidDensityGPerMl} g/ml</span>
+                      )}
+                    </div>
+
                     {food.barcode && (
                       <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-mono-nums">
                         <Barcode className="w-3.5 h-3.5 text-slate-400" />
@@ -607,6 +684,22 @@ export const FoodDatabasePage: React.FC = () => {
                           Ingredients:{' '}
                         </span>
                         {food.ingredientsText}
+                      </p>
+                    )}
+                    {(food.aliases?.length || 0) > 0 && (
+                      <p className="text-slate-500 dark:text-slate-400">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">
+                          Also known as:{' '}
+                        </span>
+                        {food.aliases!.join(', ')}
+                      </p>
+                    )}
+                    {portions.length > 0 && (
+                      <p className="text-slate-500 dark:text-slate-400">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">
+                          Standard portions:{' '}
+                        </span>
+                        {portions.map((p) => `${p.portionName} (${p.gramOrMlWeight}g)`).join(' · ')}
                       </p>
                     )}
                     {food.micronutrients && Object.keys(food.micronutrients).length > 0 && (
@@ -634,10 +727,21 @@ export const FoodDatabasePage: React.FC = () => {
                         )}
                       </div>
                     )}
+                    {food.validationIssues &&
+                      food.validationIssues.some((i) => i.severity !== 'info') && (
+                        <div className="text-[11px] text-amber-700 dark:text-amber-300 space-y-0.5">
+                          {food.validationIssues
+                            .filter((i) => i.severity !== 'info')
+                            .map((issue, idx) => (
+                              <div key={idx}>Notice: {issue.message}</div>
+                            ))}
+                        </div>
+                      )}
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-black/10 dark:border-white/12">
                       <span>
                         License: {food.license || 'Verified Reference'}
                         {food.sourceId ? ` · ID ${food.sourceId}` : ''}
+                        {food.measurementBasis ? ` · Basis ${food.measurementBasis}` : ''}
                       </span>
                       {food.sourceUrl && (
                         <a

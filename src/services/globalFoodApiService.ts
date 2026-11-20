@@ -15,7 +15,7 @@ export interface GlobalFoodSearchResult {
 }
 
 export interface ExternalSourceStatus {
-  ifct2017: { active: boolean; count: number; license: string };
+  ifct2017: { active: boolean; count: number; totalReferenceCount?: number; license: string };
   openFoodFacts: { active: boolean; apiVersion: string; license: string };
   usdaFdc: { configured: boolean; envVar: string; license: string };
   supabaseAi: { edgeFunctionsAvailable: boolean };
@@ -80,7 +80,10 @@ export async function lookupBarcodeApi(barcode: string): Promise<{
   error?: string;
 }> {
   try {
-    const res = await fetch(`/api/foods/barcode/${encodeURIComponent(barcode.trim())}`);
+    const authHeaders = await getAccessTokenHeader();
+    const res = await fetch(`/api/foods/barcode/${encodeURIComponent(barcode.trim())}`, {
+      headers: authHeaders,
+    });
     if (!res.ok) {
       return { item: null, error: `Barcode lookup returned HTTP ${res.status}` };
     }

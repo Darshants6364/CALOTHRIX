@@ -8,6 +8,7 @@ import {
   WeightEntry,
 } from '../types';
 import { getMondayToSundayWeek, parseLocalDateKey } from './dateUtils';
+import { searchFoodsIntelligent } from './foodSearchEngine';
 
 export function round1(val: number): number {
   return Math.round(val * 10) / 10;
@@ -22,17 +23,43 @@ export function roundCal(val: number): number {
 }
 
 export function calculateScaledNutrition(
-  food: MacroNutrients & { servingWeightGrams: number },
+  food: MacroNutrients & { servingWeightGrams: number; missingFields?: FoodItem['missingFields'] },
   quantityGrams: number
 ): MacroNutrients {
   const baseWeight = food.servingWeightGrams > 0 ? food.servingWeightGrams : 100;
   const factor = Math.max(0, quantityGrams) / baseWeight;
+  const missing = food.missingFields || [];
   return {
-    calories: roundCal(food.calories * factor),
-    protein: round1(food.protein * factor),
-    carbs: round1(food.carbs * factor),
-    fat: round1(food.fat * factor),
-    fibre: round1(food.fibre * factor),
+    calories: missing.includes('calories') ? 0 : roundCal(food.calories * factor),
+    protein: missing.includes('protein') ? 0 : round1(food.protein * factor),
+    carbs: missing.includes('carbs') ? 0 : round1(food.carbs * factor),
+    fat: missing.includes('fat') ? 0 : round1(food.fat * factor),
+    fibre: missing.includes('fibre') ? 0 : round1(food.fibre * factor),
+  };
+}
+
+export function calculateScaledNutritionDetailed(
+  food: FoodItem,
+  quantityGrams: number
+): MacroNutrients & {
+  insolubleFibreG: number | null;
+  solubleFibreG: number | null;
+  missingFields: NonNullable<FoodItem['missingFields']>;
+} {
+  const baseWeight = food.servingWeightGrams > 0 ? food.servingWeightGrams : 100;
+  const factor = Math.max(0, quantityGrams) / baseWeight;
+  const missing = food.missingFields || [];
+  return {
+    calories: missing.includes('calories') ? 0 : roundCal(food.calories * factor),
+    protein: missing.includes('protein') ? 0 : round1(food.protein * factor),
+    carbs: missing.includes('carbs') ? 0 : round1(food.carbs * factor),
+    fat: missing.includes('fat') ? 0 : round1(food.fat * factor),
+    fibre: missing.includes('fibre') ? 0 : round1(food.fibre * factor),
+    insolubleFibreG:
+      typeof food.insolubleFibreG === 'number' ? round1(food.insolubleFibreG * factor) : null,
+    solubleFibreG:
+      typeof food.solubleFibreG === 'number' ? round1(food.solubleFibreG * factor) : null,
+    missingFields: missing,
   };
 }
 
@@ -225,23 +252,9 @@ export function searchFoods(
   favoriteIds: string[],
   recentIds: string[]
 ): FoodItem[] {
-  const q = query.trim().toLowerCase();
-  return foods.filter((food) => {
-    const matchesQuery =
-      !q ||
-      food.name.toLowerCase().includes(q) ||
-      (food.brand || '').toLowerCase().includes(q) ||
-      (food.country || '').toLowerCase().includes(q) ||
-      (food.barcode || '').toLowerCase().includes(q) ||
-      (food.ingredientsText || '').toLowerCase().includes(q) ||
-      food.category.toLowerCase().includes(q) ||
-      food.servingName.toLowerCase().includes(q);
-    if (!matchesQuery) return false;
-
-    if (category === 'All') return true;
-    if (category === 'Favorites') return favoriteIds.includes(food.id);
-    if (category === 'Recent') return recentIds.includes(food.id);
-    if (category === 'My Custom Foods') return food.isCustom;
-    return food.category === category || normalizeLegacyCategory(food.category) === category;
+  return searchFoodsIntelligent(foods, query, {
+    category: category === 'My Custom Foods' ? 'Custom' : category,
+    favoriteIds,
+    recentIds,
   });
 }

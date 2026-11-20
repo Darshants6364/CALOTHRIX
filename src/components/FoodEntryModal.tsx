@@ -11,10 +11,12 @@ import {
   MEAL_CATEGORIES,
 } from '../types';
 import {
-  calculateScaledNutrition,
+  calculateScaledNutritionDetailed,
   formatFoodQuantity,
   formatNutrientValue,
 } from '../utils/nutritionUtils';
+import { searchFoodsIntelligent } from '../utils/foodSearchEngine';
+import { convertVolumeMlToGrams, getPortionsForFood } from '../utils/portionEngine';
 
 function getSourceTypeLabel(sourceType?: FoodSourceType, isCustom?: boolean): string {
   if (isCustom || sourceType === 'personal_custom') return 'Personal Custom';
@@ -23,14 +25,27 @@ function getSourceTypeLabel(sourceType?: FoodSourceType, isCustom?: boolean): st
   return 'Verified Reference';
 }
 
-const HOUSEHOLD_UNIT_PRESETS: { label: string; grams: number }[] = [
-  { label: '1 piece (50g)', grams: 50 },
-  { label: '1 tsp (5g)', grams: 5 },
-  { label: '1 tbsp (15g)', grams: 15 },
-  { label: '100g', grams: 100 },
-  { label: '1 bowl (200g)', grams: 200 },
-  { label: '1 cup (240g)', grams: 240 },
-];
+function getVerificationBadgeInfo(status?: FoodItem['verificationStatus']): {
+  label: string;
+  cls: string;
+} {
+  switch (status) {
+    case 'verified':
+      return { label: 'Verified', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' };
+    case 'enriched':
+      return { label: 'Enriched', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' };
+    case 'estimated':
+      return { label: 'Estimated', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' };
+    case 'user_provided':
+      return { label: 'User Provided', cls: 'bg-slate-500/15 text-slate-600 dark:text-slate-300' };
+    case 'needs_review':
+      return { label: 'Needs Review', cls: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' };
+    default:
+      return { label: 'Verified', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' };
+  }
+}
+
+const STANDARD_GRAM_PRESETS: number[] = [50, 100, 150, 200, 250];
 
 export const FoodEntryModal: React.FC = () => {
   const {
@@ -50,9 +65,11 @@ export const FoodEntryModal: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'india' | 'recent' | 'favorites' | 'custom'>('all');
   const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
-  const [inputMode, setInputMode] = useState<'grams' | 'servings'>('grams');
+  const [inputMode, setInputMode] = useState<'grams' | 'ml' | 'servings'>('grams');
   const [quantityGrams, setQuantityGrams] = useState<string>('100');
+  const [volumeMl, setVolumeMl] = useState<string>('200');
   const [servingsCount, setServingsCount] = useState<string>('1');
+  const [selectedUnitLabel, setSelectedUnitLabel] = useState<string>('');
   const [mealType, setMealType] = useState<MealCategory>('breakfast');
   const [date, setDate] = useState<string>(foodModal.targetDate);
   const [error, setError] = useState<string>('');
@@ -91,12 +108,16 @@ export const FoodEntryModal: React.FC = () => {
       if (matched) {
         setSelectedFood(matched);
         setQuantityGrams(String(editing.quantityGrams));
+        setSelectedUnitLabel(editing.unitLabel || '');
         setServingsCount(
           String(
             Math.round((editing.quantityGrams / Math.max(1, matched.servingWeightGrams)) * 100) /
               100
           )
         );
+        if (matched.liquidDensityGPerMl) {
+          setVolumeMl(String(Math.round((editing.quantityGrams / matched.liquidDensityGPerMl) * 10) / 10));
+        }
         setInputMode('grams');
       } else {
         const fallback: FoodItem = {
@@ -113,29 +134,48 @@ export const FoodEntryModal: React.FC = () => {
           isCustom: true,
           sourceName: editing.sourceName,
           sourceType: editing.sourceType,
+          foodState: editing.foodState,
+          verificationStatus: editing.verificationStatus,
         };
         setSelectedFood(fallback);
         setQuantityGrams(String(editing.quantityGrams));
+        setSelectedUnitLabel(editing.unitLabel || '');
         setServingsCount('1');
         setInputMode('grams');
       }
     } else if (foodModal.preselectedFood) {
       const pre = foodModal.preselectedFood;
+      const defaultPortions = getPortionsForFood(pre);
+      const defP = defaultPortions.find((p) => p.isDefault) || defaultPortions[0];
+      const initGrams = defP ? defP.gramOrMlWeight : pre.servingWeightGrams || 100;
       setSelectedFood(pre);
-      setQuantityGrams(String(pre.servingWeightGrams || 100));
+      setQuantityGrams(String(initGrams));
+      setSelectedUnitLabel(defP ? defP.portionName : `${initGrams} g`);
       setServingsCount('1');
-      setInputMode(pre.servingWeightGrams === 100 ? 'grams' : 'servings');
+      if (pre.liquidDensityGPerMl) {
+        setVolumeMl(String(Math.round((initGrams / pre.liquidDensityGPerMl) * 10) / 10));
+      }
+      setInputMode(initGrams === 100 || !defP ? 'grams' : 'grams');
     } else if (foodModal.preselectedFoodId) {
       const matched = allFoods.find((f) => f.id === foodModal.preselectedFoodId) ?? null;
       setSelectedFood(matched);
       if (matched) {
-        setQuantityGrams(String(matched.servingWeightGrams));
+        const defaultPortions = getPortionsForFood(matched);
+        const defP = defaultPortions.find((p) => p.isDefault) || defaultPortions[0];
+        const initGrams = defP ? defP.gramOrMlWeight : matched.servingWeightGrams || 100;
+        setQuantityGrams(String(initGrams));
+        setSelectedUnitLabel(defP ? defP.portionName : `${initGrams} g`);
         setServingsCount('1');
-        setInputMode(matched.servingWeightGrams === 100 ? 'grams' : 'servings');
+        if (matched.liquidDensityGPerMl) {
+          setVolumeMl(String(Math.round((initGrams / matched.liquidDensityGPerMl) * 10) / 10));
+        }
+        setInputMode('grams');
       }
     } else {
       setSelectedFood(null);
       setQuantityGrams('100');
+      setSelectedUnitLabel('');
+      setVolumeMl('200');
       setServingsCount('1');
       setInputMode('grams');
     }
@@ -193,22 +233,17 @@ export const FoodEntryModal: React.FC = () => {
   }, [allFoods, creatingCustom, filterTab, foodModal.isOpen, searchQuery, selectedFood]);
 
   const filteredLocalFoods = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return allFoods.filter((f) => {
-      const matchesQ =
-        !q ||
-        f.name.toLowerCase().includes(q) ||
-        (f.brand || '').toLowerCase().includes(q) ||
-        (f.country || '').toLowerCase().includes(q) ||
-        (f.barcode || '').toLowerCase().includes(q) ||
-        (f.ingredientsText || '').toLowerCase().includes(q) ||
-        f.category.toLowerCase().includes(q);
-      if (!matchesQ) return false;
+    const preFiltered = allFoods.filter((f) => {
       if (filterTab === 'india') return (f.country || '').toLowerCase().includes('india');
       if (filterTab === 'favorites') return state.favoriteFoodIds.includes(f.id);
       if (filterTab === 'recent') return state.recentFoodIds.includes(f.id);
       if (filterTab === 'custom') return f.isCustom;
       return true;
+    });
+    return searchFoodsIntelligent(preFiltered, searchQuery, {
+      favoriteIds: state.favoriteFoodIds,
+      recentIds: state.recentFoodIds,
+      limit: searchQuery.trim() ? 60 : 80,
     });
   }, [allFoods, filterTab, searchQuery, state.favoriteFoodIds, state.recentFoodIds]);
 
@@ -218,32 +253,64 @@ export const FoodEntryModal: React.FC = () => {
     return [...filteredLocalFoods, ...remoteFoods.filter((r) => !seen.has(r.id))];
   }, [filterTab, filteredLocalFoods, remoteFoods]);
 
+  const foodPortions = useMemo(
+    () => (selectedFood ? getPortionsForFood(selectedFood) : []),
+    [selectedFood]
+  );
+
+  const supportsVolumeMl = Boolean(
+    selectedFood?.liquidDensityGPerMl && selectedFood.liquidDensityGPerMl > 0
+  );
+
   const effectiveGrams = useMemo(() => {
     if (!selectedFood) return 0;
     if (inputMode === 'grams') {
       const parsed = parseFloat(quantityGrams);
       return Number.isFinite(parsed) ? parsed : 0;
     }
+    if (inputMode === 'ml') {
+      const parsedMl = parseFloat(volumeMl);
+      if (!Number.isFinite(parsedMl)) return 0;
+      const conv = convertVolumeMlToGrams(selectedFood, parsedMl);
+      return conv.ok ? conv.grams : 0;
+    }
     const parsedServings = parseFloat(servingsCount);
     return Number.isFinite(parsedServings)
       ? parsedServings * (selectedFood.servingWeightGrams || 100)
       : 0;
-  }, [inputMode, quantityGrams, selectedFood, servingsCount]);
+  }, [inputMode, quantityGrams, selectedFood, servingsCount, volumeMl]);
 
   const liveMacros = useMemo(() => {
     if (!selectedFood) {
-      return { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 };
+      return {
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        fibre: 0,
+        insolubleFibreG: null as number | null,
+        solubleFibreG: null as number | null,
+        missingFields: [] as NonNullable<FoodItem['missingFields']>,
+      };
     }
-    return calculateScaledNutrition(selectedFood, effectiveGrams);
+    const roundedGrams = Math.round(effectiveGrams * 10) / 10;
+    return calculateScaledNutritionDetailed(selectedFood, roundedGrams);
   }, [effectiveGrams, selectedFood]);
 
   if (!foodModal.isOpen) return null;
 
   const handleSelectFood = (food: FoodItem) => {
+    const portions = getPortionsForFood(food);
+    const defaultP = portions.find((p) => p.isDefault) || portions[0];
+    const initGrams = defaultP ? defaultP.gramOrMlWeight : food.servingWeightGrams || 100;
     setSelectedFood(food);
-    setQuantityGrams(String(food.servingWeightGrams || 100));
-    setServingsCount('1');
-    setInputMode((food.servingWeightGrams || 100) === 100 ? 'grams' : 'servings');
+    setQuantityGrams(String(initGrams));
+    setSelectedUnitLabel(defaultP ? defaultP.portionName : `${initGrams} g`);
+    setServingsCount(String(Math.round((initGrams / Math.max(1, food.servingWeightGrams || 100)) * 100) / 100));
+    if (food.liquidDensityGPerMl) {
+      setVolumeMl(String(Math.round((initGrams / food.liquidDensityGPerMl) * 10) / 10));
+    }
+    setInputMode('grams');
     setError('');
   };
 
@@ -262,19 +329,29 @@ export const FoodEntryModal: React.FC = () => {
       return;
     }
 
+    const roundedGrams = Math.round(effectiveGrams * 10) / 10;
+    const computedUnitLabel =
+      inputMode === 'ml'
+        ? `${parseFloat(volumeMl) || 0} ml (${roundedGrams} g)`
+        : inputMode === 'servings'
+        ? `${parseFloat(servingsCount) || 1} × ${selectedFood.servingName}`
+        : selectedUnitLabel || `${roundedGrams} g`;
+
     if (editing) {
       updateFoodEntry(editing.id, {
         food: selectedFood,
-        quantityGrams: Math.round(effectiveGrams * 10) / 10,
+        quantityGrams: roundedGrams,
         mealType,
         date,
+        unitLabel: computedUnitLabel,
       });
     } else {
       addFoodEntry({
         food: selectedFood,
-        quantityGrams: Math.round(effectiveGrams * 10) / 10,
+        quantityGrams: roundedGrams,
         mealType,
         date,
+        unitLabel: computedUnitLabel,
       });
     }
     closeFoodModal();
@@ -662,6 +739,7 @@ export const FoodEntryModal: React.FC = () => {
               ) : (
                 combinedFoods.map((food) => {
                   const isFav = state.favoriteFoodIds.includes(food.id);
+                  const badge = getVerificationBadgeInfo(food.verificationStatus);
                   return (
                     <button
                       key={food.id}
@@ -674,6 +752,11 @@ export const FoodEntryModal: React.FC = () => {
                           <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                             {food.name}
                           </span>
+                          {food.foodState && (
+                            <span className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/10 text-[10px] capitalize text-slate-600 dark:text-slate-300 shrink-0">
+                              {food.foodState}
+                            </span>
+                          )}
                           {food.brand && (
                             <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
                               · {food.brand}
@@ -698,9 +781,14 @@ export const FoodEntryModal: React.FC = () => {
                             F {formatNutrientValue(food, 'fat', 'g')}
                           </span>
                         </div>
-                        <div className="mt-0.5 text-[11px] text-slate-400 truncate">
-                          {getSourceTypeLabel(food.sourceType, food.isCustom)}
-                          {food.sourceName ? ` · ${food.sourceName}` : ''}
+                        <div className="mt-0.5 text-[11px] text-slate-400 flex items-center gap-1.5 truncate">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                          <span className="truncate">
+                            {food.sourceName || getSourceTypeLabel(food.sourceType, food.isCustom)}
+                            {food.foodCode ? ` · ${food.foodCode}` : ''}
+                          </span>
                         </div>
                       </div>
                       <div className="text-right shrink-0">
@@ -728,13 +816,28 @@ export const FoodEntryModal: React.FC = () => {
 
             <div className="flex items-start justify-between gap-3 pb-4 border-b border-black/10 dark:border-white/12">
               <div className="min-w-0">
-                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {selectedFood.name}
-                  {selectedFood.brand ? ` (${selectedFood.brand})` : ''}
-                </h3>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                    {selectedFood.name}
+                    {selectedFood.brand ? ` (${selectedFood.brand})` : ''}
+                  </h3>
+                  {selectedFood.foodState && (
+                    <span className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/10 text-[10px] font-medium capitalize text-slate-600 dark:text-slate-300">
+                      {selectedFood.foodState}
+                    </span>
+                  )}
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                      getVerificationBadgeInfo(selectedFood.verificationStatus).cls
+                    }`}
+                  >
+                    {getVerificationBadgeInfo(selectedFood.verificationStatus).label}
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Base serving: {selectedFood.servingName} (
+                  Ref basis: {selectedFood.servingName} (
                   {formatNutrientValue(selectedFood, 'calories', ' kcal')})
+                  {selectedFood.foodCode ? ` · Code ${selectedFood.foodCode}` : ''}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   {getSourceTypeLabel(selectedFood.sourceType, selectedFood.isCustom)}
@@ -756,7 +859,7 @@ export const FoodEntryModal: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <label className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                  Quantity
+                  Quantity & Portions
                 </label>
                 <div className="flex items-center gap-1 p-0.5 bg-stone-100 dark:bg-[#090A0C] rounded-lg">
                   <button
@@ -777,6 +880,23 @@ export const FoodEntryModal: React.FC = () => {
                   >
                     Grams (g)
                   </button>
+                  {supportsVolumeMl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInputMode('ml');
+                        const density = selectedFood.liquidDensityGPerMl || 1;
+                        setVolumeMl(String(Math.round((effectiveGrams / density) * 10) / 10 || 200));
+                      }}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                        inputMode === 'ml'
+                          ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      ml (Liquid)
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -800,38 +920,107 @@ export const FoodEntryModal: React.FC = () => {
                   type="number"
                   step="any"
                   min="0.1"
-                  value={inputMode === 'grams' ? quantityGrams : servingsCount}
+                  value={
+                    inputMode === 'grams'
+                      ? quantityGrams
+                      : inputMode === 'ml'
+                      ? volumeMl
+                      : servingsCount
+                  }
                   onChange={(e) => {
                     if (inputMode === 'grams') {
                       setQuantityGrams(e.target.value);
+                      setSelectedUnitLabel('');
+                    } else if (inputMode === 'ml') {
+                      setVolumeMl(e.target.value);
+                      setSelectedUnitLabel('');
                     } else {
                       setServingsCount(e.target.value);
+                      setSelectedUnitLabel('');
                     }
                   }}
                   className="flex-1 h-12 px-4 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/70 dark:bg-[#090A0C] text-base font-semibold font-mono-nums text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
                 />
-                <span className="text-sm font-medium text-slate-500 dark:text-slate-400 min-w-[70px] text-right tabular-nums">
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400 min-w-[78px] text-right tabular-nums">
                   {inputMode === 'grams'
                     ? formatFoodQuantity(effectiveGrams, state.settings.foodUnit)
-                    : `${Math.round(effectiveGrams)} g`}
+                    : `${Math.round(effectiveGrams * 10) / 10} g`}
                 </span>
               </div>
 
-              {/* Quick preset buttons & household unit presets */}
+              {inputMode === 'ml' && selectedFood.liquidDensityGPerMl && (
+                <p className="text-[11px] text-sky-700 dark:text-sky-300 font-mono-nums">
+                  Verified liquid density: {selectedFood.liquidDensityGPerMl} g/ml →{' '}
+                  {Math.round(effectiveGrams * 10) / 10} g equivalent
+                </p>
+              )}
+
+              {/* Food-specific verified portions (S / M / L / Katori / Piece) */}
+              {foodPortions.length > 0 && inputMode === 'grams' && (
+                <div className="space-y-1">
+                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    Food-Specific Household Portions
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {foodPortions.map((portion) => {
+                      const active =
+                        Math.abs((parseFloat(quantityGrams) || 0) - portion.gramOrMlWeight) < 0.05;
+                      return (
+                        <button
+                          key={portion.id}
+                          type="button"
+                          onClick={() => {
+                            setQuantityGrams(String(portion.gramOrMlWeight));
+                            setSelectedUnitLabel(portion.portionName);
+                          }}
+                          title={`${portion.sourceReference} · ${portion.confidenceLevel} confidence`}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                            active
+                              ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500'
+                              : 'border-black/10 dark:border-white/15 text-slate-700 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          {portion.portionName} ({portion.gramOrMlWeight}g)
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Gram / Volume / Serving Presets */}
               <div className="flex flex-wrap gap-1.5">
                 {inputMode === 'grams'
-                  ? HOUSEHOLD_UNIT_PRESETS.map((preset) => (
+                  ? STANDARD_GRAM_PRESETS.map((g) => (
                       <button
-                        key={preset.label}
+                        key={g}
                         type="button"
-                        onClick={() => setQuantityGrams(String(preset.grams))}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                          Number(quantityGrams) === preset.grams
+                        onClick={() => {
+                          setQuantityGrams(String(g));
+                          setSelectedUnitLabel(`${g} g`);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium font-mono-nums border transition-colors ${
+                          Math.abs((parseFloat(quantityGrams) || 0) - g) < 0.05
                             ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500'
                             : 'border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
                         }`}
                       >
-                        {preset.label}
+                        {g}g
+                      </button>
+                    ))
+                  : inputMode === 'ml'
+                  ? [100, 150, 200, 250, 300].map((ml) => (
+                      <button
+                        key={ml}
+                        type="button"
+                        onClick={() => setVolumeMl(String(ml))}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium font-mono-nums border transition-colors ${
+                          Math.abs((parseFloat(volumeMl) || 0) - ml) < 0.05
+                            ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 border-slate-900 dark:border-lime-500'
+                            : 'border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300 hover:bg-stone-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {ml} ml
                       </button>
                     ))
                   : [0.5, 1, 1.5, 2, 3].map((srv) => (
@@ -852,10 +1041,10 @@ export const FoodEntryModal: React.FC = () => {
             </div>
 
             {/* Live calculated nutrition */}
-            <div className="rounded-2xl bg-stone-50 dark:bg-[#090A0C]/90 border border-black/10 dark:border-white/12 p-4">
-              <div className="flex items-baseline justify-between mb-3">
+            <div className="rounded-2xl bg-stone-50 dark:bg-[#090A0C]/90 border border-black/10 dark:border-white/12 p-4 space-y-2.5">
+              <div className="flex items-baseline justify-between">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Calculated nutrition
+                  Calculated nutrition ({Math.round(effectiveGrams * 10) / 10} g)
                 </span>
                 <span className="text-lg font-bold text-slate-900 dark:text-slate-100 font-mono-nums">
                   {selectedFood.missingFields?.includes('calories')
@@ -897,6 +1086,18 @@ export const FoodEntryModal: React.FC = () => {
                   </div>
                 </div>
               </div>
+              {(liveMacros.solubleFibreG !== null || liveMacros.insolubleFibreG !== null) && (
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center justify-between gap-2 font-mono-nums">
+                  <span>
+                    Soluble Fibre: {liveMacros.solubleFibreG ?? 'Unavailable'}
+                    {liveMacros.solubleFibreG !== null ? 'g' : ''}
+                  </span>
+                  <span>
+                    Insoluble Fibre: {liveMacros.insolubleFibreG ?? 'Unavailable'}
+                    {liveMacros.insolubleFibreG !== null ? 'g' : ''}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Meal & Date */}

@@ -26,6 +26,7 @@ import {
   WorkoutIntensity,
 } from '../types';
 import { convertDisplayWeightToKg, convertWeightToDisplay } from '../utils/nutritionUtils';
+import { isDatabaseAdmin } from '../utils/adminAccess';
 
 const RESTRICTION_OPTIONS: { id: FoodRestriction; label: string }[] = [
   { id: 'dairy_free', label: 'Dairy-free' },
@@ -43,9 +44,11 @@ export const ProfileSettingsPage: React.FC = () => {
     exportData,
     signOut,
     selectAccountRole,
+    setActiveTab,
   } = useMacroLogStore();
 
   const { profile, settings } = state;
+  const isAdmin = isDatabaseAdmin(authUser, profile);
 
   const [name, setName] = useState(profile.name);
   const [age, setAge] = useState(String(profile.age));
@@ -630,17 +633,29 @@ export const ProfileSettingsPage: React.FC = () => {
       {/* Global Food Sources & Backend Status */}
       {sourceStatus && (
         <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-3">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <Database className="w-4 h-4 text-lime-600 dark:text-lime-400" />
-            Global Food Sources & AI Integrations
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Database className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+              Global Food Sources & AI Integrations
+            </h2>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('admin-quality')}
+                className="min-h-[34px] px-3 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-semibold hover:opacity-90 inline-flex items-center gap-1.5"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Open Admin DB Quality Audit
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">
               <div className="font-semibold text-slate-800 dark:text-slate-200">
                 ICMR-NIN IFCT 2017 & Reference Catalog
               </div>
               <div className="text-slate-500 dark:text-slate-400 mt-0.5">
-                Active · {sourceStatus.ifct2017.count} Indian & global staple foods
+                Active · {sourceStatus.ifct2017.count} IFCT 2017 records ({sourceStatus.ifct2017.totalReferenceCount ?? sourceStatus.ifct2017.count} total curated reference foods)
               </div>
             </div>
             <div className="p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12">

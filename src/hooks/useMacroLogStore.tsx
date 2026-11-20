@@ -166,10 +166,17 @@ interface MacroLogContextValue {
     quantityGrams: number;
     mealType: MealCategory;
     date: string;
+    unitLabel?: string;
   }) => void;
   updateFoodEntry: (
     entryId: string,
-    params: { food: FoodItem; quantityGrams: number; mealType: MealCategory; date: string }
+    params: {
+      food: FoodItem;
+      quantityGrams: number;
+      mealType: MealCategory;
+      date: string;
+      unitLabel?: string;
+    }
   ) => void;
   deleteFoodEntry: (entryId: string) => void;
   duplicateFoodEntry: (entry: FoodLogEntry, targetDate?: string) => void;
@@ -177,6 +184,7 @@ interface MacroLogContextValue {
   addCustomFood: (
     food: Omit<FoodItem, 'id' | 'isCustom' | 'createdAt' | 'userId'>
   ) => FoodItem;
+  saveExternalFoodToMyFoods: (food: FoodItem) => FoodItem;
   updateCustomFood: (
     foodId: string,
     updates: Partial<Omit<FoodItem, 'id' | 'isCustom'>>
@@ -838,6 +846,9 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         servingName: item.estimatedQuantityDescription?.trim() || `${Math.round(item.estimatedGrams || 100)} g`,
         sourceName: sourceLabel,
         sourceType: 'community',
+        verificationStatus: 'estimated',
+        measurementBasis: 'per_serving',
+        foodState: 'prepared',
         calories: Math.max(0, Math.round(item.calories)),
         protein: Math.max(0, Math.round(item.protein * 10) / 10),
         carbs: Math.max(0, Math.round(item.carbs * 10) / 10),
@@ -877,11 +888,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       quantityGrams,
       mealType,
       date,
+      unitLabel,
     }: {
       food: FoodItem;
       quantityGrams: number;
       mealType: MealCategory;
       date: string;
+      unitLabel?: string;
     }) => {
       const user = authUserRef.current;
       if (!user) return;
@@ -899,7 +912,11 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         foodName: food.brand ? `${food.name} (${food.brand})` : food.name,
         quantityGrams,
         servingsCount,
-        servingName: food.servingName,
+        servingName: unitLabel || food.servingName,
+        unitLabel: unitLabel || `${quantityGrams} g`,
+        measurementBasis: food.measurementBasis || (food.servingWeightGrams === 100 ? 'per_100g' : 'per_serving'),
+        verificationStatus: food.verificationStatus || (food.isCustom ? 'user_provided' : 'verified'),
+        foodState: food.foodState,
         sourceName: food.sourceName || (food.isCustom ? 'Personal Custom Food' : 'Reference'),
         sourceType: food.sourceType || (food.isCustom ? 'personal_custom' : 'verified_reference'),
         ...scaled,
@@ -933,7 +950,14 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         quantityGrams,
         mealType,
         date,
-      }: { food: FoodItem; quantityGrams: number; mealType: MealCategory; date: string }
+        unitLabel,
+      }: {
+        food: FoodItem;
+        quantityGrams: number;
+        mealType: MealCategory;
+        date: string;
+        unitLabel?: string;
+      }
     ) => {
       const scaled = calculateScaledNutrition(food, quantityGrams);
       const servingsCount =
@@ -953,7 +977,12 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             foodName: food.name,
             quantityGrams,
             servingsCount,
-            servingName: food.servingName,
+            servingName: unitLabel || food.servingName,
+            unitLabel: unitLabel || `${quantityGrams} g`,
+            measurementBasis:
+              food.measurementBasis || e.measurementBasis || (food.servingWeightGrams === 100 ? 'per_100g' : 'per_serving'),
+            verificationStatus: food.verificationStatus || e.verificationStatus,
+            foodState: food.foodState || e.foodState,
             ...scaled,
             updatedAt: now,
           };
@@ -1009,6 +1038,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const addCustomFood = useCallback(
     (food: Omit<FoodItem, 'id' | 'isCustom' | 'createdAt' | 'userId'>) => {
       const userId = authUserRef.current?.id || '';
+      const isRecipe = food.verificationStatus === 'estimated' && (food.sourceName || '').includes('Recipe Engine');
       const newFood: FoodItem = {
         ...food,
         id: makeId('custom-food'),
@@ -1016,8 +1046,14 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         isCustom: true,
         category: food.category || 'Custom',
         sourceType: 'personal_custom',
-        sourceName: 'Personal Custom Food',
+        sourceName: isRecipe ? food.sourceName : 'Personal Custom Food',
+        sourcePriority: isRecipe ? 2 : 6,
+        verificationStatus: isRecipe ? 'estimated' : 'user_provided',
+        foodState: food.foodState || 'prepared',
+        measurementBasis:
+          food.measurementBasis || (food.servingWeightGrams === 100 ? 'per_100g' : 'per_serving'),
         dataQuality: 'user_entered',
+        lastUpdated: new Date().toISOString().slice(0, 10),
         createdAt: new Date().toISOString(),
       };
       setState((prev) => ({
@@ -1033,15 +1069,55 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [handleDbResult, notify]
   );
 
+  const saveExternalFoodToMyFoods = useCallback(
+    (food: FoodItem) => {
+      const userId = authUserRef.current?.id || '';
+      const existing = stateRef.current.customFoods.find(
+        (f) => f.sourceId && food.sourceId && f.sourceId === food.sourceId
+      );
+      if (existing) {
+        notify(`"${food.name}" is already saved in your foods`, 'info');
+        return existing;
+      }
+      const savedFood: FoodItem = {
+        ...food,
+        id: makeId('saved-food'),
+        userId,
+        isCustom: true,
+        sourceType: food.sourceType || 'branded',
+        sourceName: food.sourceName || 'Verified External Source',
+        verificationStatus: food.verificationStatus || 'verified',
+        createdAt: new Date().toISOString(),
+      };
+      setState((prev) => ({
+        ...prev,
+        customFoods: [savedFood, ...prev.customFoods],
+      }));
+      if (userId) {
+        void insertCustomFoodDb(userId, savedFood).then(handleDbResult);
+      }
+      notify(`Saved "${savedFood.name}" (${savedFood.sourceName}) to My Foods`);
+      return savedFood;
+    },
+    [handleDbResult, notify]
+  );
+
   const updateCustomFood = useCallback(
     (foodId: string, updates: Partial<Omit<FoodItem, 'id' | 'isCustom'>>) => {
       const user = authUserRef.current;
+      const stampedUpdates = {
+        ...updates,
+        verificationStatus: 'user_provided' as const,
+        sourceName: 'Personal Custom Food',
+      };
       setState((prev) => ({
         ...prev,
-        customFoods: prev.customFoods.map((f) => (f.id === foodId ? { ...f, ...updates } : f)),
+        customFoods: prev.customFoods.map((f) =>
+          f.id === foodId ? { ...f, ...stampedUpdates } : f
+        ),
       }));
       if (user) {
-        void updateCustomFoodDb(user.id, foodId, updates).then(handleDbResult);
+        void updateCustomFoodDb(user.id, foodId, stampedUpdates).then(handleDbResult);
       }
       notify('Custom food updated');
     },
@@ -1598,6 +1674,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     deleteFoodEntry,
     duplicateFoodEntry,
     addCustomFood,
+    saveExternalFoodToMyFoods,
     updateCustomFood,
     deleteCustomFood,
     toggleFavoriteFood,

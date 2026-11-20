@@ -14,6 +14,7 @@ import { TrainerLayout } from './components/TrainerLayout';
 import { WeightEntryModal } from './components/WeightEntryModal';
 import { MacroLogProvider, useMacroLogStore } from './hooks/useMacroLogStore';
 import { TrainerDashboardProvider } from './hooks/useTrainerDashboard';
+import { AdminQualityPage } from './pages/AdminQualityPage';
 import { FoodDatabasePage } from './pages/FoodDatabasePage';
 import { FoodLogPage } from './pages/FoodLogPage';
 import { GoalsPage } from './pages/GoalsPage';
@@ -28,6 +29,7 @@ import { TrainerClientsPage } from './pages/trainer/TrainerClientsPage';
 import { TrainerOverviewPage } from './pages/trainer/TrainerOverviewPage';
 import { TrainerSettingsPage } from './pages/trainer/TrainerSettingsPage';
 import { AccountRole, ENABLE_TRAINER_PORTAL } from './types';
+import { isDatabaseAdmin } from './utils/adminAccess';
 
 function shouldOpenAuthDirectly(): { openAuth: boolean; portal: AccountRole } {
   if (typeof window === 'undefined') return { openAuth: false, portal: 'individual' };
@@ -52,7 +54,7 @@ function shouldOpenAuthDirectly(): { openAuth: boolean; portal: AccountRole } {
 }
 
 const MacroLogRouter: React.FC = () => {
-  const { activeTab } = useMacroLogStore();
+  const { activeTab, authUser, state } = useMacroLogStore();
 
   switch (activeTab) {
     case 'home':
@@ -69,6 +71,8 @@ const MacroLogRouter: React.FC = () => {
       return <GoalsPage />;
     case 'profile':
       return <ProfileSettingsPage />;
+    case 'admin-quality':
+      return isDatabaseAdmin(authUser, state.profile) ? <AdminQualityPage /> : <HomePage />;
     default:
       return <HomePage />;
   }

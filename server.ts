@@ -3,6 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 import {
   getExternalFoodSourceStatus,
   lookupBarcodeFromOpenFoodFacts,
@@ -10,6 +11,11 @@ import {
   searchGlobalFoods,
 } from './server/foodService.ts';
 import { GLOBAL_REFERENCE_FOODS } from './src/data/globalReferenceFoods.ts';
+import { isDatabaseAdmin } from './src/utils/adminAccess.ts';
+import {
+  buildDatabaseQualityReport,
+  exportValidationReportCsv,
+} from './src/utils/foodValidationEngine.ts';
 
 import {
   calculateSmartFitnessTargets,
@@ -20,6 +26,32 @@ import {
   readBarcodeFromImageWithGemini,
   type AnalyzeMealInputMode,
 } from './server/mealAiService.ts';
+
+async function verifyAdminRequest(req: express.Request): Promise<{ ok: boolean; status: number; error?: string }> {
+  const authHeader = String(req.headers.authorization || '');
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!token) {
+    return { ok: false, status: 401, error: 'Authentication required' };
+  }
+  const supabaseUrl = (
+    process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
+  ).trim();
+  const anonKey = (
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
+  ).trim();
+  const sb = createClient(supabaseUrl, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await sb.auth.getUser(token);
+  if (error || !data?.user) {
+    return { ok: false, status: 401, error: 'Invalid session token' };
+  }
+  if (!isDatabaseAdmin(data.user, null)) {
+    return { ok: false, status: 403, error: 'Admin privileges required' };
+  }
+  return { ok: true, status: 200 };
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +101,30 @@ async function startServer() {
     res.json(getExternalFoodSourceStatus());
   });
 
+  // Admin-Only Internal Food Database Quality Audit Report
+  app.get('/api/admin/food-quality', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    return res.json(buildDatabaseQualityReport(GLOBAL_REFERENCE_FOODS));
+  });
+
+  // Admin-Only CSV Export of Database Validation Audit
+  app.get('/api/admin/food-quality/export.csv', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const csv = exportValidationReportCsv(GLOBAL_REFERENCE_FOODS);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="calothrix-food-validation-audit-${new Date().toISOString().slice(0, 10)}.csv"`
+    );
+    return res.send(csv);
+  });
+
   // Unified Global Food Search (IFCT 2017 + USDA FDC + Open Food Facts v2)
   app.get('/api/foods/search', async (req, res) => {
     try {
@@ -96,10 +152,12 @@ async function startServer() {
     }
   });
 
-  // Barcode Lookup via Open Food Facts v2 + Local Reference
+  // Barcode Lookup via Open Food Facts v2 + Local Reference + Supabase cache
   app.get('/api/foods/barcode/:barcode', async (req, res) => {
     try {
-      const result = await lookupBarcodeFromOpenFoodFacts(req.params.barcode);
+      const authHeader = String(req.headers.authorization || '');
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : undefined;
+      const result = await lookupBarcodeFromOpenFoodFacts(req.params.barcode, token);
       res.json(result);
     } catch (err) {
       res.status(500).json({

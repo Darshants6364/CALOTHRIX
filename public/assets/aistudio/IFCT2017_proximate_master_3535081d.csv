@@ -1,0 +1,529 @@
+food_code,food_name,food_group,food_state,energy_kj,energy_kcal_derived,protein_g,fat_g,carbohydrate_g,total_dietary_fibre_g,insoluble_fibre_g,soluble_fibre_g,water_g,ash_g,source
+A001,"Amaranth seed, black (Amaranthus cruentus)",Cereals And Millets,,1490,356.1,14.59,5.74,59.98,7.02,5.76,1.26,9.89,2.78,ICMR-NIN IFCT 2017
+A002,"Amaranth seed, pale brown (Amaranthus cruentus)",Cereals And Millets,,1489,355.9,13.27,5.56,61.46,7.47,5.8,1.67,9.2,3.05,ICMR-NIN IFCT 2017
+A003,Bajra (Pennisetum typhoideum),Cereals And Millets,,1456,348.0,10.96,5.43,61.78,11.49,9.14,2.34,8.97,1.37,ICMR-NIN IFCT 2017
+A004,Barley (Hordeum vulgare),Cereals And Millets,,1321,315.7,10.94,1.3,61.29,15.64,9.98,5.66,9.77,1.06,ICMR-NIN IFCT 2017
+A005,Jowar (Sorghum vulgare),Cereals And Millets,,1398,334.1,9.97,1.73,67.68,10.22,8.49,1.73,9.01,1.39,ICMR-NIN IFCT 2017
+A006,"Maize, dry (Zea mays)",Cereals And Millets,dry,1398,334.1,8.8,3.77,64.77,12.24,11.29,0.94,9.26,1.17,ICMR-NIN IFCT 2017
+A007,"Maize, tender, local (Zea mays)",Cereals And Millets,tender,502,120.0,3.57,1.4,22.69,3.67,3.23,0.43,68.29,0.38,ICMR-NIN IFCT 2017
+A008,"Maize, tender, sweet (Zea mays)",Cereals And Millets,tender,405,96.8,4.16,1.35,16.42,3.3,2.71,0.59,74.4,0.36,ICMR-NIN IFCT 2017
+A009,Quinoa (Chenopodium quinoa),Cereals And Millets,,1374,328.4,13.11,5.5,53.65,14.66,10.21,4.46,10.43,2.65,ICMR-NIN IFCT 2017
+A010,Ragi (Eleusine coracana),Cereals And Millets,,1342,320.7,7.16,1.92,66.82,11.18,9.51,1.67,10.89,2.04,ICMR-NIN IFCT 2017
+A011,Rice flakes (Oryza sativa ),Cereals And Millets,,1480,353.7,7.44,1.14,76.75,3.46,2.65,0.81,10.36,0.85,ICMR-NIN IFCT 2017
+A012,Rice puffed (Oryza sativa ),Cereals And Millets,puffed,1514,361.9,7.47,1.62,77.68,2.56,1.76,0.8,9.4,1.28,ICMR-NIN IFCT 2017
+A013,"Rice, raw, brown (Oryza sativa )",Cereals And Millets,raw,1480,353.7,9.16,1.24,74.8,4.43,3.6,0.82,9.33,1.04,ICMR-NIN IFCT 2017
+A014,"Rice, parboiled, milled (Oryza sativa )",Cereals And Millets,parboiled,1471,351.6,7.81,0.55,77.16,3.74,2.98,0.76,10.09,0.65,ICMR-NIN IFCT 2017
+A015,"Rice, raw, milled (Oryza sativa )",Cereals And Millets,raw,1491,356.4,7.94,0.52,78.24,2.81,1.99,0.82,9.93,0.56,ICMR-NIN IFCT 2017
+A016,Samai (Panicum miliare),Cereals And Millets,,1449,346.3,10.13,3.89,65.55,7.72,5.45,2.27,11.36,1.34,ICMR-NIN IFCT 2017
+A017,Varagu (Paspalum scrobiculatum),Cereals And Millets,,1388,331.7,8.92,2.55,66.19,6.39,4.29,2.11,14.23,1.72,ICMR-NIN IFCT 2017
+A018,"Wheat flour, refined (Triticum aestivum)",Cereals And Millets,,1472,351.8,10.36,0.76,74.27,2.76,2.14,0.62,11.34,0.51,ICMR-NIN IFCT 2017
+A019,"Wheat flour, atta (Triticum aestivum)",Cereals And Millets,,1340,320.3,10.57,1.53,64.17,11.36,9.73,1.63,11.1,1.28,ICMR-NIN IFCT 2017
+A020,"Wheat, whole (Triticum aestivum)",Cereals And Millets,,1347,321.9,10.59,1.47,64.72,11.23,9.63,1.6,10.58,1.42,ICMR-NIN IFCT 2017
+A021,"Wheat, bulgur (Triticum aestivum)",Cereals And Millets,,1430,341.8,10.84,1.45,69.06,8.81,6.56,2.25,8.61,1.23,ICMR-NIN IFCT 2017
+A022,"Wheat, semolina (Triticum aestivum)",Cereals And Millets,,1396,333.7,11.38,0.74,68.43,9.72,8.16,1.55,8.94,0.8,ICMR-NIN IFCT 2017
+A023,"Wheat, vermicelli (Triticum aestivum)",Cereals And Millets,,1392,332.7,9.7,0.45,70.39,9.28,7.53,1.75,9.59,0.6,ICMR-NIN IFCT 2017
+A024,"Wheat, vermicelli, roasted (Triticum aestivum)",Cereals And Millets,roasted,1423,340.1,10.37,0.49,71.42,9.55,7.79,1.76,7.61,0.56,ICMR-NIN IFCT 2017
+B001,"Bengal gram, dal (Cicer arietinum)",Grain Legumes,,1377,329.1,21.55,5.31,46.72,15.15,12.67,2.48,9.18,2.1,ICMR-NIN IFCT 2017
+B002,"Bengal gram, whole (Cicer arietinum)",Grain Legumes,,1201,287.0,18.77,5.11,39.56,25.22,22.7,2.52,8.56,2.78,ICMR-NIN IFCT 2017
+B003,"Black gram, dal (Phaseolus mungo)",Grain Legumes,,1356,324.1,23.06,1.69,51.0,11.93,7.58,4.35,9.16,3.17,ICMR-NIN IFCT 2017
+B004,"Black gram, whole (Phaseolus mungo)",Grain Legumes,,1219,291.3,21.97,1.58,43.99,20.41,15.47,4.94,8.7,3.35,ICMR-NIN IFCT 2017
+B005,"Cowpea, brown (Vigna catjang)",Grain Legumes,,1340,320.3,20.36,1.15,54.62,11.54,8.75,2.8,9.42,2.9,ICMR-NIN IFCT 2017
+B006,"Cowpea, white (Vigna catjang)",Grain Legumes,,1340,320.3,21.25,1.14,53.77,11.7,8.91,2.79,9.32,2.83,ICMR-NIN IFCT 2017
+B007,"Field bean, black (Phaseolus vulgaris)",Grain Legumes,,1155,276.1,19.93,0.92,43.46,23.4,17.99,5.41,9.57,2.73,ICMR-NIN IFCT 2017
+B008,"Field bean, brown (Phaseolus vulgaris)",Grain Legumes,,1184,283.0,19.9,0.98,45.24,22.4,17.32,5.08,8.74,2.74,ICMR-NIN IFCT 2017
+B009,"Field bean, white (Phaseolus vulgaris)",Grain Legumes,,1173,280.4,19.84,0.94,44.53,22.99,17.45,5.54,8.61,3.09,ICMR-NIN IFCT 2017
+B010,"Green gram, dal (Vigna radiata)",Grain Legumes,,1363,325.8,23.88,1.35,52.59,9.37,7.75,1.62,9.77,3.04,ICMR-NIN IFCT 2017
+B011,"Green gram, whole (Vigna radiata)",Grain Legumes,,1229,293.7,22.53,1.14,46.13,17.04,14.59,2.44,9.95,3.22,ICMR-NIN IFCT 2017
+B012,"Horse gram, whole (Dolichos biflorus)",Grain Legumes,,1379,329.6,21.73,0.62,57.24,7.88,6.22,1.66,9.28,3.24,ICMR-NIN IFCT 2017
+B013,Lentil dal (Lens culinaris),Grain Legumes,,1349,322.4,24.35,0.75,52.53,10.43,8.6,1.83,9.71,2.23,ICMR-NIN IFCT 2017
+B014,"Lentil whole, brown (Lens culinaris)",Grain Legumes,,1251,299.0,22.49,0.64,48.47,16.82,14.16,2.66,9.2,2.39,ICMR-NIN IFCT 2017
+B015,"Lentil whole, yellowish (Lens culinaris)",Grain Legumes,,1246,297.8,22.87,0.61,47.91,16.66,14.15,2.51,9.75,2.2,ICMR-NIN IFCT 2017
+B016,Moth bean (Vigna aconitifolia),Grain Legumes,,1291,308.6,19.75,1.76,52.09,15.12,14.5,0.62,8.14,3.14,ICMR-NIN IFCT 2017
+B017,"Peas, dry (Pisum sativum)",Grain Legumes,dry,1269,303.3,20.43,1.89,48.93,17.01,14.55,2.47,9.33,2.41,ICMR-NIN IFCT 2017
+B018,"Rajmah, black (Phaseolus vulgaris)",Grain Legumes,,1247,298.0,19.01,1.62,49.59,17.74,15.16,2.58,8.69,3.35,ICMR-NIN IFCT 2017
+B019,"Rajmah, brown (Phaseolus vulgaris)",Grain Legumes,,1245,297.6,19.5,1.68,48.83,16.95,14.33,2.62,9.68,3.36,ICMR-NIN IFCT 2017
+B020,"Rajmah, red (Phaseolus vulgaris)",Grain Legumes,,1252,299.2,19.91,1.77,48.61,16.57,13.86,2.7,9.87,3.28,ICMR-NIN IFCT 2017
+B021,"Red gram, dal (Cajanus cajan)",Grain Legumes,,1384,330.8,21.7,1.56,55.23,9.06,6.67,2.39,9.2,3.26,ICMR-NIN IFCT 2017
+B022,"Red gram, whole (Cajanus cajan)",Grain Legumes,,1146,273.9,20.47,1.38,42.48,22.84,19.69,3.15,9.3,3.53,ICMR-NIN IFCT 2017
+B023,Ricebean (Vigna umbellata),Grain Legumes,,1265,302.3,19.97,0.74,51.26,13.37,10.04,3.33,11.12,3.54,ICMR-NIN IFCT 2017
+B024,"Soybean, brown (Glycine max)",Grain Legumes,,1596,381.5,35.58,19.82,12.79,21.55,16.56,5.0,5.51,4.74,ICMR-NIN IFCT 2017
+B025,"Soybean, white (Glycine max)",Grain Legumes,,1579,377.4,37.8,19.42,10.16,22.63,17.04,5.59,5.47,4.52,ICMR-NIN IFCT 2017
+C001,Agathi leaves (Sesbania grandiflora),Green Leafy Vegetables,,295,70.5,8.01,1.35,5.21,8.6,6.0,2.6,74.43,2.42,ICMR-NIN IFCT 2017
+C002,"Amaranth leaves, green (Amaranthus gangeticus)",Green Leafy Vegetables,,128,30.6,3.29,0.65,2.28,4.41,3.21,1.2,86.85,2.52,ICMR-NIN IFCT 2017
+C003,"Amaranth leaves, red (Amaranthus gangeticus)",Green Leafy Vegetables,,140,33.5,3.93,0.63,2.37,4.91,3.72,1.19,85.56,2.61,ICMR-NIN IFCT 2017
+C004,"Amaranth leaves, red and green mix (Amaranthus gangeticus)",Green Leafy Vegetables,,132,31.5,3.09,0.53,2.87,4.6,3.23,1.37,86.37,2.55,ICMR-NIN IFCT 2017
+C005,"Amaranth spined, leaves, green (Amaranthus spinosus)",Green Leafy Vegetables,,110,26.3,3.54,0.36,1.61,5.1,3.89,1.2,86.46,2.94,ICMR-NIN IFCT 2017
+C006,"Amaranth spined, leaves, red and green mix (Amaranthus spinosus)",Green Leafy Vegetables,,99,23.7,2.8,0.34,1.45,5.57,3.82,1.75,86.64,3.2,ICMR-NIN IFCT 2017
+C007,Basella leaves (Basella alba),Green Leafy Vegetables,,82,19.6,1.57,0.45,2.01,2.21,1.64,0.57,92.68,1.09,ICMR-NIN IFCT 2017
+C008,Bathua leaves (Chenopodium album),Green Leafy Vegetables,,116,27.7,2.5,0.44,2.56,4.01,2.34,1.68,88.77,1.71,ICMR-NIN IFCT 2017
+C009,Beet greens (Beta vulgaris),Green Leafy Vegetables,,145,34.7,2.38,0.75,3.86,3.64,2.2,1.43,86.68,2.69,ICMR-NIN IFCT 2017
+C010,"Betel leaves, big (Kolkata) (Piper betle)",Green Leafy Vegetables,,202,48.3,2.51,0.75,7.37,2.12,1.32,0.8,84.93,2.33,ICMR-NIN IFCT 2017
+C011,"Betel leaves, small (Piper betle)",Green Leafy Vegetables,,183,43.7,2.62,0.75,6.16,1.97,1.17,0.8,85.92,2.59,ICMR-NIN IFCT 2017
+C012,Brussels sprouts (Brassica oleracea var. gemmifera),Green Leafy Vegetables,,185,44.2,4.26,0.5,5.09,4.29,3.35,0.94,84.39,1.47,ICMR-NIN IFCT 2017
+C013,"Cabbage, Chinese (Brassica rupa)",Green Leafy Vegetables,,75,17.9,1.58,0.13,2.36,2.01,1.55,0.45,93.19,0.73,ICMR-NIN IFCT 2017
+C014,"Cabbage, collard greens (Brassica oleracea var. viridis)",Green Leafy Vegetables,,126,30.1,3.63,0.27,2.79,2.98,2.04,0.94,89.53,0.81,ICMR-NIN IFCT 2017
+C015,"Cabbage, green (Brassica oleracea var. capitata f. alba)",Green Leafy Vegetables,,90,21.5,1.36,0.12,3.25,2.76,1.91,0.85,91.85,0.67,ICMR-NIN IFCT 2017
+C016,"Cabbage, violet (Brassica oleracea var. capitata f. rubra)",Green Leafy Vegetables,,97,23.2,1.39,0.21,3.54,2.21,1.58,0.62,91.94,0.71,ICMR-NIN IFCT 2017
+C017,Cauliflower leaves (Brassica oleracea var. botrytis),Green Leafy Vegetables,,148,35.4,3.9,0.42,3.39,3.43,2.37,1.06,87.64,1.22,ICMR-NIN IFCT 2017
+C018,"Colocasia leaves, green (Colocasia esculenta)",Green Leafy Vegetables,,182,43.5,3.42,1.38,3.69,5.6,4.32,1.29,83.61,2.3,ICMR-NIN IFCT 2017
+C019,Drumstick leaves (Moringa oleifera),Green Leafy Vegetables,,282,67.4,6.41,1.64,5.62,8.21,6.12,2.1,75.65,2.46,ICMR-NIN IFCT 2017
+C020,Fenugreek leaves (Trigonella foenum graecum),Green Leafy Vegetables,,144,34.4,3.68,0.83,2.17,4.9,3.2,1.7,86.73,1.69,ICMR-NIN IFCT 2017
+C021,Garden cress (Lepidium sativum),Green Leafy Vegetables,,208,49.7,5.62,0.8,4.48,2.6,1.77,0.83,84.02,2.48,ICMR-NIN IFCT 2017
+C022,"Gogu leaves, green (Hibiscus cannabinus)",Green Leafy Vegetables,,152,36.3,1.86,1.09,4.06,4.59,3.24,1.35,87.42,0.98,ICMR-NIN IFCT 2017
+C023,"Gogu leaves, red (Hibiscus cannabinus)",Green Leafy Vegetables,,153,36.6,1.85,1.07,4.24,3.89,2.66,1.23,87.98,0.97,ICMR-NIN IFCT 2017
+C024,"Knol-Khol, leaves (Brassica oleracea var. gongylodes)",Green Leafy Vegetables,,178,42.5,3.12,0.35,6.16,2.76,1.81,0.95,86.2,1.42,ICMR-NIN IFCT 2017
+C025,Lettuce (Lactuca sativa),Green Leafy Vegetables,,91,21.7,1.54,0.27,3.01,1.79,1.32,0.47,92.27,1.11,ICMR-NIN IFCT 2017
+C026,Mustard leaves (Brassica juncea),Green Leafy Vegetables,,127,30.4,3.52,0.51,2.41,3.92,3.04,0.87,88.17,1.47,ICMR-NIN IFCT 2017
+C027,Pak Choi leaves (Brassica rapa var. chinensis),Green Leafy Vegetables,,67,16.0,1.41,0.25,1.78,1.91,1.44,0.47,93.56,1.1,ICMR-NIN IFCT 2017
+C028,Parsley (Petroselinum crispum),Green Leafy Vegetables,,305,72.9,5.55,1.14,9.43,3.87,2.79,1.09,77.76,2.25,ICMR-NIN IFCT 2017
+C029,Ponnaganni (Alternanthera sessilis),Green Leafy Vegetables,,213,50.9,5.29,0.71,5.17,6.74,5.63,1.11,79.43,2.65,ICMR-NIN IFCT 2017
+C030,"Pumpkin leaves, tender (Cucurbita maxima)",Green Leafy Vegetables,tender,185,44.2,4.21,0.74,4.75,2.25,1.56,0.69,85.82,2.24,ICMR-NIN IFCT 2017
+C031,Radish leaves (Raphanus sativus),Green Leafy Vegetables,,109,26.1,2.22,0.51,2.77,1.82,1.18,0.63,91.19,1.5,ICMR-NIN IFCT 2017
+C032,Rumex leaves (Rumex patientia),Green Leafy Vegetables,,82,19.6,1.62,0.33,2.33,1.27,0.93,0.34,93.18,1.27,ICMR-NIN IFCT 2017
+C033,Spinach (Spinacia oleracea),Green Leafy Vegetables,,102,24.4,2.14,0.64,2.05,2.38,1.52,0.86,90.31,2.47,ICMR-NIN IFCT 2017
+C034,"Tamarind leaves, tender (Tamarindus indica)",Green Leafy Vegetables,tender,299,71.5,5.84,0.49,10.04,10.7,9.34,1.36,71.69,1.25,ICMR-NIN IFCT 2017
+D001,Ash gourd (Benincasa hispida),Other Vegetables,,73,17.4,0.79,0.14,2.84,3.37,2.52,0.85,92.17,0.7,ICMR-NIN IFCT 2017
+D002,"Bamboo shoot, tender (Bambusa vulgaris)",Other Vegetables,tender,68,16.3,1.33,0.35,1.67,1.55,1.06,0.49,94.56,0.55,ICMR-NIN IFCT 2017
+D003,"Bean scarlet, tender (Phaseolus coccineus)",Other Vegetables,tender,179,42.8,2.86,0.99,5.16,4.5,3.76,0.74,85.51,0.96,ICMR-NIN IFCT 2017
+D004,"Bitter gourd, jagged, teeth ridges, elongate (Momordica charantia)",Other Vegetables,,87,20.8,1.44,0.24,2.82,3.78,3.1,0.68,90.87,0.86,ICMR-NIN IFCT 2017
+D005,"Bitter gourd, jagged, teeth ridges, short (Momordica charantia)",Other Vegetables,,79,18.9,1.34,0.24,2.53,3.49,2.96,0.53,91.6,0.81,ICMR-NIN IFCT 2017
+D006,"Bitter gourd, jagged, smooth ridges, elongate (Momordica charantia)",Other Vegetables,,81,19.4,1.61,0.26,2.29,3.72,3.05,0.67,91.24,0.88,ICMR-NIN IFCT 2017
+D007,"Bottle gourd, elongate, pale green (Lagenaria vulgaris)",Other Vegetables,,46,11.0,0.53,0.13,1.68,2.12,1.65,0.48,95.17,0.36,ICMR-NIN IFCT 2017
+D008,"Bottle gourd, round, pale green (Lagenaria vulgaris)",Other Vegetables,,57,13.6,0.42,0.12,2.53,2.1,1.72,0.38,94.5,0.34,ICMR-NIN IFCT 2017
+D009,"Bottle gourd, elongate, dark green (Lagenaria vulgaris)",Other Vegetables,,54,12.9,0.49,0.13,2.25,2.11,1.74,0.37,94.63,0.4,ICMR-NIN IFCT 2017
+D010,Brinjal-1 (Solanum melongena),Other Vegetables,,114,27.2,1.77,0.39,3.49,3.57,2.37,1.2,89.95,0.83,ICMR-NIN IFCT 2017
+D011,Brinjal-2 (Solanum melongena),Other Vegetables,,99,23.7,1.82,0.34,2.71,4.01,2.8,1.21,90.28,0.85,ICMR-NIN IFCT 2017
+D012,Brinjal-3 (Solanum melongena),Other Vegetables,,102,24.4,1.36,0.33,3.38,4.26,3.1,1.16,90.02,0.65,ICMR-NIN IFCT 2017
+D013,Brinjal-4 (Solanum melongena),Other Vegetables,,100,23.9,1.51,0.31,3.19,4.04,3.03,1.01,90.28,0.66,ICMR-NIN IFCT 2017
+D014,Brinjal-5 (Solanum melongena),Other Vegetables,,111,26.5,1.38,0.29,4.02,4.13,3.1,1.03,89.45,0.72,ICMR-NIN IFCT 2017
+D015,Brinjal-6 (Solanum melongena),Other Vegetables,,97,23.2,1.46,0.29,3.29,3.68,3.0,0.68,90.57,0.72,ICMR-NIN IFCT 2017
+D016,Brinjal-7 (Solanum melongena),Other Vegetables,,98,23.4,1.4,0.37,3.1,3.32,2.3,1.02,91.25,0.57,ICMR-NIN IFCT 2017
+D017,Brinjal-8 (Solanum melongena),Other Vegetables,,117,28.0,1.82,0.33,3.75,4.01,2.79,1.22,89.28,0.8,ICMR-NIN IFCT 2017
+D018,Brinjal-9 (Solanum melongena),Other Vegetables,,106,25.3,1.47,0.35,3.52,4.0,2.94,1.06,89.83,0.83,ICMR-NIN IFCT 2017
+D019,Brinjal-10 (Solanum melongena),Other Vegetables,,116,27.7,1.68,0.25,4.08,3.9,2.74,1.16,89.38,0.72,ICMR-NIN IFCT 2017
+D020,Brinjal-11 (Solanum melongena),Other Vegetables,,105,25.1,1.43,0.31,3.53,4.12,2.95,1.17,89.93,0.68,ICMR-NIN IFCT 2017
+D021,Brinjal-12 (Solanum melongena),Other Vegetables,,93,22.2,1.6,0.27,2.73,3.89,2.7,1.19,90.94,0.58,ICMR-NIN IFCT 2017
+D022,Brinjal-13 (Solanum melongena),Other Vegetables,,124,29.6,1.49,0.31,4.51,3.92,2.61,1.31,89.14,0.64,ICMR-NIN IFCT 2017
+D023,Brinjal-14 (Solanum melongena),Other Vegetables,,106,25.3,1.56,0.35,3.27,3.87,2.5,1.37,90.31,0.64,ICMR-NIN IFCT 2017
+D024,Brinjal-15 (Solanum melongena),Other Vegetables,,114,27.2,1.58,0.29,3.96,3.99,2.82,1.17,89.44,0.74,ICMR-NIN IFCT 2017
+D025,Brinjal-16 (Solanum melongena),Other Vegetables,,103,24.6,1.26,0.34,3.46,3.74,2.54,1.2,90.39,0.8,ICMR-NIN IFCT 2017
+D026,Brinjal-17 (Solanum melongena),Other Vegetables,,91,21.7,1.18,0.36,2.89,3.94,2.8,1.14,90.83,0.81,ICMR-NIN IFCT 2017
+D027,Brinjal-18 (Solanum melongena),Other Vegetables,,116,27.7,1.47,0.33,4.1,4.38,3.23,1.15,89.07,0.66,ICMR-NIN IFCT 2017
+D028,Brinjal-19 (Solanum melongena),Other Vegetables,,100,23.9,1.26,0.31,3.39,3.97,2.81,1.16,90.41,0.66,ICMR-NIN IFCT 2017
+D029,Brinjal-20 (Solanum melongena),Other Vegetables,,99,23.7,1.44,0.34,3.15,3.73,2.64,1.09,90.65,0.68,ICMR-NIN IFCT 2017
+D030,Brinjal-21 (Solanum melongena),Other Vegetables,,113,27.0,1.36,0.35,3.93,3.85,2.57,1.28,89.83,0.69,ICMR-NIN IFCT 2017
+D031,Brinjal - all varieties (Solanum melongena),Other Vegetables,,106,25.3,1.48,0.32,3.52,3.98,2.84,1.14,90.0,0.7,ICMR-NIN IFCT 2017
+D032,Broad beans (Vicia faba),Other Vegetables,,123,29.4,3.85,0.15,2.11,8.63,6.61,2.03,84.2,1.05,ICMR-NIN IFCT 2017
+D033,"Capsicum, green (Capsicum annuum)",Other Vegetables,,68,16.3,1.11,0.34,1.84,2.06,1.33,0.73,93.89,0.76,ICMR-NIN IFCT 2017
+D034,"Capsicum, red (Capsicum annuum)",Other Vegetables,,83,19.8,1.47,0.47,2.14,2.19,1.58,0.61,92.99,0.76,ICMR-NIN IFCT 2017
+D035,"Capsicum, yellow (Capsicum annuum)",Other Vegetables,,78,18.6,1.35,0.41,1.95,2.19,1.39,0.8,93.38,0.72,ICMR-NIN IFCT 2017
+D036,Cauliflower (Brassica oleracea var. botrytis),Other Vegetables,,96,22.9,2.15,0.44,2.03,3.71,2.66,1.04,90.76,0.91,ICMR-NIN IFCT 2017
+D037,Celery stalk (Apium graveolens),Other Vegetables,,69,16.5,0.98,0.24,2.33,2.09,1.57,0.52,92.87,1.5,ICMR-NIN IFCT 2017
+D038,Cho-cho-marrow (Sechium edule),Other Vegetables,,79,18.9,0.66,0.15,3.47,1.55,1.19,0.36,93.78,0.38,ICMR-NIN IFCT 2017
+D039,Cluster beans (Cyamopsis tetragonoloba),Other Vegetables,,168,40.2,3.55,0.37,4.91,4.83,3.55,1.28,84.65,1.68,ICMR-NIN IFCT 2017
+D040,"Colocasia, stem, black (Colocasia esculenta)",Other Vegetables,,100,23.9,0.76,0.34,3.83,3.01,1.81,1.2,91.15,0.91,ICMR-NIN IFCT 2017
+D041,"Colocasia, stem, green (Colocasia esculenta)",Other Vegetables,,81,19.4,0.91,0.22,2.86,2.33,1.26,1.07,92.67,1.0,ICMR-NIN IFCT 2017
+D042,"Corn, baby (Zea mays)",Other Vegetables,,306,73.1,2.69,1.33,11.66,6.09,4.47,1.62,75.44,2.79,ICMR-NIN IFCT 2017
+D043,"Cucumber, green, elongate (Cucumis sativus)",Other Vegetables,,82,19.6,0.71,0.16,3.48,2.14,1.52,0.63,92.96,0.54,ICMR-NIN IFCT 2017
+D044,"Cucumber, green, short (Cucumis sativus)",Other Vegetables,,73,17.4,0.83,0.18,2.82,2.13,1.6,0.54,93.52,0.52,ICMR-NIN IFCT 2017
+D045,"Cucumber, orange, round (Cucumis sativus)",Other Vegetables,,82,19.6,0.98,0.24,3.01,2.46,1.78,0.68,92.8,0.52,ICMR-NIN IFCT 2017
+D046,Drumstick (Moringa oleifera),Other Vegetables,,123,29.4,2.62,0.12,3.76,6.83,5.6,1.23,85.39,1.27,ICMR-NIN IFCT 2017
+D047,"Field beans, tender, broad (Vicia faba)",Other Vegetables,tender,129,30.8,3.06,0.64,2.75,5.64,4.84,0.79,86.98,0.94,ICMR-NIN IFCT 2017
+D048,"Field beans, tender, lean (Vicia faba)",Other Vegetables,tender,140,33.5,3.71,0.6,2.85,6.19,5.37,0.82,85.57,1.08,ICMR-NIN IFCT 2017
+D049,"French beans, country (Phaseolus vulgaris)",Other Vegetables,,102,24.4,2.49,0.26,2.68,4.38,3.88,0.51,89.14,1.05,ICMR-NIN IFCT 2017
+D050,"French beans, hybrid (Phaseolus vulgaris)",Other Vegetables,,93,22.2,2.12,0.19,2.63,4.18,3.53,0.65,90.11,0.77,ICMR-NIN IFCT 2017
+D051,"Jack fruit, raw (Artocarpus heterophyllus)",Other Vegetables,raw,110,26.3,1.98,0.35,3.48,7.69,7.15,0.54,85.52,0.99,ICMR-NIN IFCT 2017
+D052,"Jack fruit, seed, mature (Artocarpus heterophyllus)",Other Vegetables,mature,322,77.0,5.79,0.44,11.81,8.63,7.83,0.8,72.32,1.02,ICMR-NIN IFCT 2017
+D053,Knol - Khol (Brassica oleracea),Other Vegetables,,67,16.0,1.58,0.35,1.39,2.75,2.31,0.44,93.14,0.79,ICMR-NIN IFCT 2017
+D054,"Kovai, big (Coccinia cordifolia)",Other Vegetables,,73,17.4,1.39,0.24,2.01,3.0,2.19,0.81,92.78,0.58,ICMR-NIN IFCT 2017
+D055,"Kovai, small (Coccinia cordifolia)",Other Vegetables,,80,19.1,1.22,0.24,2.41,3.25,2.14,1.12,92.4,0.47,ICMR-NIN IFCT 2017
+D056,Ladies finger (Abelmoschus esculentus),Other Vegetables,,115,27.5,2.08,0.22,3.62,4.08,2.8,1.28,89.06,0.94,ICMR-NIN IFCT 2017
+D057,"Mango, green, raw (Mangifera indica)",Other Vegetables,raw,205,49.0,0.69,0.08,10.59,3.01,1.68,1.34,85.14,0.49,ICMR-NIN IFCT 2017
+D058,"Onion, stalk (Allium cepa)",Other Vegetables,,107,25.6,2.07,0.26,2.99,5.21,3.76,1.45,88.35,1.13,ICMR-NIN IFCT 2017
+D059,"Papaya, raw (Carica papaya)",Other Vegetables,raw,100,23.9,0.5,0.23,4.4,2.28,1.32,0.96,92.04,0.55,ICMR-NIN IFCT 2017
+D060,Parwar (Trichosanthes dioica),Other Vegetables,,101,24.1,1.4,0.3,3.54,2.61,1.82,0.79,91.57,0.59,ICMR-NIN IFCT 2017
+D061,"Peas, fresh (Pisum sativum)",Other Vegetables,fresh,340,81.3,7.25,0.13,11.88,6.32,5.04,1.28,73.37,1.05,ICMR-NIN IFCT 2017
+D062,"Plantain, flower (Musa x paradisiaca)",Other Vegetables,,89,21.3,1.47,0.63,2.15,5.25,4.72,0.52,89.14,1.35,ICMR-NIN IFCT 2017
+D063,"Plantain, green (Musa x paradisiaca)",Other Vegetables,,334,79.8,1.18,0.23,17.58,3.6,2.79,0.81,76.15,1.27,ICMR-NIN IFCT 2017
+D064,"Plantain, stem (Musa x paradisiaca)",Other Vegetables,,165,39.4,0.35,0.16,8.64,2.12,1.33,0.8,87.53,1.2,ICMR-NIN IFCT 2017
+D065,"Pumpkin, green, cylindrical (Cucurbita maxima)",Other Vegetables,,103,24.6,0.87,0.18,4.22,2.53,1.28,1.25,91.73,0.47,ICMR-NIN IFCT 2017
+D066,"Pumpkin, orange, round (Cucurbita maxima)",Other Vegetables,,97,23.2,0.84,0.16,4.0,2.56,1.44,1.12,91.85,0.58,ICMR-NIN IFCT 2017
+D067,"Red gram, tender, fresh (Cajanus cajan)",Other Vegetables,fresh;tender,520,124.3,8.09,0.92,19.46,5.9,3.66,2.25,64.0,1.64,ICMR-NIN IFCT 2017
+D068,Ridge gourd (Luffa acutangula),Other Vegetables,,55,13.1,0.91,0.14,1.72,1.81,1.2,0.61,94.99,0.44,ICMR-NIN IFCT 2017
+D069,"Ridge gourd, smooth skin (Luffa acutangula)",Other Vegetables,,64,15.3,0.98,0.13,2.24,1.85,1.31,0.54,94.27,0.53,ICMR-NIN IFCT 2017
+D070,"Snake gourd, long, pale green (Trichosanthes anguina)",Other Vegetables,,52,12.4,0.98,0.25,1.27,2.27,1.69,0.58,94.81,0.42,ICMR-NIN IFCT 2017
+D071,"Snake gourd, long, dark green (Trichosanthes anguina)",Other Vegetables,,50,12.0,0.89,0.25,1.23,2.27,1.69,0.58,94.92,0.45,ICMR-NIN IFCT 2017
+D072,"Snake gourd, short (Trichosanthes anguina)",Other Vegetables,,61,14.6,0.54,0.26,2.15,2.29,1.61,0.68,94.35,0.41,ICMR-NIN IFCT 2017
+D073,"Tinda, tender (Praecitrullus fistulosus)",Other Vegetables,tender,58,13.9,1.02,0.17,1.9,2.0,1.68,0.32,94.41,0.51,ICMR-NIN IFCT 2017
+D074,"Tomato, green (Solanum lycopersicum)",Other Vegetables,,87,20.8,1.12,0.27,3.18,1.62,1.05,0.57,93.21,0.6,ICMR-NIN IFCT 2017
+D075,"Tomato, ripe, hybrid ((Solanum lycopersicum)",Other Vegetables,ripe,79,18.9,0.76,0.25,3.2,1.58,1.27,0.3,93.79,0.43,ICMR-NIN IFCT 2017
+D076,"Tomato, ripe, local (Lycopersicon esculentum)",Other Vegetables,ripe,82,19.6,0.9,0.47,2.71,1.77,1.44,0.33,93.62,0.52,ICMR-NIN IFCT 2017
+D077,"Zucchini, green (Cucurbita pepo)",Other Vegetables,,84,20.1,1.1,0.51,2.33,2.3,1.42,0.88,92.83,0.93,ICMR-NIN IFCT 2017
+D078,"Zucchini, yellow (Cucurbita pepo)",Other Vegetables,,79,18.9,1.31,0.44,2.2,1.84,1.37,0.47,93.15,1.08,ICMR-NIN IFCT 2017
+E001,"Apple, big (Malus domestica)",Fruits,,261,62.4,0.29,0.64,13.11,2.59,1.43,1.16,83.01,0.36,ICMR-NIN IFCT 2017
+E002,"Apple, green (Malus domestica)",Fruits,,214,51.1,0.46,0.5,10.65,2.54,1.72,0.81,85.54,0.31,ICMR-NIN IFCT 2017
+E003,"Apple, small (Malus domestica)",Fruits,,267,63.8,0.31,0.53,13.95,2.06,1.44,0.62,82.91,0.24,ICMR-NIN IFCT 2017
+E004,"Apple, small, Kashmir (Malus domestica)",Fruits,,269,64.3,0.27,0.6,13.99,2.07,1.53,0.54,82.79,0.29,ICMR-NIN IFCT 2017
+E005,"Apricot, dried (Prunus armeniaca)",Fruits,dried,1321,315.7,3.17,0.74,72.63,3.32,2.72,0.6,16.68,3.46,ICMR-NIN IFCT 2017
+E006,"Apricot, processed (Prunus armeniaca)",Fruits,,236,56.4,1.47,0.64,10.93,0.59,0.43,0.16,85.75,0.61,ICMR-NIN IFCT 2017
+E007,Avocado fruit (Persea sp.),Fruits,,604,144.4,2.95,13.86,1.75,6.69,5.26,1.42,73.56,1.19,ICMR-NIN IFCT 2017
+E008,Bael fruit (Aegle marmelos),Fruits,,569,136.0,2.63,0.57,28.21,6.31,3.31,3.0,61.36,0.91,ICMR-NIN IFCT 2017
+E009,"Banana, ripe, montham (Musa x paradisiaca)",Fruits,ripe,463,110.7,1.25,0.32,24.95,2.21,1.43,0.78,70.13,1.15,ICMR-NIN IFCT 2017
+E010,"Banana, ripe, poovam (Musa x paradisiaca)",Fruits,ripe,445,106.4,1.49,0.35,23.41,2.33,1.29,1.04,71.32,1.09,ICMR-NIN IFCT 2017
+E011,"Banana, ripe, red (Musa x paradisiaca)",Fruits,ripe,467,111.6,1.29,0.29,25.21,1.98,1.26,0.72,70.28,0.95,ICMR-NIN IFCT 2017
+E012,"Banana, ripe, robusta (Musa x paradisiaca)",Fruits,ripe,440,105.2,1.23,0.33,23.63,1.94,1.23,0.71,71.93,0.94,ICMR-NIN IFCT 2017
+E013,Black berry (Rubus sp.),Fruits,,227,54.3,0.92,0.63,10.64,4.35,3.44,0.91,82.94,0.52,ICMR-NIN IFCT 2017
+E014,"Cherries, red (Prunus cerasus)",Fruits,,250,59.8,1.49,0.46,11.87,2.12,1.35,0.78,83.61,0.45,ICMR-NIN IFCT 2017
+E015,"Currants, black (Ribes nigrum)",Fruits,,227,54.3,1.51,0.53,9.93,4.07,2.43,1.64,83.27,0.69,ICMR-NIN IFCT 2017
+E016,Custard apple (Annona squamosa),Fruits,,414,98.9,1.62,0.67,20.38,5.1,3.17,1.93,71.55,0.68,ICMR-NIN IFCT 2017
+E017,"Dates, dry, pale brown (Phoenix dactylifera)",Fruits,dry,1340,320.3,2.45,0.35,74.91,8.95,7.53,1.42,11.14,2.2,ICMR-NIN IFCT 2017
+E018,"Dates, dry, dark brown (Phoenix dactylifera)",Fruits,dry,1301,310.9,2.38,0.35,72.67,9.1,7.57,1.53,13.13,2.39,ICMR-NIN IFCT 2017
+E019,"Dates, processed (Phoenix dactylifera)",Fruits,,1197,286.1,1.18,0.41,67.95,6.52,5.68,0.84,22.01,1.93,ICMR-NIN IFCT 2017
+E020,Fig (Ficus carica),Fruits,,341,81.5,2.03,0.37,16.28,4.64,2.59,2.05,75.6,1.08,ICMR-NIN IFCT 2017
+E021,Gooseberry (Emblica officinalis),Fruits,,99,23.7,0.34,0.16,4.39,7.75,6.2,1.55,87.02,0.34,ICMR-NIN IFCT 2017
+E022,"Grapes, seeded, round, black (Vitis vinifera)",Fruits,,254,60.7,0.76,0.32,13.23,1.35,0.82,0.52,83.88,0.46,ICMR-NIN IFCT 2017
+E023,"Grapes, seeded, round, green (Vitis vinifera)",Fruits,,235,56.2,0.77,0.29,12.19,1.25,0.81,0.44,85.07,0.43,ICMR-NIN IFCT 2017
+E024,"Grapes, seeded, round, red (Vitis vinifera)",Fruits,,244,58.3,0.95,0.29,12.55,1.28,0.85,0.43,84.46,0.48,ICMR-NIN IFCT 2017
+E025,"Grapes, seedless, oval, black (Vitis vinifera)",Fruits,,395,94.4,1.41,0.46,20.48,1.64,0.98,0.66,75.3,0.7,ICMR-NIN IFCT 2017
+E026,"Grapes, seedless, round, green (Vitis vinifera)",Fruits,,224,53.5,0.62,0.26,11.81,1.28,0.85,0.44,85.55,0.47,ICMR-NIN IFCT 2017
+E027,"Grapes, seedless, round, black (Vitis vinifera)",Fruits,,374,89.4,1.24,0.35,19.86,1.15,0.83,0.32,76.9,0.49,ICMR-NIN IFCT 2017
+E028,"Guava, white flesh (Psidium guajava)",Fruits,,135,32.3,1.44,0.32,5.13,8.59,7.14,1.45,83.79,0.72,ICMR-NIN IFCT 2017
+E029,"Guava, pink flesh (Psidium guajava)",Fruits,,195,46.6,1.19,0.25,9.14,7.39,6.12,1.28,81.22,0.81,ICMR-NIN IFCT 2017
+E030,"Jack fruit, ripe (Artocarpus heterophyllus)",Fruits,ripe,302,72.2,2.74,0.15,14.01,3.62,2.21,1.41,78.56,0.91,ICMR-NIN IFCT 2017
+E031,"Jambu fruit, ripe (Syzygium samarangense)",Fruits,ripe,235,56.2,0.82,0.17,12.3,3.07,2.4,0.67,83.33,0.31,ICMR-NIN IFCT 2017
+E032,Karonda fruit (Carissa carandas),Fruits,,141,33.7,1.15,1.67,2.87,7.25,5.87,1.38,86.04,1.02,ICMR-NIN IFCT 2017
+E033,"Lemon, juice (Citrus limon)",Fruits,,153,36.6,0.41,0.75,6.97,,,,91.59,0.28,ICMR-NIN IFCT 2017
+E034,"Lime, sweet,pulp (Citrus limetta)",Fruits,,114,27.2,0.76,0.2,5.18,2.07,1.33,0.74,91.32,0.47,ICMR-NIN IFCT 2017
+E035,Litchi (Litchi chinensis),Fruits,,225,53.8,0.99,0.26,11.41,1.34,0.81,0.53,85.56,0.44,ICMR-NIN IFCT 2017
+E036,"Mango, ripe, banganapalli (Mangifera indica)",Fruits,ripe,175,41.8,0.54,0.55,8.18,1.88,1.01,0.87,88.44,0.42,ICMR-NIN IFCT 2017
+E037,"Mango, ripe, gulabkhas (Mangifera indica)",Fruits,ripe,209,50.0,0.52,0.53,10.32,1.67,1.03,0.64,86.65,0.32,ICMR-NIN IFCT 2017
+E038,"Mango, ripe, himsagar (Mangifera indica)",Fruits,ripe,187,44.7,0.46,0.54,9.03,1.55,0.82,0.73,88.04,0.38,ICMR-NIN IFCT 2017
+E039,"Mango, ripe, kesar (Mangifera indica)",Fruits,ripe,231,55.2,0.54,0.57,11.36,2.02,1.09,0.93,85.07,0.44,ICMR-NIN IFCT 2017
+E040,"Mango, ripe, neelam (Mangifera indica)",Fruits,ripe,178,42.5,0.68,0.55,8.21,1.77,0.97,0.79,88.41,0.38,ICMR-NIN IFCT 2017
+E041,"Mango, ripe, paheri (Mangifera indica)",Fruits,ripe,188,44.9,0.68,0.58,8.67,1.97,0.99,0.98,87.69,0.42,ICMR-NIN IFCT 2017
+E042,"Mango, ripe, totapari (Mangifera indica)",Fruits,ripe,248,59.3,0.41,0.49,12.75,1.73,0.95,0.78,84.14,0.47,ICMR-NIN IFCT 2017
+E043,Mangosteen (Garcinia mangostana),Fruits,,219,52.3,0.63,0.24,11.41,1.87,1.23,0.64,85.52,0.33,ICMR-NIN IFCT 2017
+E044,Manila tamarind (Pithecellobium dulce),Fruits,,342,81.7,3.56,1.14,13.54,4.4,3.3,1.1,74.54,2.82,ICMR-NIN IFCT 2017
+E045,"Musk melon, orange flesh (Cucumis melon)",Fruits,,97,23.2,0.42,0.35,4.24,1.51,0.84,0.67,92.97,0.52,ICMR-NIN IFCT 2017
+E046,"Musk melon, yellow flesh (Cucumis melon)",Fruits,,116,27.7,0.53,0.26,5.4,1.49,0.79,0.7,91.84,0.48,ICMR-NIN IFCT 2017
+E047,"Orange, pulp (Citrus aurantium)",Fruits,,156,37.3,0.7,0.13,7.92,1.29,0.73,0.56,89.61,0.36,ICMR-NIN IFCT 2017
+E048,"Palm fruit, tender (Borassus flabellifer)",Fruits,tender,101,24.1,0.5,0.12,4.92,2.4,1.87,0.53,91.93,0.13,ICMR-NIN IFCT 2017
+E049,"Papaya, ripe (Carica papaya)",Fruits,ripe,100,23.9,0.42,0.16,4.61,2.83,1.75,1.08,91.47,0.51,ICMR-NIN IFCT 2017
+E050,Peach (Prunus communis),Fruits,,168,40.2,0.86,0.37,7.82,2.13,1.22,0.91,88.31,0.51,ICMR-NIN IFCT 2017
+E051,Pear (Pyrus sp.),Fruits,,157,37.5,0.36,0.27,8.09,4.48,4.02,0.46,86.49,0.32,ICMR-NIN IFCT 2017
+E052,Phalsa (Grewia asiatica),Fruits,,299,71.5,1.66,0.14,15.09,4.54,3.44,1.09,77.48,1.09,ICMR-NIN IFCT 2017
+E053,Pineapple (Ananas comosus),Fruits,,180,43.0,0.52,0.16,9.42,3.46,2.88,0.59,86.06,0.38,ICMR-NIN IFCT 2017
+E054,Plum (Prunus domestica),Fruits,,238,56.9,0.64,0.4,12.1,2.07,1.23,0.84,84.44,0.35,ICMR-NIN IFCT 2017
+E055,"Pomegranate, maroon seeds (Punica granatum)",Fruits,,229,54.7,1.33,0.15,11.58,2.83,2.26,0.57,83.55,0.57,ICMR-NIN IFCT 2017
+E056,Pummelo (Citrus maxima),Fruits,,210,50.2,0.68,0.42,10.64,0.8,0.49,0.31,86.97,0.49,ICMR-NIN IFCT 2017
+E057,"Raisins, dried, black (Vitis vinifera)",Fruits,dried,1279,305.7,2.57,0.34,71.29,3.92,2.55,1.37,19.69,2.19,ICMR-NIN IFCT 2017
+E058,"Raisins, dried, golden (Vitis vinifera)",Fruits,dried,1241,296.6,2.76,0.35,68.79,4.56,3.04,1.53,21.5,2.04,ICMR-NIN IFCT 2017
+E059,Rambutan (Nephelium lappaceum),Fruits,,306,73.1,0.68,0.16,16.84,1.02,0.71,0.3,80.87,0.43,ICMR-NIN IFCT 2017
+E060,Sapota (Achras sapota),Fruits,,307,73.4,0.92,1.26,13.9,9.6,8.46,1.14,73.64,0.68,ICMR-NIN IFCT 2017
+E061,Soursop (Annona muricata),Fruits,,260,62.1,0.74,0.94,11.94,4.95,3.79,1.16,80.85,0.58,ICMR-NIN IFCT 2017
+E062,Star fruit (Averrhoa carambola),Fruits,,110,26.3,0.79,0.39,4.51,2.81,2.17,0.64,91.18,0.33,ICMR-NIN IFCT 2017
+E063,Strawberry (Fragaria x ananassa),Fruits,,103,24.6,0.97,0.56,3.4,2.5,1.51,0.99,92.03,0.54,ICMR-NIN IFCT 2017
+E064,"Tamarind, pulp (Tamarindus indica)",Fruits,,1207,288.5,2.92,0.15,67.35,5.31,3.73,1.58,20.83,3.44,ICMR-NIN IFCT 2017
+E065,"Water melon, dark green (sugar baby) (Citrullus vulgaris)",Fruits,,85,20.3,0.6,0.16,3.86,0.7,0.35,0.34,94.54,0.13,ICMR-NIN IFCT 2017
+E066,"Water melon, pale green (Citrullus vulgaris)",Fruits,,70,16.7,0.59,0.16,3.02,0.78,0.4,0.38,95.33,0.12,ICMR-NIN IFCT 2017
+E067,Wood Apple (Limonia acidissima),Fruits,,327,78.2,3.14,3.62,7.52,5.21,3.77,1.44,79.36,1.15,ICMR-NIN IFCT 2017
+E068,Zizyphus (Zizyphus jujube),Fruits,,204,48.8,1.34,0.35,9.4,3.73,2.71,1.02,84.39,0.8,ICMR-NIN IFCT 2017
+F001,Beet root (Beta vulgaris),Roots And Tubers,,149,35.6,1.95,0.14,6.18,3.31,2.6,0.71,86.95,1.46,ICMR-NIN IFCT 2017
+F002,"Carrot, orange (Daucus carota)",Roots And Tubers,,139,33.2,0.95,0.47,5.55,4.18,2.81,1.37,87.69,1.16,ICMR-NIN IFCT 2017
+F003,"Carrot, red (Daucus carota)",Roots And Tubers,,160,38.2,1.04,0.47,6.71,4.49,3.09,1.4,86.07,1.22,ICMR-NIN IFCT 2017
+F004,Colocasia (Colocasia esculenta),Roots And Tubers,,372,88.9,3.31,0.17,17.85,3.22,2.54,0.68,73.49,1.95,ICMR-NIN IFCT 2017
+F005,Lotus root (Nelumbium nelumbo),Roots And Tubers,,332,79.3,1.94,0.93,14.67,4.7,2.86,1.84,76.26,1.5,ICMR-NIN IFCT 2017
+F006,"Potato, brown skin, big (Solanum tuberosum)",Roots And Tubers,,292,69.8,1.54,0.23,14.89,1.71,1.13,0.58,80.72,0.92,ICMR-NIN IFCT 2017
+F007,"Potato, brown skin, small (Solanum tuberosum)",Roots And Tubers,,255,60.9,1.35,0.22,12.9,1.69,1.15,0.54,82.97,0.87,ICMR-NIN IFCT 2017
+F008,"Potato, red skin (Solanum tuberosum)",Roots And Tubers,,306,73.1,1.83,0.22,15.43,1.68,1.11,0.57,79.72,1.13,ICMR-NIN IFCT 2017
+F009,"Radish, elongate, red skin (Raphanus sativus)",Roots And Tubers,,134,32.0,0.67,0.13,6.71,2.46,1.96,0.49,89.32,0.73,ICMR-NIN IFCT 2017
+F010,"Radish, elongate, white skin (Raphanus sativus)",Roots And Tubers,,135,32.3,0.77,0.15,6.56,2.65,1.98,0.67,89.05,0.82,ICMR-NIN IFCT 2017
+F011,"Radish, round, red skin (Raphanus sativus)",Roots And Tubers,,130,31.1,0.89,0.16,6.07,2.29,1.56,0.73,89.68,0.91,ICMR-NIN IFCT 2017
+F012,"Radish, round, white skin (Raphanus sativus)",Roots And Tubers,,129,30.8,0.8,0.14,6.13,2.37,1.63,0.74,89.76,0.8,ICMR-NIN IFCT 2017
+F013,"Sweet potato, brown skin (Ipomoea batatas)",Roots And Tubers,,456,109.0,1.33,0.26,24.25,3.99,2.57,1.43,69.21,0.96,ICMR-NIN IFCT 2017
+F014,"Sweet potato, pink skin (Ipomoea batatas)",Roots And Tubers,,452,108.0,1.27,0.33,23.93,3.94,2.53,1.41,69.58,0.95,ICMR-NIN IFCT 2017
+F015,Tapioca (Manihot esculenta),Roots And Tubers,,334,79.8,1.03,0.2,17.81,4.61,3.85,0.76,75.23,1.12,ICMR-NIN IFCT 2017
+F016,Water Chestnut (Eleocharis dulcis),Roots And Tubers,,400,95.6,0.86,0.37,21.46,3.02,2.15,0.87,73.34,0.95,ICMR-NIN IFCT 2017
+F017,"Yam, elephant (Amorphophallus campanulatus)",Roots And Tubers,,353,84.4,2.56,0.14,17.46,4.17,3.25,0.92,74.39,1.29,ICMR-NIN IFCT 2017
+F018,"Yam, ordinary (Amorphophallus sp.)",Roots And Tubers,,349,83.4,2.18,0.17,17.65,4.08,3.32,0.76,74.28,1.64,ICMR-NIN IFCT 2017
+F019,"Yam, wild (Dioscorea villosa)",Roots And Tubers,,430,102.8,3.07,0.3,20.95,4.57,3.29,1.29,69.35,1.76,ICMR-NIN IFCT 2017
+G001,"Chillies, green-1 (Capsicum annum)",Condiments And Spices-Dry,,191,45.7,2.62,0.73,6.32,4.86,3.31,1.55,84.47,1.01,ICMR-NIN IFCT 2017
+G002,"Chillies, green-2 (Capsicum annum)",Condiments And Spices-Dry,,167,39.9,2.28,0.75,5.27,5.13,3.79,1.34,85.72,0.85,ICMR-NIN IFCT 2017
+G003,"Chillies, green-3 (Capsicum annum)",Condiments And Spices-Dry,,169,40.4,2.38,0.75,5.23,5.1,3.61,1.5,85.59,0.95,ICMR-NIN IFCT 2017
+G004,"Chillies, green-4 (Capsicum annum)",Condiments And Spices-Dry,,190,45.4,2.33,0.74,6.63,4.15,2.84,1.31,85.29,0.87,ICMR-NIN IFCT 2017
+G005,"Chillies, green-5 (Capsicum annum)",Condiments And Spices-Dry,,180,43.0,2.01,0.65,6.64,3.95,2.83,1.12,85.93,0.82,ICMR-NIN IFCT 2017
+G006,"Chillies, green-6 (Capsicum annum)",Condiments And Spices-Dry,,175,41.8,3.01,0.64,5.31,5.15,3.91,1.24,84.93,0.96,ICMR-NIN IFCT 2017
+G007,"Chillies, green-7 (Capsicum annum)",Condiments And Spices-Dry,,163,39.0,2.12,0.6,5.61,4.95,3.75,1.2,85.83,0.9,ICMR-NIN IFCT 2017
+G008,"Chillies, green - all varieties (Capsicum annum)",Condiments And Spices-Dry,,177,42.3,2.36,0.72,5.86,4.77,3.41,1.37,85.39,0.91,ICMR-NIN IFCT 2017
+G009,Coriander leaves (Coriandrum sativum),Condiments And Spices-Dry,,130,31.1,3.52,0.7,1.93,4.66,3.24,1.42,86.99,2.19,ICMR-NIN IFCT 2017
+G010,Curry leaves (Murraya koenigii),Condiments And Spices-Dry,,266,63.6,7.41,1.06,4.51,16.83,13.81,3.02,65.33,4.86,ICMR-NIN IFCT 2017
+G011,"Garlic, big clove (Allium sativum)",Condiments And Spices-Dry,,518,123.8,6.92,0.16,21.93,5.22,2.56,2.66,64.38,1.4,ICMR-NIN IFCT 2017
+G012,"Garlic, small clove (Allium sativum)",Condiments And Spices-Dry,,514,122.8,6.75,0.14,21.84,5.47,2.61,2.86,64.42,1.38,ICMR-NIN IFCT 2017
+G013,"Garlic, single clove, Kashmir (Allium sativum)",Condiments And Spices-Dry,,523,125.0,6.12,0.16,23.46,4.01,2.2,1.81,64.49,1.76,ICMR-NIN IFCT 2017
+G014,"Ginger, fresh (Zingiber officinale)",Condiments And Spices-Dry,fresh,230,55.0,2.22,0.85,8.97,5.36,4.28,1.08,81.27,1.33,ICMR-NIN IFCT 2017
+G015,Mango ginger (Curcuma amada),Condiments And Spices-Dry,,177,42.3,1.45,0.7,6.98,4.74,3.79,0.95,84.55,1.57,ICMR-NIN IFCT 2017
+G016,Mint leaves (Mentha spicata ),Condiments And Spices-Dry,,155,37.0,4.66,0.65,2.39,5.89,4.49,1.4,84.24,2.18,ICMR-NIN IFCT 2017
+G017,"Onion, big (Allium cepa)",Condiments And Spices-Dry,,201,48.0,1.5,0.24,9.56,2.45,1.92,0.53,85.76,0.5,ICMR-NIN IFCT 2017
+G018,"Onion, small (Allium cepa)",Condiments And Spices-Dry,,237,56.6,1.82,0.16,11.58,1.16,0.7,0.46,84.67,0.61,ICMR-NIN IFCT 2017
+G019,Asafoetida (Ferula assa-foetida),Condiments And Spices-Dry,,1387,331.5,6.34,1.26,71.95,5.13,3.9,1.23,9.42,5.9,ICMR-NIN IFCT 2017
+G020,"Cardamom, green (Elettaria cardamomum)",Condiments And Spices-Dry,,1067,255.0,8.1,2.6,47.76,23.1,20.46,2.64,11.24,7.21,ICMR-NIN IFCT 2017
+G021,"Cardamom, black (Elettaria cardamomum)",Condiments And Spices-Dry,,1132,270.6,6.69,2.8,52.53,23.46,20.73,2.74,6.69,7.84,ICMR-NIN IFCT 2017
+G022,"Chillies, red (Capsicum annum)",Condiments And Spices-Dry,,990,236.6,12.69,6.4,29.46,31.15,26.55,4.6,14.57,5.73,ICMR-NIN IFCT 2017
+G023,Cloves (Syzygium aromaticum),Condiments And Spices-Dry,,781,186.7,5.86,8.41,18.73,34.52,28.07,6.46,26.49,5.99,ICMR-NIN IFCT 2017
+G024,Coriander seeds (Coriandrum sativum),Condiments And Spices-Dry,,1125,268.9,10.66,17.47,12.98,44.81,35.27,9.54,8.72,5.36,ICMR-NIN IFCT 2017
+G025,Cumin seeds (Cuminum cyminum),Condiments And Spices-Dry,,1274,304.5,13.91,16.64,22.62,30.35,25.73,4.62,10.59,5.9,ICMR-NIN IFCT 2017
+G026,Fenugreek seeds (Trigonella foenum graecum),Condiments And Spices-Dry,,983,234.9,25.41,5.72,10.57,47.55,27.63,19.92,7.82,2.93,ICMR-NIN IFCT 2017
+G027,Mace (Myristica fragrans),Condiments And Spices-Dry,,1488,355.6,6.24,24.41,26.51,20.31,16.78,3.54,20.06,2.47,ICMR-NIN IFCT 2017
+G028,Nutmeg (Myristica fragrans),Condiments And Spices-Dry,,1940,463.7,6.3,36.52,27.64,11.99,10.54,1.46,15.55,1.99,ICMR-NIN IFCT 2017
+G029,Omum (Trachyspermum ammi),Condiments And Spices-Dry,,1495,357.3,15.89,21.11,24.53,20.58,17.2,3.38,9.71,8.18,ICMR-NIN IFCT 2017
+G030,Pippali (Piper longum),Condiments And Spices-Dry,,906,216.5,10.53,2.27,35.7,34.14,29.57,4.57,10.95,6.41,ICMR-NIN IFCT 2017
+G031,"Pepper, black (Piper nigrum)",Condiments And Spices-Dry,,910,217.5,10.12,2.74,36.22,33.16,30.61,2.54,13.18,4.58,ICMR-NIN IFCT 2017
+G032,Poppy seeds (Papaver somniferum),Condiments And Spices-Dry,,1768,422.6,20.31,30.38,12.37,26.68,15.62,11.06,4.22,6.04,ICMR-NIN IFCT 2017
+G033,Turmeric powder (Curcuma domestica),Condiments And Spices-Dry,,1174,280.6,7.66,5.03,49.22,21.38,18.79,2.59,10.58,6.13,ICMR-NIN IFCT 2017
+H001,Almond (Prunus amygdalus),Nuts And Oil Seeds,,2549,609.2,18.41,58.49,3.04,13.06,10.55,2.52,4.37,2.62,ICMR-NIN IFCT 2017
+H002,"Arecanut, dried, brown (Areca catechu)",Nuts And Oil Seeds,dried,1467,350.6,5.78,4.35,70.42,11.44,10.14,1.3,6.63,1.39,ICMR-NIN IFCT 2017
+H003,"Arecanut, dried, red color (Areca catechu)",Nuts And Oil Seeds,dried,1477,353.0,6.46,4.46,70.27,11.11,10.09,1.03,6.3,1.41,ICMR-NIN IFCT 2017
+H004,"Arecanut, fresh (Areca catechu)",Nuts And Oil Seeds,fresh,1024,244.7,2.73,5.51,45.0,7.63,6.59,1.03,37.7,1.43,ICMR-NIN IFCT 2017
+H005,Cashew nut (Anacardium occidentale),Nuts And Oil Seeds,,2438,582.7,18.78,45.2,25.46,3.86,2.23,1.63,4.44,2.25,ICMR-NIN IFCT 2017
+H006,"Coconut, kernel, dry (Cocos nucifera)",Nuts And Oil Seeds,dry,2611,624.0,7.27,63.26,8.01,15.88,14.55,1.33,3.97,1.61,ICMR-NIN IFCT 2017
+H007,"Coconut, kernel, fresh (Cocos nucifera)",Nuts And Oil Seeds,fresh,1711,408.9,3.84,41.38,6.3,10.42,9.43,0.99,36.14,1.93,ICMR-NIN IFCT 2017
+H008,"Garden cress, seeds (Lepidium sativum)",Nuts And Oil Seeds,,1863,445.3,23.36,23.74,33.66,8.27,6.33,1.95,4.6,6.37,ICMR-NIN IFCT 2017
+H009,"Gingelly seeds, black (Sesamum indicum)",Nuts And Oil Seeds,,2124,507.6,19.17,43.1,10.29,17.16,13.57,3.59,4.51,5.78,ICMR-NIN IFCT 2017
+H010,"Gingelly seeds, brown (Sesamum indicum)",Nuts And Oil Seeds,,2161,516.5,21.61,43.22,9.76,17.21,13.58,3.63,3.62,4.58,ICMR-NIN IFCT 2017
+H011,"Gingelly seeds, white (Sesamum indicum)",Nuts And Oil Seeds,,2174,519.6,21.7,43.05,10.83,16.99,13.49,3.51,3.3,4.13,ICMR-NIN IFCT 2017
+H012,Ground nut (Arachis hypogaea),Nuts And Oil Seeds,,2176,520.1,23.65,39.63,17.27,10.38,8.58,1.79,6.97,2.11,ICMR-NIN IFCT 2017
+H013,Mustard seeds (Brassica nigra),Nuts And Oil Seeds,,2132,509.6,19.51,40.19,16.8,14.1,10.63,3.47,5.67,3.73,ICMR-NIN IFCT 2017
+H014,Linseeds (Linum usitatissimum),Nuts And Oil Seeds,,1857,443.8,18.55,35.67,10.99,26.17,21.83,4.33,5.48,3.15,ICMR-NIN IFCT 2017
+H015,"Niger seeds, black (Guizotia abyssinica)",Nuts And Oil Seeds,,2144,512.4,18.92,38.61,22.98,10.93,10.5,0.43,4.65,3.91,ICMR-NIN IFCT 2017
+H016,"Niger seeds, gray (Guizotia abyssinica)",Nuts And Oil Seeds,,2128,508.6,18.34,39.53,20.59,10.96,10.54,0.41,5.66,4.92,ICMR-NIN IFCT 2017
+H017,Pine seed (Pinus sp.),Nuts And Oil Seeds,,2486,594.2,12.55,48.79,26.77,3.79,2.23,1.57,5.32,2.78,ICMR-NIN IFCT 2017
+H018,Pistachio nuts (Pistacia vera),Nuts And Oil Seeds,,2257,539.4,23.35,42.49,15.82,10.64,8.23,2.41,4.68,3.02,ICMR-NIN IFCT 2017
+H019,Safflower seeds (Carthamus tinctorius),Nuts And Oil Seeds,,1981,473.5,17.66,30.87,30.18,13.49,10.24,3.25,5.24,2.57,ICMR-NIN IFCT 2017
+H020,Sunflower seeds (Helianthus annuus),Nuts And Oil Seeds,,2453,586.3,23.53,51.85,6.85,10.8,8.51,2.29,3.53,3.44,ICMR-NIN IFCT 2017
+H021,Walnut (Juglans regia),Nuts And Oil Seeds,,2809,671.4,14.92,64.27,10.14,5.39,4.74,0.65,3.56,1.72,ICMR-NIN IFCT 2017
+I001,"Jaggery, cane (Saccharum officinarum)",Sugars,,1480,353.7,1.85,0.16,84.87,,,,11.2,1.92,ICMR-NIN IFCT 2017
+I002,"Sugarcane, juice (Saccharum officinarum)",Sugars,,242,57.8,0.16,0.4,13.11,0.56,0.4,0.16,85.54,0.23,ICMR-NIN IFCT 2017
+J001,"Button mushroom, fresh (Agaricus sp.)",Mushrooms,fresh,115,27.5,3.68,0.42,1.98,3.11,2.76,0.35,90.09,0.71,ICMR-NIN IFCT 2017
+J002,"Chicken mushroom, fresh (Lactiporus sp.)",Mushrooms,fresh,89,21.3,1.84,0.25,2.76,1.99,1.82,0.18,92.43,0.74,ICMR-NIN IFCT 2017
+J003,"Shiitake mushroom, fresh (Lentinula sp.)",Mushrooms,fresh,243,58.1,3.19,0.76,8.98,3.02,2.03,0.99,82.94,1.11,ICMR-NIN IFCT 2017
+J004,"Oyster mushroom, dried (Pleurotus sp.)",Mushrooms,dried,1019,243.5,19.04,2.86,33.07,39.12,35.64,3.48,4.51,1.41,ICMR-NIN IFCT 2017
+K001,Toddy (Borassus flabellifer),Miscellaneous Foods,,101,24.1,0.18,0.03,5.72,,,,93.86,0.21,ICMR-NIN IFCT 2017
+K002,Coconut Water (Cocos nucifera),Miscellaneous Foods,,64,15.3,0.26,0.16,3.16,,,,95.77,0.65,ICMR-NIN IFCT 2017
+L001,"Milk, whole, Buffalo",Milk And Milk Products,,449,107.3,3.68,6.58,8.39,,,,80.68,0.67,ICMR-NIN IFCT 2017
+L002,"Milk, whole, Cow",Milk And Milk Products,,305,72.9,3.26,4.48,4.94,,,,86.64,0.68,ICMR-NIN IFCT 2017
+L003,Paneer,Milk And Milk Products,,1278,305.4,18.86,24.78,2.41,,,,51.96,1.98,ICMR-NIN IFCT 2017
+L004,Khoa,Milk And Milk Products,,1322,316.0,16.34,20.62,16.53,,,,42.51,4.0,ICMR-NIN IFCT 2017
+M001,"Egg, poultry, whole, raw",Egg And Egg Products,raw,564,134.8,13.28,9.15,,,,,76.51,0.81,ICMR-NIN IFCT 2017
+M002,"Egg, poultry, white, raw",Egg And Egg Products,raw,187,44.7,10.84,0.06,,,,,86.68,0.75,ICMR-NIN IFCT 2017
+M003,"Egg, poultry, yolk, raw",Egg And Egg Products,raw,1242,296.8,15.74,26.34,,,,,53.57,1.05,ICMR-NIN IFCT 2017
+M004,"Egg, poultry, whole, boiled",Egg And Egg Products,boiled,618,147.7,13.43,10.54,,,,,73.46,0.86,ICMR-NIN IFCT 2017
+M005,"Egg, poultry, white, boiled",Egg And Egg Products,boiled,220,52.6,12.37,0.26,,,,,83.54,0.81,ICMR-NIN IFCT 2017
+M006,"Egg, poultry, yolk, boiled",Egg And Egg Products,boiled,1290,308.3,16.13,27.46,,,,,51.42,1.38,ICMR-NIN IFCT 2017
+M007,"Egg, poultry, omlet",Egg And Egg Products,,710,169.7,16.53,11.6,,,,,68.48,0.96,ICMR-NIN IFCT 2017
+M008,"Egg, country hen, whole, raw",Egg And Egg Products,raw,704,168.3,13.14,13.0,,,,,72.96,0.86,ICMR-NIN IFCT 2017
+M009,"Egg, country hen, whole, boiled",Egg And Egg Products,boiled,767,183.3,14.43,14.1,,,,,70.43,0.94,ICMR-NIN IFCT 2017
+M010,"Egg, country hen, omlet",Egg And Egg Products,,855,204.3,14.8,16.3,,,,,67.8,1.08,ICMR-NIN IFCT 2017
+M011,"Egg, duck, whole, boiled",Egg And Egg Products,boiled,738,176.4,13.8,13.61,,,,,71.61,0.97,ICMR-NIN IFCT 2017
+M012,"Egg, duck, whole, raw",Egg And Egg Products,raw,760,181.6,14.6,13.83,,,,,70.53,0.99,ICMR-NIN IFCT 2017
+M013,"Egg, duck, whole, omlet",Egg And Egg Products,,804,192.2,15.1,14.8,,,,,68.9,1.18,ICMR-NIN IFCT 2017
+M014,"Egg, quial, whole, raw",Egg And Egg Products,raw,635,151.8,12.39,11.46,,,,,75.11,0.94,ICMR-NIN IFCT 2017
+M015,"Egg, quial, whole, boiled",Egg And Egg Products,boiled,647,154.6,13.03,11.5,,,,,74.41,0.99,ICMR-NIN IFCT 2017
+N001,"Chicken, poultry, leg, skinless",Poultry,,1605,383.6,19.44,12.64,,,,,67.61,1.14,ICMR-NIN IFCT 2017
+N002,"Chicken, poultry, thigh, skinless",Poultry,,836,199.8,18.18,14.23,,,,,67.58,1.14,ICMR-NIN IFCT 2017
+N003,"Chicken, poultry, breast, skinless",Poultry,,704,168.3,21.81,9.0,,,,,67.15,1.19,ICMR-NIN IFCT 2017
+N004,"Chicken, poultry, wing, skinless",Poultry,,807,192.9,17.42,13.81,,,,,67.48,1.13,ICMR-NIN IFCT 2017
+N005,"Poultry, chicken, liver",Poultry,,518,123.8,21.57,4.08,,,,,73.2,1.11,ICMR-NIN IFCT 2017
+N006,"Poultry, chicken, gizzard",Poultry,,386,92.3,18.22,2.07,,,,,78.05,1.46,ICMR-NIN IFCT 2017
+N007,"Country hen, leg, with skin",Poultry,,723,172.8,17.01,11.73,,,,,70.02,1.2,ICMR-NIN IFCT 2017
+N008,"Country hen, thigh, with skin",Poultry,,785,187.6,18.29,12.82,,,,,67.46,1.23,ICMR-NIN IFCT 2017
+N009,"Country hen, breast, with skin",Poultry,,753,180.0,22.08,10.2,,,,,66.53,1.14,ICMR-NIN IFCT 2017
+N010,"Country hen, wing, with skin",Poultry,,764,182.6,18.65,12.09,,,,,68.01,1.14,ICMR-NIN IFCT 2017
+N011,"Duck, meat, with skin",Poultry,,547,130.7,19.07,6.03,,,,,73.49,1.22,ICMR-NIN IFCT 2017
+N012,"Emu, meat, skinless",Poultry,,556,132.9,22.65,4.62,,,,,71.65,0.98,ICMR-NIN IFCT 2017
+N013,"Guinea fowl, meat, with skin",Poultry,,469,112.1,20.52,3.24,,,,,75.21,0.92,ICMR-NIN IFCT 2017
+N014,"Pigeon, meat, with skin",Poultry,,528,126.2,17.94,6.03,,,,,74.61,1.32,ICMR-NIN IFCT 2017
+N015,"Quail, meat, skinless",Poultry,,576,137.7,20.92,5.95,,,,,71.58,1.35,ICMR-NIN IFCT 2017
+N016,"Turkey, leg, with skin",Poultry,,647,154.6,20.3,8.15,,,,,69.24,1.21,ICMR-NIN IFCT 2017
+N017,"Turkey, thigh, with skin",Poultry,,581,138.9,20.46,6.31,,,,,72.17,0.97,ICMR-NIN IFCT 2017
+N018,"Turkey, breast, with skin",Poultry,,671,160.4,21.96,8.04,,,,,68.44,1.01,ICMR-NIN IFCT 2017
+N019,"Turkey, wing, with skin",Poultry,,771,184.3,21.91,10.77,,,,,66.16,0.97,ICMR-NIN IFCT 2017
+O001,"Goat, shoulder",Animal Meat,,787,188.1,20.33,11.94,,,,,66.39,0.9,ICMR-NIN IFCT 2017
+O002,"Goat, chops",Animal Meat,,568,135.8,20.39,5.98,,,,,72.46,0.99,ICMR-NIN IFCT 2017
+O003,"Goat, legs",Animal Meat,,669,159.9,22.07,7.94,,,,,68.85,0.97,ICMR-NIN IFCT 2017
+O004,"Goat, brain",Animal Meat,,533,127.4,13.82,8.06,,,,,76.74,1.29,ICMR-NIN IFCT 2017
+O005,"Goat, tongue",Animal Meat,,789,188.6,16.63,13.68,,,,,68.4,1.02,ICMR-NIN IFCT 2017
+O006,"Goat, lungs",Animal Meat,,401,95.8,16.86,3.09,,,,,79.03,0.74,ICMR-NIN IFCT 2017
+O007,"Goat, heart",Animal Meat,,492,117.6,19.38,4.4,,,,,75.15,0.95,ICMR-NIN IFCT 2017
+O008,"Goat, liver",Animal Meat,,526,125.7,20.32,4.88,,,,,73.37,1.3,ICMR-NIN IFCT 2017
+O009,"Goat, tripe",Animal Meat,,386,92.3,15.36,3.36,,,,,80.94,0.23,ICMR-NIN IFCT 2017
+O010,"Goat, spleen",Animal Meat,,401,95.8,18.45,2.37,,,,,77.93,1.15,ICMR-NIN IFCT 2017
+O011,"Goat, kidneys",Animal Meat,,374,89.4,15.6,2.93,,,,,80.26,1.1,ICMR-NIN IFCT 2017
+O012,"Goat, tube (small intestine)",Animal Meat,,525,125.5,12.92,8.26,,,,,78.12,0.54,ICMR-NIN IFCT 2017
+O013,"Goat, testis",Animal Meat,,298,71.2,12.32,2.39,,,,,84.29,0.87,ICMR-NIN IFCT 2017
+O014,"Sheep, shoulder",Animal Meat,,840,200.8,18.24,14.31,,,,,66.51,0.86,ICMR-NIN IFCT 2017
+O015,"Sheep, chops",Animal Meat,,496,118.5,18.0,5.15,,,,,75.66,1.09,ICMR-NIN IFCT 2017
+O016,"Sheep, leg",Animal Meat,,686,164.0,21.42,8.69,,,,,68.26,0.94,ICMR-NIN IFCT 2017
+O017,"Sheep, brain",Animal Meat,,492,117.6,13.05,7.29,,,,,78.36,1.19,ICMR-NIN IFCT 2017
+O018,"Sheep, tongue",Animal Meat,,783,187.1,16.61,13.53,,,,,68.7,1.06,ICMR-NIN IFCT 2017
+O019,"Sheep, lungs",Animal Meat,,363,86.8,16.12,2.41,,,,,80.41,0.97,ICMR-NIN IFCT 2017
+O020,"Sheep, heart",Animal Meat,,445,106.4,18.19,3.66,,,,,77.06,0.97,ICMR-NIN IFCT 2017
+O021,"Sheep, liver",Animal Meat,,559,133.6,22.26,4.87,,,,,69.71,1.26,ICMR-NIN IFCT 2017
+O022,"Sheep, tripe",Animal Meat,,435,104.0,16.76,4.05,,,,,78.81,0.26,ICMR-NIN IFCT 2017
+O023,"Sheep, spleen",Animal Meat,,384,91.8,16.02,3.02,,,,,79.66,1.17,ICMR-NIN IFCT 2017
+O024,"Sheep, kidneys",Animal Meat,,384,91.8,16.22,2.92,,,,,79.77,1.0,ICMR-NIN IFCT 2017
+O025,"Beef, shoulder",Animal Meat,,889,212.5,20.56,14.59,,,,,63.84,0.95,ICMR-NIN IFCT 2017
+O026,"Beef, chops",Animal Meat,,585,139.8,19.82,6.71,,,,,72.4,0.96,ICMR-NIN IFCT 2017
+O027,"Beef, round (leg)",Animal Meat,,658,157.3,22.64,7.38,,,,,68.04,1.19,ICMR-NIN IFCT 2017
+O028,"Beef, brain",Animal Meat,,523,125.0,10.55,9.28,,,,,78.71,1.37,ICMR-NIN IFCT 2017
+O029,"Beef, tongue",Animal Meat,,731,174.7,15.63,12.57,,,,,70.97,0.73,ICMR-NIN IFCT 2017
+O030,"Beef, lungs",Animal Meat,,351,83.9,15.66,2.28,,,,,80.83,1.13,ICMR-NIN IFCT 2017
+O031,"Beef, heart",Animal Meat,,433,103.5,17.68,3.57,,,,,77.77,0.87,ICMR-NIN IFCT 2017
+O032,"Beef, liver",Animal Meat,,499,119.3,20.73,3.96,,,,,74.15,1.07,ICMR-NIN IFCT 2017
+O033,"Beef, tripe",Animal Meat,,316,75.5,13.1,2.51,,,,,83.74,0.55,ICMR-NIN IFCT 2017
+O034,"Beef, spleen",Animal Meat,,378,90.3,17.42,2.22,,,,,79.03,1.22,ICMR-NIN IFCT 2017
+O035,"Beef, kidneys",Animal Meat,,439,104.9,17.09,4.01,,,,,77.59,1.22,ICMR-NIN IFCT 2017
+O036,"Calf, shoulder",Animal Meat,,633,151.3,20.98,7.47,,,,,70.49,0.94,ICMR-NIN IFCT 2017
+O037,"Calf, chops",Animal Meat,,524,125.2,22.47,3.85,,,,,72.66,0.92,ICMR-NIN IFCT 2017
+O038,"Calf, round (leg)",Animal Meat,,615,147.0,21.1,6.92,,,,,71.13,0.74,ICMR-NIN IFCT 2017
+O039,"Calf, brain",Animal Meat,,448,107.1,9.84,7.6,,,,,81.19,1.26,ICMR-NIN IFCT 2017
+O040,"Calf, tongue",Animal Meat,,737,176.1,17.78,11.76,,,,,69.44,0.93,ICMR-NIN IFCT 2017
+O041,"Calf, heart",Animal Meat,,459,109.7,18.84,3.75,,,,,73.44,0.86,ICMR-NIN IFCT 2017
+O042,"Calf, liver",Animal Meat,,503,120.2,21.02,3.95,,,,,73.66,1.26,ICMR-NIN IFCT 2017
+O043,"Calf, spleen",Animal Meat,,379,90.6,17.71,2.12,,,,,78.65,1.41,ICMR-NIN IFCT 2017
+O044,"Calf, kidneys",Animal Meat,,387,92.5,15.16,3.5,,,,,80.23,1.02,ICMR-NIN IFCT 2017
+O045,"Mithun, shoulder",Animal Meat,,736,175.9,19.05,11.14,,,,,68.86,0.84,ICMR-NIN IFCT 2017
+O046,"Mithun, chops",Animal Meat,,536,128.1,18.19,6.12,,,,,73.81,0.79,ICMR-NIN IFCT 2017
+O047,"Mithun, round (leg)",Animal Meat,,485,115.9,19.61,4.1,,,,,72.25,0.9,ICMR-NIN IFCT 2017
+O048,"Pork, shoulder",Animal Meat,,993,237.3,17.41,18.83,,,,,62.92,0.75,ICMR-NIN IFCT 2017
+O049,"Pork, chops",Animal Meat,,748,178.8,19.41,11.3,,,,,68.4,0.64,ICMR-NIN IFCT 2017
+O050,"Pork, ham",Animal Meat,,1006,240.4,18.83,18.55,,,,,61.94,0.62,ICMR-NIN IFCT 2017
+O051,"Pork, lungs",Animal Meat,,358,85.6,15.13,2.74,,,,,81.12,0.93,ICMR-NIN IFCT 2017
+O052,"Pork, heart",Animal Meat,,457,109.2,16.31,4.87,,,,,77.74,1.01,ICMR-NIN IFCT 2017
+O053,"Pork, liver",Animal Meat,,484,115.7,19.89,3.94,,,,,74.88,1.18,ICMR-NIN IFCT 2017
+O054,"Pork, stomach",Animal Meat,,550,131.5,15.36,7.81,,,,,76.51,0.23,ICMR-NIN IFCT 2017
+O055,"Pork, spleen",Animal Meat,,357,85.3,15.13,2.71,,,,,80.93,1.13,ICMR-NIN IFCT 2017
+O056,"Pork, kidneys",Animal Meat,,379,90.6,14.35,3.65,,,,,80.92,0.97,ICMR-NIN IFCT 2017
+O057,"Pork, tube (small intestine)",Animal Meat,,587,140.3,14.96,8.98,,,,,75.42,0.55,ICMR-NIN IFCT 2017
+O058,"Hare, shoulder",Animal Meat,,603,144.1,21.13,6.58,,,,,71.06,1.17,ICMR-NIN IFCT 2017
+O059,"Hare, chops",Animal Meat,,445,106.4,20.62,2.55,,,,,75.47,1.27,ICMR-NIN IFCT 2017
+O060,"Hare, leg",Animal Meat,,503,120.2,20.52,4.16,,,,,73.0,1.26,ICMR-NIN IFCT 2017
+O061,"Rabbit, shoulder",Animal Meat,,635,151.8,20.01,7.96,,,,,70.75,1.19,ICMR-NIN IFCT 2017
+O062,"Rabbit, chops",Animal Meat,,565,135.0,22.61,4.88,,,,,71.03,1.35,ICMR-NIN IFCT 2017
+O063,"Rabbit, leg",Animal Meat,,584,139.6,21.31,5.99,,,,,70.33,1.26,ICMR-NIN IFCT 2017
+P001,Allathi (Elops machnata),Marine Fish,,406,97.0,21.77,0.98,,,,,75.91,1.06,ICMR-NIN IFCT 2017
+P002,Aluva (Parastromateus niger),Marine Fish,,434,103.7,21.63,1.8,,,,,75.71,1.39,ICMR-NIN IFCT 2017
+P003,Anchovy (Stolephorus indicus),Marine Fish,,367,87.7,19.88,0.78,,,,,77.77,1.62,ICMR-NIN IFCT 2017
+P004,Ari fish (Aprion virescens ),Marine Fish,,415,99.2,22.01,1.11,,,,,77.09,1.34,ICMR-NIN IFCT 2017
+P005,Betki (Lates calcarifer),Marine Fish,,284,67.9,15.28,0.29,,,,,82.52,1.12,ICMR-NIN IFCT 2017
+P006,Black snapper (Macolor niger),Marine Fish,,377,90.1,19.5,1.24,,,,,78.09,1.19,ICMR-NIN IFCT 2017
+P007,Bombay duck (Harpadon nehereus),Marine Fish,,287,68.6,13.53,1.03,,,,,83.24,1.07,ICMR-NIN IFCT 2017
+P008,Bommuralu (Muraenesox cinerius),Marine Fish,,485,115.9,22.3,2.87,,,,,76.42,1.21,ICMR-NIN IFCT 2017
+P009,Cat fish (Tachysurus thalassinus),Marine Fish,,456,109.0,22.18,2.13,,,,,76.22,1.32,ICMR-NIN IFCT 2017
+P010,Chakla 5 (Rachycentron canadum),Marine Fish,,406,97.0,20.21,1.68,,,,,78.36,1.07,ICMR-NIN IFCT 2017
+P011,Chappal (Aluterus monoceros ),Marine Fish,,317,75.8,17.17,0.67,,,,,80.61,1.23,ICMR-NIN IFCT 2017
+P012,Chelu (Elagatis bipinnulata),Marine Fish,,366,87.5,20.02,0.7,,,,,76.36,1.28,ICMR-NIN IFCT 2017
+P013,Chembali (Lutjanus quinquelineatus),Marine Fish,,406,97.0,20.06,1.77,,,,,77.54,0.86,ICMR-NIN IFCT 2017
+P014,Eri meen (Pristipomoides filamentosus),Marine Fish,,454,108.5,22.3,2.02,,,,,76.54,1.28,ICMR-NIN IFCT 2017
+P015,Gobro (Epinephelus diacanthus),Marine Fish,,362,86.5,19.37,0.88,,,,,78.84,0.98,ICMR-NIN IFCT 2017
+P016,Guitar fish (Rhinobatus prahli),Marine Fish,,400,95.6,22.56,0.44,,,,,75.73,1.32,ICMR-NIN IFCT 2017
+P017,Hilsa (Tenualosa ilisha),Marine Fish,,1083,258.8,21.8,18.49,,,,,60.09,1.11,ICMR-NIN IFCT 2017
+P018,Jallal (Arius sp.),Marine Fish,,420,100.4,21.55,1.46,,,,,77.5,1.17,ICMR-NIN IFCT 2017
+P019,Jathi vela meen (Lethrinus lentjan),Marine Fish,,453,108.3,22.45,1.92,,,,,75.66,1.26,ICMR-NIN IFCT 2017
+P020,Kadal bral (Synodus indicus),Marine Fish,,368,88.0,18.72,1.34,,,,,79.66,1.27,ICMR-NIN IFCT 2017
+P021,Kadali (Nemipterus mesoprion),Marine Fish,,530,126.7,22.07,4.2,,,,,73.74,1.06,ICMR-NIN IFCT 2017
+P022,Kalamaara (Leptomelanosoma indicum),Marine Fish,,523,125.0,20.89,4.54,,,,,75.5,1.08,ICMR-NIN IFCT 2017
+P023,Kalava (Epinephelus coioides),Marine Fish,,374,89.4,19.38,1.2,,,,,80.02,1.34,ICMR-NIN IFCT 2017
+P024,Kanamayya (Lutjanus rivulatus),Marine Fish,,367,87.7,20.19,0.65,,,,,77.59,1.07,ICMR-NIN IFCT 2017
+P025,Kannadi paarai (Alectis indicus),Marine Fish,,423,101.1,22.09,1.27,,,,,76.25,1.28,ICMR-NIN IFCT 2017
+P026,Karimeen (Etroplus suratensis),Marine Fish,,386,92.3,19.68,1.38,,,,,78.66,0.97,ICMR-NIN IFCT 2017
+P027,Karnagawala (Anchoa hepsetus),Marine Fish,,363,86.8,19.52,0.84,,,,,79.22,1.45,ICMR-NIN IFCT 2017
+P028,Kayrai (Thunnus albacores),Marine Fish,,454,108.5,20.15,3.0,,,,,72.69,1.28,ICMR-NIN IFCT 2017
+P029,Kiriyan (Atule mate),Marine Fish,,556,132.9,22.49,4.7,,,,,72.39,0.94,ICMR-NIN IFCT 2017
+P030,Kite fish (Mobula kuhlii),Marine Fish,,413,98.7,23.07,0.56,,,,,77.61,1.5,ICMR-NIN IFCT 2017
+P031,Korka (Terapon jarbua),Marine Fish,,528,126.2,23.72,3.36,,,,,72.25,1.09,ICMR-NIN IFCT 2017
+P032,Kulam paarai 1 (Carangoides fulvoguttatus),Marine Fish,,501,119.7,21.62,3.6,,,,,73.44,1.25,ICMR-NIN IFCT 2017
+P033,Maagaa (Polynemus plebeius),Marine Fish,,366,87.5,20.11,0.67,,,,,79.23,1.01,ICMR-NIN IFCT 2017
+P034,Mackerel (Rastrelliger kanagurta),Marine Fish,,423,101.1,21.51,1.53,,,,,74.55,1.2,ICMR-NIN IFCT 2017
+P035,Manda clathi (Naso reticulatus),Marine Fish,,398,95.1,21.27,1.0,,,,,76.32,1.48,ICMR-NIN IFCT 2017
+P036,Matha (Acanthurus mata),Marine Fish,,389,93.0,21.17,0.79,,,,,79.81,1.35,ICMR-NIN IFCT 2017
+P037,Milk fish (Chanos chanos),Marine Fish,,442,105.6,23.66,1.09,,,,,72.22,1.12,ICMR-NIN IFCT 2017
+P038,Moon fish (Mene maculata),Marine Fish,,526,125.7,20.74,4.69,,,,,74.21,1.69,ICMR-NIN IFCT 2017
+P039,Mullet (Mugil cephalus),Marine Fish,,393,93.9,20.23,1.32,,,,,76.12,1.16,ICMR-NIN IFCT 2017
+P040,Mural 1 (Tylosurus crocodilus),Marine Fish,,345,82.5,19.04,0.58,,,,,78.96,1.11,ICMR-NIN IFCT 2017
+P041,Myil meen (Istiophorus platypterus),Marine Fish,,410,98.0,22.89,0.56,,,,,75.57,1.21,ICMR-NIN IFCT 2017
+P042,Nalla bontha (Epinephelus sp.),Marine Fish,,364,87.0,19.82,0.72,,,,,79.32,1.0,ICMR-NIN IFCT 2017
+P043,Narba (Caranx sexfasciatus),Marine Fish,,432,103.3,21.95,1.6,,,,,76.37,1.17,ICMR-NIN IFCT 2017
+P044,Paarai (Caranx heberi),Marine Fish,,435,104.0,21.58,1.84,,,,,75.77,1.21,ICMR-NIN IFCT 2017
+P045,Padayappa (Canthidermis maculata),Marine Fish,,360,86.0,19.7,0.69,,,,,79.18,1.26,ICMR-NIN IFCT 2017
+P046,Pali kora (Panna microdon),Marine Fish,,394,94.2,19.25,1.81,,,,,78.63,1.0,ICMR-NIN IFCT 2017
+P047,Pambada (Lepturacanthus savala),Marine Fish,,537,128.3,21.95,4.44,,,,,74.67,1.41,ICMR-NIN IFCT 2017
+P048,Pandukopa (Pseudosciaena manchurica),Marine Fish,,360,86.0,19.73,0.65,,,,,77.46,1.15,ICMR-NIN IFCT 2017
+P049,Parava (Lactarius lactarius),Marine Fish,,467,111.6,21.5,2.74,,,,,77.19,1.08,ICMR-NIN IFCT 2017
+P050,Parcus (Psettodes erumei),Marine Fish,,361,86.3,19.87,0.62,,,,,79.01,1.12,ICMR-NIN IFCT 2017
+P051,Parrot fish (Scarus ghobban),Marine Fish,,375,89.6,20.82,0.57,,,,,76.84,1.4,ICMR-NIN IFCT 2017
+P052,Perinkilichai (Pinjalo pinjalo),Marine Fish,,387,92.5,20.89,0.87,,,,,78.33,1.02,ICMR-NIN IFCT 2017
+P053,Phopat (Coryphaena hippurus),Marine Fish,,424,101.3,22.05,1.33,,,,,76.42,1.24,ICMR-NIN IFCT 2017
+P054,Piranha 1 (Pygopritis sp.),Marine Fish,,549,131.2,20.46,5.43,,,,,76.15,0.93,ICMR-NIN IFCT 2017
+P055,"Pomfret, black (Parastromateus niger)",Marine Fish,,515,123.1,18.91,4.83,,,,,74.43,0.97,ICMR-NIN IFCT 2017
+P056,"Pomfret, snub nose (Trachinotus blochii)",Marine Fish,,375,89.6,21.05,0.46,,,,,77.81,1.29,ICMR-NIN IFCT 2017
+P057,"Pomfret, white (Pampus argenteus)",Marine Fish,,513,122.6,19.02,5.12,,,,,75.91,1.01,ICMR-NIN IFCT 2017
+P058,Pranel (Gerres sp.),Marine Fish,,405,96.8,19.69,1.89,,,,,79.54,0.76,ICMR-NIN IFCT 2017
+P059,Pulli paarai (Gnathanodon speciosus),Marine Fish,,399,95.4,20.06,1.55,,,,,75.99,1.19,ICMR-NIN IFCT 2017
+P060,Queen fish (Scomberoides commersonianus),Marine Fish,,400,95.6,20.97,1.17,,,,,76.63,1.22,ICMR-NIN IFCT 2017
+P061,Raai fish (Lobotes surinamensis),Marine Fish,,430,102.8,21.61,1.69,,,,,77.14,1.11,ICMR-NIN IFCT 2017
+P062,Raai vanthu (Epinephelus chlorostigma),Marine Fish,,410,98.0,19.39,2.17,,,,,79.95,0.92,ICMR-NIN IFCT 2017
+P063,Rani (Pink perch),Marine Fish,,377,90.1,18.83,1.49,,,,,78.55,1.01,ICMR-NIN IFCT 2017
+P064,"Ray fish, bow head, spotted (Rhina ancylostoma)",Marine Fish,,349,83.4,19.03,0.7,,,,,80.3,1.15,ICMR-NIN IFCT 2017
+P065,Red snapper (Lutjanus argentimaculatus),Marine Fish,,437,104.4,22.79,1.34,,,,,76.28,1.26,ICMR-NIN IFCT 2017
+P066,"Red snapper, small (Priacanthus hamrur)",Marine Fish,,451,107.8,21.5,2.3,,,,,76.31,1.1,ICMR-NIN IFCT 2017
+P067,Sadaya (Platax orbicularis),Marine Fish,,462,110.4,20.68,2.97,,,,,75.53,1.32,ICMR-NIN IFCT 2017
+P068,Salmon (Salmo salar),Marine Fish,,721,172.3,20.97,9.86,,,,,67.84,1.13,ICMR-NIN IFCT 2017
+P069,Sangada (Nemipterus japanicus),Marine Fish,,443,105.9,20.26,2.67,,,,,78.51,1.26,ICMR-NIN IFCT 2017
+P070,Sankata paarai (Caranx ignobilis),Marine Fish,,434,103.7,21.87,1.68,,,,,74.88,1.18,ICMR-NIN IFCT 2017
+P071,Sardine (Sardinella longiceps),Marine Fish,,637,152.2,17.91,8.99,,,,,72.29,0.84,ICMR-NIN IFCT 2017
+P072,Shark (Carcharhinus sorrah),Marine Fish,,398,95.1,21.6,0.83,,,,,72.82,1.08,ICMR-NIN IFCT 2017
+P073,"Shark, hammer head (Sphyrna mokarran)",Marine Fish,,432,103.3,23.4,0.8,,,,,74.61,0.92,ICMR-NIN IFCT 2017
+P074,"Shark, spotted (Stegostoma fasciatum)",Marine Fish,,384,91.8,20.95,0.75,,,,,78.83,1.04,ICMR-NIN IFCT 2017
+P075,Shelavu (Sphyraena jello),Marine Fish,,446,106.6,22.46,1.74,,,,,74.6,1.26,ICMR-NIN IFCT 2017
+P076,Silan 1 (Silonia silondia),Marine Fish,,633,151.3,22.72,6.68,,,,,70.12,0.77,ICMR-NIN IFCT 2017
+P077,Silk fish (Beryx sp.),Marine Fish,,408,97.5,20.65,1.53,,,,,77.61,1.05,ICMR-NIN IFCT 2017
+P078,Silver carp (Hypophthalmichthys molitrix),Marine Fish,,555,132.6,21.71,5.17,,,,,72.47,0.95,ICMR-NIN IFCT 2017
+P079,Sole fish (Cynoglossus arel),Marine Fish,,367,87.7,19.05,1.18,,,,,80.18,1.06,ICMR-NIN IFCT 2017
+P080,Stingray (Dasyatis pastinaca),Marine Fish,,408,97.5,23.98,0.68,,,,,75.67,1.14,ICMR-NIN IFCT 2017
+P081,Tarlava (Drepane punctata),Marine Fish,,414,98.9,21.72,1.2,,,,,76.76,1.14,ICMR-NIN IFCT 2017
+P082,Tholam (Plectorhinchus schotaf),Marine Fish,,432,103.3,20.78,2.13,,,,,76.2,1.06,ICMR-NIN IFCT 2017
+P083,Tilapia (Oreochromis niloticus),Marine Fish,,349,83.4,18.48,1.08,,,,,79.57,1.18,ICMR-NIN IFCT 2017
+P084,Tuna (Euthynnus affinis),Marine Fish,,470,112.3,24.5,1.44,,,,,72.12,1.11,ICMR-NIN IFCT 2017
+P085,"Tuna, striped (Katsuwonus pelamis)",Marine Fish,,403,96.3,21.28,1.12,,,,,77.76,0.87,ICMR-NIN IFCT 2017
+P086,Valava (Chirocentrus nudus),Marine Fish,,410,98.0,21.8,1.06,,,,,77.25,1.27,ICMR-NIN IFCT 2017
+P087,Vanjaram (Scomberomorus commerson),Marine Fish,,570,136.2,22.28,5.18,,,,,72.3,1.33,ICMR-NIN IFCT 2017
+P088,Vela meen (Aprion virescens),Marine Fish,,537,128.3,22.16,4.34,,,,,71.82,1.34,ICMR-NIN IFCT 2017
+P089,Vora (Siganus javus),Marine Fish,,422,100.9,20.14,2.14,,,,,76.94,1.26,ICMR-NIN IFCT 2017
+P090,Whale shark (Galeocerdo cuvier),Marine Fish,,401,95.8,21.83,0.82,,,,,77.59,1.48,ICMR-NIN IFCT 2017
+P091,Xiphinis (Xiphias gladius),Marine Fish,,370,88.4,19.82,0.88,,,,,79.22,1.15,ICMR-NIN IFCT 2017
+P092,Cat fish (Ompok bimaculatus),Marine Fish,,600,143.4,24.68,5.28,,,,,69.34,1.57,ICMR-NIN IFCT 2017
+Q001,Crab (Menippe mercenaria),Marine Shellfish,,343,82.0,10.23,1.41,,,,,79.77,1.74,ICMR-NIN IFCT 2017
+Q002,"Crab, sea (Portunus sanguinolentus)",Marine Shellfish,,283,67.6,15.36,0.6,,,,,79.67,0.92,ICMR-NIN IFCT 2017
+Q003,"Lobster, brown (Thenus orientalis)",Marine Shellfish,,292,69.8,15.96,0.56,,,,,81.48,1.29,ICMR-NIN IFCT 2017
+Q004,"Lobster, king size 1 (Thenus orientalis)",Marine Shellfish,,375,89.6,18.54,0.78,,,,,77.77,1.08,ICMR-NIN IFCT 2017
+Q005,Mud crab (Scylla tranquebarica),Marine Shellfish,,190,45.4,10.0,0.55,,,,,83.1,2.6,ICMR-NIN IFCT 2017
+Q006,Oyster (Crassostrea sp.),Marine Shellfish,,252,60.2,9.51,2.44,,,,,82.5,2.47,ICMR-NIN IFCT 2017
+Q007,"Tiger prawns, brown (Solenocera crassicornis)",Marine Shellfish,,273,65.2,14.85,0.56,,,,,82.41,0.94,ICMR-NIN IFCT 2017
+Q008,"Tiger Prawns, orange (Penaeus monodon)",Marine Shellfish,,270,64.5,14.25,0.74,,,,,81.48,0.83,ICMR-NIN IFCT 2017
+R001,"Clam, green shell (Perna viridis )",Marine Mollusks,,243,58.1,12.14,0.98,,,,,80.07,2.44,ICMR-NIN IFCT 2017
+R002,"Clam, white shell, ribbed 1 (Meretrix meretrix)",Marine Mollusks,,250,59.8,11.82,1.34,,,,,80.27,0.85,ICMR-NIN IFCT 2017
+R003,Octopus (Octopus vulgaris),Marine Mollusks,,334,79.8,14.71,1.12,,,,,80.45,1.21,ICMR-NIN IFCT 2017
+R004,"Squid, black (Loligo sp.)",Marine Mollusks,,335,80.1,16.1,1.07,,,,,80.59,0.99,ICMR-NIN IFCT 2017
+R005,"Squid, hard shell (Sepia pharaonis)",Marine Mollusks,,320,76.5,16.82,0.93,,,,,80.52,0.75,ICMR-NIN IFCT 2017
+R006,"Squid, red (Loligo duvaucelii)",Marine Mollusks,,329,78.6,16.25,1.44,,,,,80.85,1.15,ICMR-NIN IFCT 2017
+R007,"Squid, white, small (Uroteuthis duvauceli)",Marine Mollusks,,353,84.4,17.41,1.15,,,,,79.38,1.19,ICMR-NIN IFCT 2017
+S001,Cat fish (Tandanus tandanus),Freshwater Fish And Shellfish,,518,123.8,15.86,6.24,,,,,77.23,0.93,ICMR-NIN IFCT 2017
+S002,Catla (Catla catla),Freshwater Fish And Shellfish,,394,94.2,17.94,2.15,,,,,78.43,0.94,ICMR-NIN IFCT 2017
+S003,Freshwater Eel (Anguilla anguilla),Freshwater Fish And Shellfish,,451,107.8,20.41,2.63,,,,,75.57,1.03,ICMR-NIN IFCT 2017
+S004,Gold fish (Carassius auratus),Freshwater Fish And Shellfish,,396,94.6,16.91,2.94,,,,,79.07,1.1,ICMR-NIN IFCT 2017
+S005,Pangas (Pangasianodon hypophthalmus),Freshwater Fish And Shellfish,,852,203.6,17.12,16.77,,,,,68.5,1.12,ICMR-NIN IFCT 2017
+S006,Rohu (Labeo rohita),Freshwater Fish And Shellfish,,428,102.3,19.71,2.39,,,,,76.34,1.28,ICMR-NIN IFCT 2017
+S007,Crab (Pachygrapsus sp.),Freshwater Fish And Shellfish,,327,78.2,13.23,0.89,,,,,80.58,1.23,ICMR-NIN IFCT 2017
+S008,"Prawns, big (Macrobrachium rosenbergii)",Freshwater Fish And Shellfish,,380,90.8,19.24,0.52,,,,,77.43,0.84,ICMR-NIN IFCT 2017
+S009,"Prawns, small (Macrobrachium sp.)",Freshwater Fish And Shellfish,,297,71.0,13.07,0.78,,,,,82.58,0.86,ICMR-NIN IFCT 2017
+S010,Tiger prawns (Macrobrachium sp.),Freshwater Fish And Shellfish,,284,67.9,14.24,0.66,,,,,83.24,0.83,ICMR-NIN IFCT 2017

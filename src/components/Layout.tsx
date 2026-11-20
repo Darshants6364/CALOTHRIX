@@ -9,12 +9,14 @@ import {
   Plus,
   Scale,
   Settings,
+  ShieldCheck,
   Sun,
   Target,
   Users,
 } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { ENABLE_TRAINER_PORTAL, NavTab } from '../types';
+import { isDatabaseAdmin } from '../utils/adminAccess';
 import { CalothrixLogo } from './CalothrixLogo';
 import { SchemaSetupBanner } from './SchemaSetupBanner';
 
@@ -40,6 +42,7 @@ const MOBILE_BOTTOM_TABS = ALL_NAV_ITEMS.slice(0, 5);
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
     state,
+    authUser,
     authDetails,
     resolvedTheme,
     toggleTheme,
@@ -49,6 +52,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     selectAccountRole,
     signOut,
   } = useMacroLogStore();
+
+  const isAdmin = isDatabaseAdmin(authUser, state.profile);
+  const desktopNavItems: NavItem[] = isAdmin
+    ? [
+        ...ALL_NAV_ITEMS,
+        { id: 'admin-quality', label: 'DB Quality Audit', mobileLabel: 'Audit', icon: ShieldCheck },
+      ]
+    : ALL_NAV_ITEMS;
 
   const displayName = authDetails?.name || state.profile.name;
   const displayEmail = authDetails?.email || state.profile.email;
@@ -108,7 +119,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Main navigation">
-          {ALL_NAV_ITEMS.map((item) => {
+          {desktopNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
