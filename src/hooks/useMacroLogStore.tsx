@@ -10,6 +10,7 @@ import {
 import {
   exportFoodAndWeightAsCsv,
   exportStateAsJson,
+  storageService,
 } from '../services/storageService';
 import {
   createZeroUserState,
@@ -50,6 +51,8 @@ import {
   MealCategory,
   NavTab,
   NutritionGoals,
+  SavedMealCombo,
+  SavedMealComboItem,
   TargetRecommendation,
   ToastMessage,
   TrainerClientPlan,
@@ -65,8 +68,12 @@ import {
   sortWeightEntriesChronological,
   sumMacros,
 } from '../utils/nutritionUtils';
+import { saveLastUsedPortion } from '../utils/portionEngine';
 
-export type AuthMode = 'loading' | 'unauthenticated' | 'authenticated';
+export type AuthMode = 'loading' | 'unauthenticated' | 'guest' | 'authenticated';
+
+const GUEST_MODE_KEY = 'calothrix_guest_mode_v1';
+const GUEST_USER_ID = 'guest-local-user';
 
 interface FoodModalState {
   isOpen: boolean;
@@ -84,7 +91,7 @@ interface WeightModalState {
 
 interface MealScannerModalState {
   isOpen: boolean;
-  initialMode: 'photo' | 'voice' | 'text';
+  initialMode: 'photo' | 'voice' | 'text' | 'label' | 'menu';
   initialMeal: MealCategory;
   targetDate: string;
 }
@@ -127,6 +134,8 @@ interface MacroLogContextValue {
   ) => Promise<{ error?: string; needsEmailConfirmation?: boolean }>;
   signInWithMagicLink: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  enterGuestMode: () => void;
+  exitGuestModeToAuth: () => void;
   retrySupabaseSync: () => Promise<boolean>;
   // Food Modal Controls
   foodModal: FoodModalState;
@@ -141,7 +150,7 @@ interface MacroLogContextValue {
   // AI Meal Photo / Voice Scanner Controls
   mealScannerModal: MealScannerModalState;
   openMealScannerModal: (options?: {
-    mode?: 'photo' | 'voice' | 'text';
+    mode?: 'photo' | 'voice' | 'text' | 'label' | 'menu';
     meal?: MealCategory;
     date?: string;
   }) => void;
@@ -178,8 +187,14 @@ interface MacroLogContextValue {
       unitLabel?: string;
     }
   ) => void;
+  quickUpdateFoodEntryQuantity: (entryId: string, quantityGrams: number) => void;
   deleteFoodEntry: (entryId: string) => void;
   duplicateFoodEntry: (entry: FoodLogEntry, targetDate?: string) => void;
+  // Saved Meal Combos
+  savedMeals: SavedMealCombo[];
+  saveMealCombo: (name: string, mealType: MealCategory, items: SavedMealComboItem[]) => SavedMealCombo | null;
+  deleteSavedMealCombo: (comboId: string) => void;
+  logSavedMealCombo: (combo: SavedMealCombo, mealType: MealCategory, date: string) => number;
   // Custom Food Actions
   addCustomFood: (
     food: Omit<FoodItem, 'id' | 'isCustom' | 'createdAt' | 'userId'>
@@ -227,13 +242,29 @@ interface MacroLogContextValue {
   refreshCoachingAlerts: () => Promise<void>;
   approveTargetRecommendation: (rec: TargetRecommendation) => Promise<boolean>;
   declineTargetRecommendation: (recId: string) => Promise<boolean>;
-  // Daily Hydration & Quick Meal Copy
+  // Daily Hydration, Active Burn Allowance & Quick Meal Copy
   waterIntakeMlByDate: Record<string, number>;
   dailyWaterGoalMl: number;
   addWaterMl: (dateKey: string, deltaMl: number) => void;
   setDailyWaterGoalMl: (goalMl: number) => void;
+  activeBurnKcalByDate: Record<string, number>;
+  setActiveBurnKcal: (dateKey: string, kcal: number) => void;
+  addActiveBurnKcal: (dateKey: string, deltaKcal: number) => void;
   copyMealFromPreviousDay: (mealType: MealCategory, targetDate: string) => number;
 }
+
+const EMPTY_TOASTS: ToastMessage[] = [];
+const NOOP_DISMISS = () => {};
+
+interface ToastContextValue {
+  toasts: ToastMessage[];
+  dismissToast: (id: string) => void;
+}
+
+const ToastContext = createContext<ToastContextValue>({
+  toasts: EMPTY_TOASTS,
+  dismissToast: NOOP_DISMISS,
+});
 
 const MacroLogContext = createContext<MacroLogContextValue | null>(null);
 
@@ -274,6 +305,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [coachPlans, setCoachPlans] = useState<TrainerClientPlan[]>([]);
   const [waterIntakeMlByDate, setWaterIntakeMlByDate] = useState<Record<string, number>>({});
   const [dailyWaterGoalMl, setDailyWaterGoalMlState] = useState<number>(2500);
+  const [activeBurnKcalByDate, setActiveBurnKcalByDate] = useState<Record<string, number>>({});
+  const [savedMeals, setSavedMeals] = useState<SavedMealCombo[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateKey());
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -281,6 +314,14 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   stateRef.current = state;
   const authUserRef = useRef(authUser);
   authUserRef.current = authUser;
+  const authModeRef = useRef(authMode);
+  authModeRef.current = authMode;
+
+  const getActiveActorId = useCallback((): string | null => {
+    if (authUserRef.current?.id) return authUserRef.current.id;
+    if (authModeRef.current === 'guest') return GUEST_USER_ID;
+    return null;
+  }, []);
 
   const [foodModal, setFoodModal] = useState<FoodModalState>({
     isOpen: false,
@@ -380,6 +421,49 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, []);
 
+  // Persist guest mode state locally on any change
+  useEffect(() => {
+    if (authMode === 'guest') {
+      storageService.saveState(state);
+    }
+  }, [authMode, state]);
+
+  const hydrateAuxiliaryLocalCaches = useCallback((userId: string, user?: User | null) => {
+    try {
+      const storageKey = `calothrix_water_${userId}`;
+      const cachedRaw = localStorage.getItem(storageKey);
+      const cached = cachedRaw
+        ? (JSON.parse(cachedRaw) as { logs?: Record<string, number>; goalMl?: number })
+        : {};
+      const metaLogs =
+        (user?.user_metadata?.water_logs as Record<string, number> | undefined) || {};
+      const mergedLogs = { ...metaLogs, ...(cached.logs || {}) };
+      const metaGoal = Number(user?.user_metadata?.daily_water_goal_ml || 0);
+      setWaterIntakeMlByDate(mergedLogs);
+      setDailyWaterGoalMlState(cached.goalMl || metaGoal || 2500);
+    } catch {
+      setWaterIntakeMlByDate({});
+      setDailyWaterGoalMlState(2500);
+    }
+
+    try {
+      const burnRaw = localStorage.getItem(`calothrix_burn_${userId}`);
+      const burnCached = burnRaw ? (JSON.parse(burnRaw) as Record<string, number>) : {};
+      const metaBurn = (user?.user_metadata?.active_burn_logs as Record<string, number> | undefined) || {};
+      setActiveBurnKcalByDate({ ...metaBurn, ...burnCached });
+    } catch {
+      setActiveBurnKcalByDate({});
+    }
+
+    try {
+      const mealsRaw = localStorage.getItem(`calothrix_saved_meals_${userId}`);
+      const parsedMeals = mealsRaw ? (JSON.parse(mealsRaw) as SavedMealCombo[]) : [];
+      setSavedMeals(Array.isArray(parsedMeals) ? parsedMeals : []);
+    } catch {
+      setSavedMeals([]);
+    }
+  }, []);
+
   const hydrateForUser = useCallback(
     async (user: User) => {
       setAuthUser(user);
@@ -393,10 +477,35 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         localStorage.removeItem('calothrix_pending_auth_role');
       }
 
+      const wasGuest =
+        typeof window !== 'undefined' && localStorage.getItem(GUEST_MODE_KEY) === '1';
+
       setSyncingDb(true);
       try {
         const result = await loadUserStateFromSupabase(user, savedTheme);
         let nextState = result.state;
+
+        // If user started in Guest Mode and their Supabase account has zero logs yet, preserve & sync guest data
+        if (wasGuest && !result.needsSchemaSetup && nextState.foodEntries.length === 0) {
+          const guestState = storageService.loadState();
+          if (guestState.foodEntries.length > 0 || guestState.customFoods.length > 0 || guestState.weightEntries.length > 0) {
+            const migratedState: MacroLogPersistedState = {
+              ...nextState,
+              foodEntries: guestState.foodEntries.map((e) => ({ ...e, userId: user.id })),
+              customFoods: guestState.customFoods.map((f) => ({ ...f, userId: user.id })),
+              weightEntries: guestState.weightEntries.map((w) => ({ ...w, userId: user.id })),
+              favoriteFoodIds: guestState.favoriteFoodIds,
+              recentFoodIds: guestState.recentFoodIds,
+              goals: guestState.goals.calories > 0 ? { ...guestState.goals, userId: user.id } : nextState.goals,
+              profile: { ...nextState.profile, accountRole: 'individual', roleSelected: true },
+            };
+            nextState = migratedState;
+            void syncLocalStateToSupabase(user.id, migratedState);
+          }
+          localStorage.removeItem(GUEST_MODE_KEY);
+        } else if (wasGuest) {
+          localStorage.removeItem(GUEST_MODE_KEY);
+        }
 
         const metaRole =
           user.user_metadata?.intended_role === 'trainer' ||
@@ -446,29 +555,16 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setNeedsSchemaSetup(result.needsSchemaSetup);
         setAuthMode('authenticated');
 
-        // Hydrate water intake from Supabase user_metadata + localStorage cache
-        try {
-          const storageKey = `calothrix_water_${user.id}`;
-          const cachedRaw = localStorage.getItem(storageKey);
-          const cached = cachedRaw
-            ? (JSON.parse(cachedRaw) as { logs?: Record<string, number>; goalMl?: number })
-            : {};
-          const metaLogs =
-            (user.user_metadata?.water_logs as Record<string, number> | undefined) || {};
-          const mergedLogs = { ...metaLogs, ...(cached.logs || {}) };
-          const defaultWater = Math.min(
-            4500,
-            Math.max(
-              2000,
-              Math.round(((nextState.profile.currentWeightKg || 70) * 35 + 250) / 250) * 250
-            )
-          );
-          const metaGoal = Number(user.user_metadata?.daily_water_goal_ml || 0);
-          setWaterIntakeMlByDate(mergedLogs);
-          setDailyWaterGoalMlState(cached.goalMl || metaGoal || defaultWater);
-        } catch {
-          setWaterIntakeMlByDate({});
-          setDailyWaterGoalMlState(2500);
+        hydrateAuxiliaryLocalCaches(user.id, user);
+        const defaultWater = Math.min(
+          4500,
+          Math.max(
+            2000,
+            Math.round(((nextState.profile.currentWeightKg || 70) * 35 + 250) / 250) * 250
+          )
+        );
+        if (!localStorage.getItem(`calothrix_water_${user.id}`) && !user.user_metadata?.daily_water_goal_ml) {
+          setDailyWaterGoalMlState(defaultWater);
         }
 
         if (!result.needsSchemaSetup) {
@@ -482,8 +578,33 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSyncingDb(false);
       }
     },
-    [refreshCoachingAlertsForUser]
+    [hydrateAuxiliaryLocalCaches, refreshCoachingAlertsForUser]
   );
+
+  const enterGuestMode = useCallback(() => {
+    localStorage.setItem(GUEST_MODE_KEY, '1');
+    const loaded = storageService.loadState();
+    const guestState: MacroLogPersistedState = {
+      ...loaded,
+      profile: {
+        ...loaded.profile,
+        name: loaded.profile.name && loaded.profile.name !== 'Alex Mercer' ? loaded.profile.name : 'Guest Athlete',
+        accountRole: 'individual',
+        roleSelected: true,
+      },
+    };
+    storageService.saveState(guestState);
+    setState(guestState);
+    setNeedsSchemaSetup(false);
+    hydrateAuxiliaryLocalCaches(GUEST_USER_ID, null);
+    setAuthMode('guest');
+    setActiveTab('home');
+    notify('Guest session ready — log freely & sign in anytime to sync');
+  }, [hydrateAuxiliaryLocalCaches, notify]);
+
+  const exitGuestModeToAuth = useCallback(() => {
+    setAuthMode('unauthenticated');
+  }, []);
 
   // Initialize Supabase Auth & Popup OAuth listener
   useEffect(() => {
@@ -499,6 +620,18 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (!mounted) return;
         if (session?.user) {
           await hydrateForUser(session.user);
+        } else if (localStorage.getItem(GUEST_MODE_KEY) === '1') {
+          const loaded = storageService.loadState();
+          setState({
+            ...loaded,
+            profile: {
+              ...loaded.profile,
+              accountRole: 'individual',
+              roleSelected: true,
+            },
+          });
+          hydrateAuxiliaryLocalCaches(GUEST_USER_ID, null);
+          setAuthMode('guest');
         } else {
           setAuthMode('unauthenticated');
         }
@@ -515,6 +648,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if (event === 'SIGNED_OUT') {
+        localStorage.removeItem(GUEST_MODE_KEY);
         setAuthUser(null);
         setNeedsSchemaSetup(false);
         setPendingInvitations([]);
@@ -697,7 +831,10 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem(GUEST_MODE_KEY);
+    if (authUserRef.current) {
+      await supabase.auth.signOut();
+    }
     setAuthUser(null);
     setNeedsSchemaSetup(false);
     setPendingInvitations([]);
@@ -788,7 +925,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const openMealScannerModal = useCallback(
-    (options?: { mode?: 'photo' | 'voice' | 'text'; meal?: MealCategory; date?: string }) => {
+    (options?: { mode?: 'photo' | 'voice' | 'text' | 'label' | 'menu'; meal?: MealCategory; date?: string }) => {
       setMealScannerModal({
         isOpen: true,
         initialMode: options?.mode ?? 'photo',
@@ -830,13 +967,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       date: string;
       sourceLabel?: string;
     }): number => {
-      const user = authUserRef.current;
-      if (!user || items.length === 0) return 0;
+      const actorId = getActiveActorId();
+      if (!actorId || items.length === 0) return 0;
 
       const now = new Date().toISOString();
       const newEntries: FoodLogEntry[] = items.map((item) => ({
         id: makeId('entry'),
-        userId: user.id,
+        userId: actorId,
         date,
         mealType,
         foodId: makeId('ai-food'),
@@ -863,15 +1000,17 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         foodEntries: [...newEntries, ...prev.foodEntries],
       }));
 
-      newEntries.forEach((entry) => {
-        void insertFoodEntryDb(entry).then(handleDbResult);
-      });
+      if (authUserRef.current) {
+        newEntries.forEach((entry) => {
+          void insertFoodEntryDb(entry).then(handleDbResult);
+        });
+      }
 
       const totalKcal = newEntries.reduce((sum, e) => sum + e.calories, 0);
       notify(`Logged ${newEntries.length} ${newEntries.length === 1 ? 'item' : 'items'} (${totalKcal} kcal)`);
       return newEntries.length;
     },
-    [handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const openWeightModal = useCallback((editingEntry?: WeightEntry) => {
@@ -896,8 +1035,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       date: string;
       unitLabel?: string;
     }) => {
-      const user = authUserRef.current;
-      if (!user) return;
+      const actorId = getActiveActorId();
+      if (!actorId) return;
 
       const scaled = calculateScaledNutrition(food, quantityGrams);
       const servingsCount =
@@ -905,7 +1044,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const now = new Date().toISOString();
       const newEntry: FoodLogEntry = {
         id: makeId('entry'),
-        userId: user.id,
+        userId: actorId,
         date,
         mealType,
         foodId: food.id,
@@ -924,6 +1063,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updatedAt: now,
       };
 
+      saveLastUsedPortion(food.id, quantityGrams, unitLabel || food.servingName);
+
       const nextRecents = [
         food.id,
         ...stateRef.current.recentFoodIds.filter((id) => id !== food.id),
@@ -935,11 +1076,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         recentFoodIds: nextRecents,
       }));
 
-      void insertFoodEntryDb(newEntry).then(handleDbResult);
-      void upsertFoodPreferencesDb(user.id, stateRef.current.favoriteFoodIds, nextRecents);
+      if (authUserRef.current) {
+        void insertFoodEntryDb(newEntry).then(handleDbResult);
+        void upsertFoodPreferencesDb(actorId, stateRef.current.favoriteFoodIds, nextRecents);
+      }
       notify(`Added ${food.name} (${scaled.calories} kcal)`);
     },
-    [handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const updateFoodEntry = useCallback(
@@ -964,6 +1107,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         Math.round((quantityGrams / Math.max(1, food.servingWeightGrams)) * 100) / 100;
       const now = new Date().toISOString();
       let updatedEntry: FoodLogEntry | null = null;
+
+      saveLastUsedPortion(food.id, quantityGrams, unitLabel || food.servingName);
 
       setState((prev) => ({
         ...prev,
@@ -990,7 +1135,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }),
       }));
 
-      if (updatedEntry) {
+      if (updatedEntry && authUserRef.current) {
         void updateFoodEntryDb(updatedEntry).then(handleDbResult);
       }
       notify(`Updated ${food.name}`);
@@ -998,29 +1143,77 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [handleDbResult, notify]
   );
 
-  const deleteFoodEntry = useCallback(
-    (entryId: string) => {
-      const user = authUserRef.current;
-      if (!user) return;
+  const quickUpdateFoodEntryQuantity = useCallback(
+    (entryId: string, nextGramsRaw: number) => {
+      const nextGrams = Math.max(1, Math.round(nextGramsRaw * 10) / 10);
+      const now = new Date().toISOString();
+      let updatedEntry: FoodLogEntry | null = null;
+
       setState((prev) => ({
         ...prev,
-        foodEntries: prev.foodEntries.filter((e) => e.id !== entryId),
+        foodEntries: prev.foodEntries.map((e) => {
+          if (e.id !== entryId) return e;
+          const matchedFood = [...prev.customFoods, ...DEFAULT_FOODS].find((f) => f.id === e.foodId);
+          const scaled = matchedFood
+            ? calculateScaledNutrition(matchedFood, nextGrams)
+            : (() => {
+                const factor = nextGrams / Math.max(1, e.quantityGrams);
+                return {
+                  calories: Math.round(e.calories * factor),
+                  protein: Math.round(e.protein * factor * 10) / 10,
+                  carbs: Math.round(e.carbs * factor * 10) / 10,
+                  fat: Math.round(e.fat * factor * 10) / 10,
+                  fibre: Math.round(e.fibre * factor * 10) / 10,
+                };
+              })();
+          if (e.foodId) {
+            saveLastUsedPortion(e.foodId, nextGrams, `${nextGrams} g`);
+          }
+          updatedEntry = {
+            ...e,
+            quantityGrams: nextGrams,
+            unitLabel: `${nextGrams} g`,
+            servingName: `${nextGrams} g`,
+            ...scaled,
+            updatedAt: now,
+          };
+          return updatedEntry;
+        }),
       }));
-      void deleteFoodEntryDb(user.id, entryId).then(handleDbResult);
-      notify('Food entry removed', 'info');
+
+      if (updatedEntry && authUserRef.current) {
+        void updateFoodEntryDb(updatedEntry).then(handleDbResult);
+      }
+      notify('Quantity updated');
     },
     [handleDbResult, notify]
   );
 
+  const deleteFoodEntry = useCallback(
+    (entryId: string) => {
+      const actorId = getActiveActorId();
+      if (!actorId) return;
+      setState((prev) => ({
+        ...prev,
+        foodEntries: prev.foodEntries.filter((e) => e.id !== entryId),
+      }));
+      if (authUserRef.current) {
+        void deleteFoodEntryDb(actorId, entryId).then(handleDbResult);
+      }
+      notify('Food entry removed', 'info');
+    },
+    [getActiveActorId, handleDbResult, notify]
+  );
+
   const duplicateFoodEntry = useCallback(
     (entry: FoodLogEntry, targetDate?: string) => {
-      const user = authUserRef.current;
-      if (!user) return;
+      const actorId = getActiveActorId();
+      if (!actorId) return;
       const now = new Date().toISOString();
       const copy: FoodLogEntry = {
         ...entry,
         id: makeId('entry'),
-        userId: user.id,
+        userId: actorId,
         date: targetDate ?? entry.date,
         createdAt: now,
         updatedAt: now,
@@ -1029,10 +1222,12 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...prev,
         foodEntries: [copy, ...prev.foodEntries],
       }));
-      void insertFoodEntryDb(copy).then(handleDbResult);
+      if (authUserRef.current) {
+        void insertFoodEntryDb(copy).then(handleDbResult);
+      }
       notify(`Duplicated ${entry.foodName}`);
     },
-    [handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const addCustomFood = useCallback(
@@ -1164,12 +1359,12 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateGoals = useCallback(
     (goals: Omit<NutritionGoals, 'userId' | 'updatedAt'>) => {
-      const user = authUserRef.current;
-      if (!user) return;
+      const actorId = getActiveActorId();
+      if (!actorId) return;
       const now = new Date().toISOString();
       const nextGoals: NutritionGoals = {
         ...goals,
-        userId: user.id,
+        userId: actorId,
         updatedAt: now,
       };
 
@@ -1183,10 +1378,12 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             ? { ...prev.weightGoal, targetWeightKg: goals.targetWeightKg, updatedAt: now }
             : prev.weightGoal;
 
-        void upsertNutritionGoals(user.id, nextGoals).then(handleDbResult);
-        if (goals.targetWeightKg !== undefined) {
-          void upsertProfileAndSettings(user.id, nextProfile, prev.settings);
-          void upsertWeightGoal(user.id, nextWeightGoal);
+        if (authUserRef.current) {
+          void upsertNutritionGoals(actorId, nextGoals).then(handleDbResult);
+          if (goals.targetWeightKg !== undefined) {
+            void upsertProfileAndSettings(actorId, nextProfile, prev.settings);
+            void upsertWeightGoal(actorId, nextWeightGoal);
+          }
         }
 
         return {
@@ -1198,17 +1395,17 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       notify('Nutrition goals saved');
     },
-    [handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const addWeightEntry = useCallback(
     ({ weightKg, date, notes }: { weightKg: number; date: string; notes?: string }) => {
-      const user = authUserRef.current;
-      if (!user) return;
+      const actorId = getActiveActorId();
+      if (!actorId) return;
       const now = new Date().toISOString();
       const newEntry: WeightEntry = {
         id: makeId('weight'),
-        userId: user.id,
+        userId: actorId,
         weightKg,
         date,
         notes: notes?.trim() || undefined,
@@ -1226,10 +1423,12 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ? { ...prev.weightGoal, startingWeightKg: weightKg, updatedAt: now }
           : prev.weightGoal;
 
-        void insertWeightEntryDb(newEntry).then(handleDbResult);
-        void upsertProfileAndSettings(user.id, nextProfile, prev.settings);
-        if (shouldSetStarting) {
-          void upsertWeightGoal(user.id, nextWeightGoal);
+        if (authUserRef.current) {
+          void insertWeightEntryDb(newEntry).then(handleDbResult);
+          void upsertProfileAndSettings(actorId, nextProfile, prev.settings);
+          if (shouldSetStarting) {
+            void upsertWeightGoal(actorId, nextWeightGoal);
+          }
         }
 
         return {
@@ -1241,13 +1440,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       notify('Weight entry recorded');
     },
-    [handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const updateWeightEntry = useCallback(
     (entryId: string, { weightKg, date, notes }: { weightKg: number; date: string; notes?: string }) => {
-      const user = authUserRef.current;
-      if (!user) return;
+      const actorId = getActiveActorId();
+      if (!actorId) return;
       const now = new Date().toISOString();
       setState((prev) => {
         let updatedEntry: WeightEntry | null = null;
@@ -1260,9 +1459,9 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const latestKg = sortedDesc[0]?.weightKg ?? prev.profile.currentWeightKg;
         const nextProfile = { ...prev.profile, currentWeightKg: latestKg };
 
-        if (updatedEntry) {
+        if (updatedEntry && authUserRef.current) {
           void updateWeightEntryDb(updatedEntry).then(handleDbResult);
-          void upsertProfileAndSettings(user.id, nextProfile, prev.settings);
+          void upsertProfileAndSettings(actorId, nextProfile, prev.settings);
         }
 
         return {
@@ -1273,21 +1472,23 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       notify('Weight entry updated');
     },
-    [handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const deleteWeightEntry = useCallback(
     (entryId: string) => {
-      const user = authUserRef.current;
-      if (!user) return;
+      const actorId = getActiveActorId();
+      if (!actorId) return;
       setState((prev) => {
         const updated = prev.weightEntries.filter((w) => w.id !== entryId);
         const sortedDesc = sortWeightEntriesChronological(updated, 'desc');
         const latestKg = sortedDesc[0]?.weightKg ?? 0;
         const nextProfile = { ...prev.profile, currentWeightKg: latestKg };
 
-        void deleteWeightEntryDb(user.id, entryId).then(handleDbResult);
-        void upsertProfileAndSettings(user.id, nextProfile, prev.settings);
+        if (authUserRef.current) {
+          void deleteWeightEntryDb(actorId, entryId).then(handleDbResult);
+          void upsertProfileAndSettings(actorId, nextProfile, prev.settings);
+        }
 
         return {
           ...prev,
@@ -1297,7 +1498,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       notify('Weight entry deleted', 'info');
     },
-    [handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const updateWeightGoal = useCallback(
@@ -1529,8 +1730,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   const syncWaterMeta = useCallback(
-    (userId: string, logs: Record<string, number>, goalMl: number) => {
-      // Keep last 45 logged dates so metadata remains compact
+    (actorId: string, logs: Record<string, number>, goalMl: number) => {
       const trimmedKeys = Object.keys(logs).sort().slice(-45);
       const compactLogs: Record<string, number> = {};
       for (const k of trimmedKeys) {
@@ -1538,51 +1738,196 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       try {
         localStorage.setItem(
-          `calothrix_water_${userId}`,
+          `calothrix_water_${actorId}`,
           JSON.stringify({ logs: compactLogs, goalMl })
         );
       } catch {
         // Ignore storage errors
       }
-      void supabase.auth.updateUser({
-        data: { water_logs: compactLogs, daily_water_goal_ml: goalMl },
-      });
+      if (authUserRef.current) {
+        void supabase.auth.updateUser({
+          data: { water_logs: compactLogs, daily_water_goal_ml: goalMl },
+        });
+      }
     },
     []
   );
 
   const addWaterMl = useCallback(
     (dateKey: string, deltaMl: number) => {
-      const user = authUserRef.current;
+      const actorId = getActiveActorId();
       setWaterIntakeMlByDate((prev) => {
         const nextVal = Math.max(0, Math.min(8000, (prev[dateKey] || 0) + deltaMl));
         const nextLogs = { ...prev, [dateKey]: nextVal };
-        if (user) {
-          syncWaterMeta(user.id, nextLogs, dailyWaterGoalMl);
+        if (actorId) {
+          syncWaterMeta(actorId, nextLogs, dailyWaterGoalMl);
         }
         return nextLogs;
       });
     },
-    [dailyWaterGoalMl, syncWaterMeta]
+    [dailyWaterGoalMl, getActiveActorId, syncWaterMeta]
   );
 
   const setDailyWaterGoalMl = useCallback(
     (goalMl: number) => {
       const clamped = Math.max(1000, Math.min(6000, Math.round(goalMl / 250) * 250));
       setDailyWaterGoalMlState(clamped);
-      const user = authUserRef.current;
-      if (user) {
-        syncWaterMeta(user.id, waterIntakeMlByDate, clamped);
+      const actorId = getActiveActorId();
+      if (actorId) {
+        syncWaterMeta(actorId, waterIntakeMlByDate, clamped);
       }
       notify(`Daily water target set to ${(clamped / 1000).toFixed(2).replace(/\.?0+$/, '')} L`);
     },
-    [notify, syncWaterMeta, waterIntakeMlByDate]
+    [getActiveActorId, notify, syncWaterMeta, waterIntakeMlByDate]
+  );
+
+  const syncBurnMeta = useCallback((actorId: string, logs: Record<string, number>) => {
+    const trimmedKeys = Object.keys(logs).sort().slice(-45);
+    const compact: Record<string, number> = {};
+    for (const k of trimmedKeys) {
+      if ((logs[k] ?? 0) > 0) compact[k] = logs[k];
+    }
+    try {
+      localStorage.setItem(`calothrix_burn_${actorId}`, JSON.stringify(compact));
+    } catch {
+      // Ignore storage errors
+    }
+    if (authUserRef.current) {
+      void supabase.auth.updateUser({
+        data: { active_burn_logs: compact },
+      });
+    }
+  }, []);
+
+  const setActiveBurnKcal = useCallback(
+    (dateKey: string, kcal: number) => {
+      const actorId = getActiveActorId();
+      const clamped = Math.max(0, Math.min(3500, Math.round(kcal)));
+      setActiveBurnKcalByDate((prev) => {
+        const next = { ...prev, [dateKey]: clamped };
+        if (actorId) syncBurnMeta(actorId, next);
+        return next;
+      });
+    },
+    [getActiveActorId, syncBurnMeta]
+  );
+
+  const addActiveBurnKcal = useCallback(
+    (dateKey: string, deltaKcal: number) => {
+      const actorId = getActiveActorId();
+      setActiveBurnKcalByDate((prev) => {
+        const nextVal = Math.max(0, Math.min(3500, Math.round((prev[dateKey] || 0) + deltaKcal)));
+        const next = { ...prev, [dateKey]: nextVal };
+        if (actorId) syncBurnMeta(actorId, next);
+        return next;
+      });
+    },
+    [getActiveActorId, syncBurnMeta]
+  );
+
+  const persistSavedMeals = useCallback((actorId: string, nextMeals: SavedMealCombo[]) => {
+    try {
+      localStorage.setItem(`calothrix_saved_meals_${actorId}`, JSON.stringify(nextMeals));
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  const saveMealCombo = useCallback(
+    (name: string, mealType: MealCategory, items: SavedMealComboItem[]): SavedMealCombo | null => {
+      const actorId = getActiveActorId();
+      const cleanName = name.trim();
+      if (!actorId || !cleanName || items.length === 0) return null;
+      const combo: SavedMealCombo = {
+        id: makeId('combo'),
+        name: cleanName,
+        mealType,
+        items,
+        totalCalories: Math.round(items.reduce((s, i) => s + i.calories, 0)),
+        totalProtein: Math.round(items.reduce((s, i) => s + i.protein, 0) * 10) / 10,
+        totalCarbs: Math.round(items.reduce((s, i) => s + i.carbs, 0) * 10) / 10,
+        totalFat: Math.round(items.reduce((s, i) => s + i.fat, 0) * 10) / 10,
+        totalFibre: Math.round(items.reduce((s, i) => s + i.fibre, 0) * 10) / 10,
+        createdAt: new Date().toISOString(),
+      };
+      setSavedMeals((prev) => {
+        const next = [combo, ...prev].slice(0, 40);
+        persistSavedMeals(actorId, next);
+        return next;
+      });
+      notify(`Saved combo "${cleanName}" (${combo.totalCalories} kcal)`);
+      return combo;
+    },
+    [getActiveActorId, notify, persistSavedMeals]
+  );
+
+  const deleteSavedMealCombo = useCallback(
+    (comboId: string) => {
+      const actorId = getActiveActorId();
+      setSavedMeals((prev) => {
+        const next = prev.filter((c) => c.id !== comboId);
+        if (actorId) persistSavedMeals(actorId, next);
+        return next;
+      });
+      notify('Saved meal deleted', 'info');
+    },
+    [getActiveActorId, notify, persistSavedMeals]
+  );
+
+  const logSavedMealCombo = useCallback(
+    (combo: SavedMealCombo, mealType: MealCategory, date: string): number => {
+      const actorId = getActiveActorId();
+      if (!actorId || combo.items.length === 0) return 0;
+      const now = new Date().toISOString();
+      const entries: FoodLogEntry[] = combo.items.map((item) => {
+        const foodMatch = [...stateRef.current.customFoods, ...DEFAULT_FOODS].find(
+          (f) => f.id === item.foodId
+        );
+        return {
+          id: makeId('entry'),
+          userId: actorId,
+          date,
+          mealType,
+          foodId: item.foodId,
+          foodName: item.foodName,
+          quantityGrams: item.quantityGrams,
+          servingsCount: 1,
+          servingName: item.unitLabel || `${item.quantityGrams} g`,
+          unitLabel: item.unitLabel || `${item.quantityGrams} g`,
+          measurementBasis: foodMatch?.measurementBasis || 'per_serving',
+          verificationStatus: foodMatch?.verificationStatus || 'verified',
+          foodState: foodMatch?.foodState,
+          sourceName: foodMatch?.sourceName || `Saved Meal (${combo.name})`,
+          sourceType: foodMatch?.sourceType || 'verified_reference',
+          calories: item.calories,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+          fibre: item.fibre,
+          createdAt: now,
+          updatedAt: now,
+        };
+      });
+
+      setState((prev) => ({
+        ...prev,
+        foodEntries: [...entries, ...prev.foodEntries],
+      }));
+      if (authUserRef.current) {
+        entries.forEach((e) => {
+          void insertFoodEntryDb(e).then(handleDbResult);
+        });
+      }
+      notify(`Logged "${combo.name}" (${combo.totalCalories} kcal)`);
+      return entries.length;
+    },
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const copyMealFromPreviousDay = useCallback(
     (mealType: MealCategory, targetDate: string): number => {
-      const user = authUserRef.current;
-      if (!user) return 0;
+      const actorId = getActiveActorId();
+      if (!actorId) return 0;
       const yesterdayKey = addDaysToDateKey(targetDate, -1);
       const sourceEntries = stateRef.current.foodEntries.filter(
         (e) => e.date === yesterdayKey && e.mealType === mealType
@@ -1592,7 +1937,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const clones: FoodLogEntry[] = sourceEntries.map((entry) => ({
         ...entry,
         id: makeId('entry'),
-        userId: user.id,
+        userId: actorId,
         date: targetDate,
         createdAt: now,
         updatedAt: now,
@@ -1601,15 +1946,17 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...prev,
         foodEntries: [...clones, ...prev.foodEntries],
       }));
-      clones.forEach((clone) => {
-        void insertFoodEntryDb(clone).then(handleDbResult);
-      });
+      if (authUserRef.current) {
+        clones.forEach((clone) => {
+          void insertFoodEntryDb(clone).then(handleDbResult);
+        });
+      }
       notify(
         `Copied ${clones.length} ${clones.length === 1 ? 'item' : 'items'} from yesterday`
       );
       return clones.length;
     },
-    [handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify]
   );
 
   const declineTargetRecommendation = useCallback(
@@ -1628,86 +1975,194 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [notify]
   );
 
-  const value: MacroLogContextValue = {
-    state,
-    authMode,
-    authUser,
-    authDetails,
-    needsSchemaSetup,
-    syncingDb,
-    resolvedTheme,
-    toggleTheme,
-    activeTab,
-    setActiveTab,
-    selectedDate,
-    setSelectedDate,
-    allFoods,
-    selectedDateEntries,
-    selectedDateTotals,
-    latestWeightEntry,
-    previousWeightEntry,
-    toasts,
-    dismissToast,
-    notify,
-    signInWithGoogle,
-    signInWithEmail,
-    signUpWithEmail,
-    signInWithMagicLink,
-    signOut,
-    retrySupabaseSync,
-    foodModal,
-    openAddFoodModal,
-    openEditFoodModal,
-    closeFoodModal,
-    mealScannerModal,
-    openMealScannerModal,
-    closeMealScannerModal,
-    logAnalyzedMealItems,
-    barcodeScannerModal,
-    openBarcodeScannerModal,
-    closeBarcodeScannerModal,
-    weightModal,
-    openWeightModal,
-    closeWeightModal,
-    addFoodEntry,
-    updateFoodEntry,
-    deleteFoodEntry,
-    duplicateFoodEntry,
-    addCustomFood,
-    saveExternalFoodToMyFoods,
-    updateCustomFood,
-    deleteCustomFood,
-    toggleFavoriteFood,
-    updateGoals,
-    addWeightEntry,
-    updateWeightEntry,
-    deleteWeightEntry,
-    updateWeightGoal,
-    updateProfile,
-    updateSettings,
-    exportData,
-    selectAccountRole,
-    trainerTab,
-    setTrainerTab,
-    selectedTrainerClientId,
-    openTrainerClientDetail,
-    pendingInviteToken,
-    clearPendingInviteToken,
-    pendingInvitations,
-    pendingRecommendations,
-    coachPlans,
-    refreshCoachingAlerts,
-    approveTargetRecommendation,
-    declineTargetRecommendation,
-    waterIntakeMlByDate,
-    dailyWaterGoalMl,
-    addWaterMl,
-    setDailyWaterGoalMl,
-    copyMealFromPreviousDay,
-  };
+  const toastContextValue = useMemo<ToastContextValue>(
+    () => ({ toasts, dismissToast }),
+    [toasts, dismissToast]
+  );
 
-  return <MacroLogContext.Provider value={value}>{children}</MacroLogContext.Provider>;
+  const value = useMemo<MacroLogContextValue>(
+    () => ({
+      state,
+      authMode,
+      authUser,
+      authDetails,
+      needsSchemaSetup,
+      syncingDb,
+      resolvedTheme,
+      toggleTheme,
+      activeTab,
+      setActiveTab,
+      selectedDate,
+      setSelectedDate,
+      allFoods,
+      selectedDateEntries,
+      selectedDateTotals,
+      latestWeightEntry,
+      previousWeightEntry,
+      toasts: EMPTY_TOASTS,
+      dismissToast,
+      notify,
+      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      signInWithMagicLink,
+      signOut,
+      enterGuestMode,
+      exitGuestModeToAuth,
+      retrySupabaseSync,
+      foodModal,
+      openAddFoodModal,
+      openEditFoodModal,
+      closeFoodModal,
+      mealScannerModal,
+      openMealScannerModal,
+      closeMealScannerModal,
+      logAnalyzedMealItems,
+      barcodeScannerModal,
+      openBarcodeScannerModal,
+      closeBarcodeScannerModal,
+      weightModal,
+      openWeightModal,
+      closeWeightModal,
+      addFoodEntry,
+      updateFoodEntry,
+      quickUpdateFoodEntryQuantity,
+      deleteFoodEntry,
+      duplicateFoodEntry,
+      savedMeals,
+      saveMealCombo,
+      deleteSavedMealCombo,
+      logSavedMealCombo,
+      addCustomFood,
+      saveExternalFoodToMyFoods,
+      updateCustomFood,
+      deleteCustomFood,
+      toggleFavoriteFood,
+      updateGoals,
+      addWeightEntry,
+      updateWeightEntry,
+      deleteWeightEntry,
+      updateWeightGoal,
+      updateProfile,
+      updateSettings,
+      exportData,
+      selectAccountRole,
+      trainerTab,
+      setTrainerTab,
+      selectedTrainerClientId,
+      openTrainerClientDetail,
+      pendingInviteToken,
+      clearPendingInviteToken,
+      pendingInvitations,
+      pendingRecommendations,
+      coachPlans,
+      refreshCoachingAlerts,
+      approveTargetRecommendation,
+      declineTargetRecommendation,
+      waterIntakeMlByDate,
+      dailyWaterGoalMl,
+      addWaterMl,
+      setDailyWaterGoalMl,
+      activeBurnKcalByDate,
+      setActiveBurnKcal,
+      addActiveBurnKcal,
+      copyMealFromPreviousDay,
+    }),
+    [
+      state,
+      authMode,
+      authUser,
+      authDetails,
+      needsSchemaSetup,
+      syncingDb,
+      resolvedTheme,
+      toggleTheme,
+      activeTab,
+      selectedDate,
+      allFoods,
+      selectedDateEntries,
+      selectedDateTotals,
+      latestWeightEntry,
+      previousWeightEntry,
+      dismissToast,
+      notify,
+      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      signInWithMagicLink,
+      signOut,
+      enterGuestMode,
+      exitGuestModeToAuth,
+      retrySupabaseSync,
+      foodModal,
+      openAddFoodModal,
+      openEditFoodModal,
+      closeFoodModal,
+      mealScannerModal,
+      openMealScannerModal,
+      closeMealScannerModal,
+      logAnalyzedMealItems,
+      barcodeScannerModal,
+      openBarcodeScannerModal,
+      closeBarcodeScannerModal,
+      weightModal,
+      openWeightModal,
+      closeWeightModal,
+      addFoodEntry,
+      updateFoodEntry,
+      quickUpdateFoodEntryQuantity,
+      deleteFoodEntry,
+      duplicateFoodEntry,
+      savedMeals,
+      saveMealCombo,
+      deleteSavedMealCombo,
+      logSavedMealCombo,
+      addCustomFood,
+      saveExternalFoodToMyFoods,
+      updateCustomFood,
+      deleteCustomFood,
+      toggleFavoriteFood,
+      updateGoals,
+      addWeightEntry,
+      updateWeightEntry,
+      deleteWeightEntry,
+      updateWeightGoal,
+      updateProfile,
+      updateSettings,
+      exportData,
+      selectAccountRole,
+      trainerTab,
+      selectedTrainerClientId,
+      openTrainerClientDetail,
+      pendingInviteToken,
+      clearPendingInviteToken,
+      pendingInvitations,
+      pendingRecommendations,
+      coachPlans,
+      refreshCoachingAlerts,
+      approveTargetRecommendation,
+      declineTargetRecommendation,
+      waterIntakeMlByDate,
+      dailyWaterGoalMl,
+      addWaterMl,
+      setDailyWaterGoalMl,
+      activeBurnKcalByDate,
+      setActiveBurnKcal,
+      addActiveBurnKcal,
+      copyMealFromPreviousDay,
+    ]
+  );
+
+  return (
+    <MacroLogContext.Provider value={value}>
+      <ToastContext.Provider value={toastContextValue}>{children}</ToastContext.Provider>
+    </MacroLogContext.Provider>
+  );
 };
+
+export function useToasts(): ToastContextValue {
+  return useContext(ToastContext);
+}
 
 export function useMacroLogStore(): MacroLogContextValue {
   const ctx = useContext(MacroLogContext);

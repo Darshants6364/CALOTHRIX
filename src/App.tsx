@@ -98,7 +98,7 @@ const TrainerRouter: React.FC = () => {
 };
 
 const AppShell: React.FC = () => {
-  const { authMode, state } = useMacroLogStore();
+  const { authMode, state, enterGuestMode } = useMacroLogStore();
   const initialUnauth = shouldOpenAuthDirectly();
   const [showAuthScreen, setShowAuthScreen] = useState<boolean>(initialUnauth.openAuth);
   const [selectedAuthPortal, setSelectedAuthPortal] = useState<AccountRole>(initialUnauth.portal);
@@ -120,6 +120,7 @@ const AppShell: React.FC = () => {
             setSelectedAuthPortal(role);
             setShowAuthScreen(true);
           }}
+          onTryGuest={enterGuestMode}
         />
       );
     }

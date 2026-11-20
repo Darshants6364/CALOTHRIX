@@ -42,6 +42,7 @@ const MOBILE_BOTTOM_TABS = ALL_NAV_ITEMS.slice(0, 5);
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
     state,
+    authMode,
     authUser,
     authDetails,
     resolvedTheme,
@@ -50,8 +51,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     setActiveTab,
     openAddFoodModal,
     selectAccountRole,
+    exitGuestModeToAuth,
     signOut,
   } = useMacroLogStore();
+
+  const isGuest = authMode === 'guest';
 
   const isAdmin = isDatabaseAdmin(authUser, state.profile);
   const desktopNavItems: NavItem[] = isAdmin
@@ -165,15 +169,25 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             )}
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-[#111317] dark:text-white truncate">
-                {displayName}
+                {isGuest ? 'Guest Session' : displayName}
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                {displayEmail || 'Signed in'}
+                {isGuest ? 'Local-only · Not synced' : displayEmail || 'Signed in'}
               </div>
             </div>
           </button>
 
-          {ENABLE_TRAINER_PORTAL && (
+          {isGuest && (
+            <button
+              type="button"
+              onClick={exitGuestModeToAuth}
+              className="w-full min-h-[38px] px-3 rounded-xl bg-[#C8FF00] text-black text-xs font-bold hover:brightness-95 transition-all inline-flex items-center justify-center gap-2"
+            >
+              <span>Sign in to sync</span>
+            </button>
+          )}
+
+          {ENABLE_TRAINER_PORTAL && !isGuest && (
             <button
               type="button"
               onClick={() => void selectAccountRole('trainer')}
@@ -190,7 +204,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             className="w-full min-h-[38px] px-3 rounded-xl border border-black/12 dark:border-white/15 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-black/5 dark:hover:bg-white/5 transition-colors inline-flex items-center justify-center gap-2"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <span>{isGuest ? 'Exit Guest Mode' : 'Sign Out'}</span>
           </button>
         </div>
       </aside>
@@ -208,6 +222,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </button>
 
           <div className="flex items-center gap-0.5 shrink-0">
+            {isGuest && (
+              <button
+                type="button"
+                onClick={exitGuestModeToAuth}
+                className="min-h-[36px] px-2.5 mr-1 rounded-lg bg-[#C8FF00] text-black text-[11px] font-bold whitespace-nowrap"
+              >
+                Sign in
+              </button>
+            )}
             <button
               type="button"
               onClick={toggleTheme}

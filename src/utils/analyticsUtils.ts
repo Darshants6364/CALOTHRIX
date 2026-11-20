@@ -451,3 +451,159 @@ export function buildDeterministicWeeklySummary(params: {
     practicalSuggestions,
   };
 }
+
+export interface WeeklyCalorieBankSummary {
+  weekDates: string[];
+  dailyTarget: number;
+  weeklyBudget: number;
+  consumedThisWeek: number;
+  remainingWeeklyBudget: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  loggedDaysCount: number;
+  proteinTargetDaysHit: number;
+  recommendedPerRemainingDay: number;
+  flexRangeLow: number;
+  flexRangeHigh: number;
+  avgProteinThisWeek: number;
+}
+
+/**
+ * Weekly Calorie Banking + Protein-First Flexible Adherence
+ */
+export function getWeeklyCalorieBankSummary(params: {
+  foodEntries: FoodLogEntry[];
+  goals: NutritionGoals;
+  referenceDateKey: string;
+}): WeeklyCalorieBankSummary {
+  const { foodEntries, goals, referenceDateKey } = params;
+  const weekDates = getMondayToSundayWeek(referenceDateKey, 0);
+  const dailyTarget = Math.max(0, goals.calories || 0);
+  const weeklyBudget = dailyTarget * 7;
+
+  let consumedThisWeek = 0;
+  let loggedDaysCount = 0;
+  let totalProtein = 0;
+  let proteinTargetDaysHit = 0;
+
+  for (const d of weekDates) {
+    const dayEntries = getEntriesForDate(foodEntries, d);
+    if (dayEntries.length > 0) {
+      loggedDaysCount += 1;
+      const sum = sumMacros(dayEntries);
+      consumedThisWeek += sum.calories;
+      totalProtein += sum.protein;
+      if (goals.protein > 0 && sum.protein >= goals.protein * 0.85) {
+        proteinTargetDaysHit += 1;
+      }
+    }
+  }
+
+  const todayIdx = weekDates.indexOf(referenceDateKey);
+  const daysElapsed = todayIdx >= 0 ? todayIdx + 1 : 7;
+  const daysRemaining = Math.max(1, 7 - Math.max(0, todayIdx));
+  const remainingWeeklyBudget = Math.max(0, Math.round(weeklyBudget - consumedThisWeek));
+  const recommendedPerRemainingDay =
+    dailyTarget > 0
+      ? Math.max(1100, Math.round(remainingWeeklyBudget / daysRemaining))
+      : 0;
+
+  return {
+    weekDates,
+    dailyTarget,
+    weeklyBudget: Math.round(weeklyBudget),
+    consumedThisWeek: Math.round(consumedThisWeek),
+    remainingWeeklyBudget,
+    daysElapsed,
+    daysRemaining,
+    loggedDaysCount,
+    proteinTargetDaysHit,
+    recommendedPerRemainingDay,
+    flexRangeLow: Math.round(dailyTarget * 0.9),
+    flexRangeHigh: Math.round(dailyTarget * 1.1),
+    avgProteinThisWeek: loggedDaysCount > 0 ? round1(totalProtein / loggedDaysCount) : 0,
+  };
+}
+
+export interface DbGroundMatch {
+  food: FoodItem;
+  confidence: 'high' | 'moderate';
+  scaledMacros: MacroNutrients;
+}
+
+/**
+ * Matches an AI-detected food item name & weight against Calothrix's verified local database
+ * so users can replace estimated AI macros with IFCT 2017 / USDA / Calothrix verified macros.
+ */
+export function matchAnalyzedItemToDb(
+  itemName: string,
+  grams: number,
+  catalog: FoodItem[]
+): DbGroundMatch | null {
+  const clean = itemName
+    .toLowerCase()
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (clean.length < 2) return null;
+
+  const tokens = clean.split(' ').filter((t) => t.length >= 2);
+  if (tokens.length === 0) return null;
+
+  let bestFood: FoodItem | null = null;
+  let bestScore = 0;
+
+  for (const food of catalog) {
+    if (food.missingFields?.includes('calories')) continue;
+    const fName = food.name.toLowerCase().replace(/\(.*?\)/g, ' ').replace(/\s+/g, ' ').trim();
+    const aliases = (food.aliases || []).map((a) => a.toLowerCase());
+
+    let score = 0;
+    if (fName === clean || aliases.includes(clean)) {
+      score += 120;
+    } else if (fName.startsWith(clean) || aliases.some((a) => a.startsWith(clean))) {
+      score += 85;
+    } else {
+      let matchedTokens = 0;
+      for (const tok of tokens) {
+        if (fName.includes(tok) || aliases.some((a) => a.includes(tok))) {
+          matchedTokens += 1;
+        }
+      }
+      if (matchedTokens === tokens.length) {
+        score += 65;
+      } else if (matchedTokens >= Math.ceil(tokens.length * 0.65) && matchedTokens >= 1) {
+        score += 40 * (matchedTokens / tokens.length);
+      }
+    }
+
+    if (score <= 0) continue;
+
+    // Slight boost for cooked foods on meal scans unless 'raw' requested
+    if (!clean.includes('raw') && food.foodState && food.foodState !== 'raw') {
+      score += 12;
+    }
+    if (clean.includes('raw') && food.foodState === 'raw') {
+      score += 15;
+    }
+    if (food.verificationStatus === 'verified') {
+      score += 8;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestFood = food;
+    }
+  }
+
+  if (!bestFood || bestScore < 42) return null;
+
+  const safeGrams = Math.max(1, grams || bestFood.servingWeightGrams || 100);
+  return {
+    food: bestFood,
+    confidence: bestScore >= 75 ? 'high' : 'moderate',
+    scaledMacros: calculateScaledNutrition(bestFood, safeGrams),
+  };
+}
+

@@ -1,7 +1,17 @@
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import type { AnalyzedMealItem, MealAiAnalysisResult, MealCategory } from '../src/types/index.ts';
+import type {
+  AnalyzedMealItem,
+  CoachAdviceResult,
+  CoachSuggestionItem,
+  MealAiAnalysisResult,
+  MealCategory,
+  MenuAdvisorDish,
+  MenuAdvisorResult,
+  NutritionLabelOcrResult,
+} from '../src/types/index.ts';
 
 export type AnalyzeMealInputMode = 'photo' | 'voice' | 'text';
+export type MealPrepStyle = 'homemade_low_oil' | 'standard' | 'restaurant_rich';
 
 export interface AnalyzeMealRequest {
   mode: AnalyzeMealInputMode;
@@ -9,6 +19,7 @@ export interface AnalyzeMealRequest {
   mediaBase64?: string;
   promptText?: string;
   mealHint?: MealCategory;
+  prepStyle?: MealPrepStyle;
 }
 
 const VALID_MEAL_TYPES: MealCategory[] = [
@@ -212,14 +223,21 @@ export async function analyzeMealWithGemini(
     }
   }
 
+  const prepInstruction =
+    req.prepStyle === 'homemade_low_oil'
+      ? 'Preparation style: Homemade with minimal oil/ghee (~1 tsp per serving). Keep added cooking fat conservative.'
+      : req.prepStyle === 'restaurant_rich'
+      ? 'Preparation style: Restaurant / takeout rich preparation (generous oil, butter, ghee, or cream typical of dining out).'
+      : 'Preparation style: Standard everyday home or café preparation.';
+
   const instructionPrompt =
     req.mode === 'photo'
-      ? `Analyze the meal photograph. Identify every visible dish, food item, and drink (Indian dishes like roti, dal, sambar, dosa, idli, paneer, rice, curd as well as international foods). Estimate realistic cooked weights in grams and calculate calories, protein (g), carbs (g), fat (g), and fibre (g). ${contextNote ? `User note: "${contextNote}". ` : ''}${mealHintText}`
+      ? `Analyze the meal photograph. Identify every visible dish, food item, and drink (Indian dishes like roti, dal, sambar, dosa, idli, paneer, rice, curd as well as international foods). Estimate realistic cooked weights in grams and calculate calories, protein (g), carbs (g), fat (g), and fibre (g). ${prepInstruction} ${contextNote ? `User note: "${contextNote}". ` : ''}${mealHintText}`
       : req.mode === 'voice'
       ? resolvedTranscript
-        ? `The user spoke this meal description: "${resolvedTranscript}".${contextNote ? ` Extra user note: "${contextNote}".` : ''} Set "detectedDescription" to "${resolvedTranscript}". Break down every food or drink mentioned with realistic serving weights in grams and nutrition estimates (calories, protein, carbs, fat, fibre). Understand Indian household portions (katori, bowl, roti, piece, glass, spoon). ${mealHintText}`
-        : `Listen carefully to the voice recording. First transcribe accurately what the user ate into "detectedDescription", then break down every food or drink with realistic weights in grams and nutritional estimates (calories, protein, carbs, fat, fibre). Understand Indian household portions (katori, bowl, roti, piece, glass, spoon). ${contextNote ? `Extra note: "${contextNote}". ` : ''}${mealHintText}`
-      : `Analyze this meal description: "${contextNote}". Set "detectedDescription" to a clean summary of what was described, and break down every food or drink mentioned with realistic serving weights in grams and macronutrient estimates (calories, protein, carbs, fat, fibre). ${mealHintText}`;
+        ? `The user spoke this meal description: "${resolvedTranscript}".${contextNote ? ` Extra user note: "${contextNote}".` : ''} Set "detectedDescription" to "${resolvedTranscript}". Break down every food or drink mentioned with realistic serving weights in grams and nutrition estimates (calories, protein, carbs, fat, fibre). Understand Indian household portions (katori, bowl, roti, piece, glass, spoon). ${prepInstruction} ${mealHintText}`
+        : `Listen carefully to the voice recording. First transcribe accurately what the user ate into "detectedDescription", then break down every food or drink with realistic weights in grams and nutritional estimates (calories, protein, carbs, fat, fibre). Understand Indian household portions (katori, bowl, roti, piece, glass, spoon). ${prepInstruction} ${contextNote ? `Extra note: "${contextNote}". ` : ''}${mealHintText}`
+      : `Analyze this meal description: "${contextNote}". Set "detectedDescription" to a clean summary of what was described, and break down every food or drink mentioned with realistic serving weights in grams and macronutrient estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${mealHintText}`;
 
   parts.push({ text: instructionPrompt });
 
@@ -468,4 +486,478 @@ export async function readBarcodeFromImageWithGemini(req: {
   }
 
   return { barcode: null };
+}
+
+export async function parseNutritionLabelWithGemini(req: {
+  mimeType?: string;
+  mediaBase64: string;
+}): Promise<NutritionLabelOcrResult> {
+  const rawBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
+  if (!rawBase64) {
+    const err = new Error('No nutrition label image data received.');
+    (err as Error & { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
+
+  const ai = getGeminiClient();
+  const mimeType = req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg';
+
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      name: { type: Type.STRING, description: 'Product name if visible, otherwise Packaged Food' },
+      brand: { type: Type.STRING, description: 'Brand name if visible, else empty string' },
+      servingName: { type: Type.STRING, description: 'Serving label e.g. 1 serving (30g) or 100g' },
+      servingWeightGrams: { type: Type.NUMBER, description: 'Numeric weight in grams or ml per serving (default 100 if per 100g)' },
+      calories: { type: Type.NUMBER, description: 'Energy in kcal per servingWeightGrams' },
+      protein: { type: Type.NUMBER },
+      carbs: { type: Type.NUMBER },
+      fat: { type: Type.NUMBER },
+      fibre: { type: Type.NUMBER },
+      sugarG: { type: Type.NUMBER },
+      sodiumMg: { type: Type.NUMBER },
+      confidence: { type: Type.STRING, description: 'high, moderate, or low' },
+    },
+    required: [
+      'name',
+      'servingName',
+      'servingWeightGrams',
+      'calories',
+      'protein',
+      'carbs',
+      'fat',
+      'fibre',
+      'confidence',
+    ],
+  };
+
+  let responseText = '';
+  const attempts: Array<{ model: string; thinkingLevel: ThinkingLevel; timeoutMs: number }> = [
+    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, timeoutMs: 12000 },
+    { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW, timeoutMs: 14000 },
+  ];
+  let lastError: unknown;
+
+  for (const attempt of attempts) {
+    try {
+      const response = await withTimeout(
+        ai.models.generateContent({
+          model: attempt.model,
+          contents: {
+            parts: [
+              { inlineData: { mimeType, data: rawBase64 } },
+              {
+                text: 'Extract the Nutrition Facts / Nutritional Information table accurately. Convert kJ to kcal (divide by 4.184) if only kJ is shown. Normalize values to match servingWeightGrams (prefer per-serving if clearly stated, otherwise 100g). Keep missing sugar or sodium as 0 if absent.',
+              },
+            ],
+          },
+          config: {
+            systemInstruction:
+              'You are a precision food label OCR extractor. Read FSSAI (India), US FDA, and EU Nutrition Facts tables accurately without inventing numbers.',
+            thinkingConfig: { thinkingLevel: attempt.thinkingLevel },
+            responseMimeType: 'application/json',
+            responseSchema,
+          },
+        }),
+        attempt.timeoutMs,
+        'Nutrition label OCR timed out.'
+      );
+      const txt = (response.text || '').trim();
+      if (txt) {
+        responseText = txt;
+        break;
+      }
+    } catch (err) {
+      lastError = err;
+      const details = extractGeminiErrorDetails(err);
+      if (!details.retryable) {
+        const fatal = new Error(details.message);
+        (fatal as Error & { statusCode?: number }).statusCode = details.statusCode;
+        throw fatal;
+      }
+    }
+  }
+
+  if (!responseText) {
+    const details = extractGeminiErrorDetails(lastError);
+    const wrapped = new Error(details.message);
+    (wrapped as Error & { statusCode?: number }).statusCode = details.statusCode;
+    throw wrapped;
+  }
+
+  const parsed = JSON.parse(responseText) as Record<string, unknown>;
+  const confRaw = String(parsed.confidence || 'moderate');
+  const confidence: NutritionLabelOcrResult['confidence'] =
+    confRaw === 'high' || confRaw === 'low' ? confRaw : 'moderate';
+
+  return {
+    name: String(parsed.name || 'Packaged Food').trim() || 'Packaged Food',
+    brand: parsed.brand ? String(parsed.brand).trim() || undefined : undefined,
+    servingName: String(parsed.servingName || '1 serving').trim(),
+    servingWeightGrams: Math.max(1, normalizeNumber(parsed.servingWeightGrams, 1)),
+    calories: Math.round(normalizeNumber(parsed.calories, 0)),
+    protein: normalizeNumber(parsed.protein, 1),
+    carbs: normalizeNumber(parsed.carbs, 1),
+    fat: normalizeNumber(parsed.fat, 1),
+    fibre: normalizeNumber(parsed.fibre, 1),
+    sugarG: parsed.sugarG !== undefined ? normalizeNumber(parsed.sugarG, 1) : undefined,
+    sodiumMg: parsed.sodiumMg !== undefined ? Math.round(normalizeNumber(parsed.sodiumMg, 0)) : undefined,
+    confidence,
+  };
+}
+
+export async function analyzeMenuWithGemini(req: {
+  mimeType?: string;
+  mediaBase64?: string;
+  menuText?: string;
+  remainingCalories: number;
+  remainingProtein: number;
+  dietaryPreference?: string;
+}): Promise<MenuAdvisorResult> {
+  const ai = getGeminiClient();
+  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+  const rawBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
+
+  if (rawBase64) {
+    parts.push({
+      inlineData: {
+        mimeType: req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg',
+        data: rawBase64,
+      },
+    });
+  }
+
+  const textDesc = (req.menuText || '').trim();
+  if (!rawBase64 && !textDesc) {
+    const err = new Error('Upload a restaurant menu photo or paste dishes to analyze.');
+    (err as Error & { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
+
+  parts.push({
+    text: `Analyze this restaurant menu${textDesc ? ` / dish list: "${textDesc}"` : ''}. The user has ~${Math.round(req.remainingCalories)} kcal and ~${Math.round(req.remainingProtein)}g protein remaining today. Dietary preference: ${req.dietaryPreference || 'omnivore'}. Recommend the top 4-6 best-fitting dishes ranked by protein density (protein per 100 kcal) and macro fit, respecting their dietary preference.`,
+  });
+
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      restaurantSummary: { type: Type.STRING },
+      orderingTip: { type: Type.STRING },
+      dishes: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            dishName: { type: Type.STRING },
+            estimatedCalories: { type: Type.NUMBER },
+            protein: { type: Type.NUMBER },
+            carbs: { type: Type.NUMBER },
+            fat: { type: Type.NUMBER },
+            proteinPer100Kcal: { type: Type.NUMBER },
+            fitRating: { type: Type.STRING, description: 'best_fit, good_fit, or moderate_fit' },
+            reason: { type: Type.STRING },
+          },
+          required: [
+            'dishName',
+            'estimatedCalories',
+            'protein',
+            'carbs',
+            'fat',
+            'proteinPer100Kcal',
+            'fitRating',
+            'reason',
+          ],
+        },
+      },
+    },
+    required: ['restaurantSummary', 'orderingTip', 'dishes'],
+  };
+
+  let responseText = '';
+  const attempts: Array<{ model: string; thinkingLevel: ThinkingLevel; timeoutMs: number }> = [
+    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, timeoutMs: 12000 },
+    { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW, timeoutMs: 14000 },
+  ];
+  let lastError: unknown;
+
+  for (const attempt of attempts) {
+    try {
+      const response = await withTimeout(
+        ai.models.generateContent({
+          model: attempt.model,
+          contents: { parts },
+          config: {
+            systemInstruction:
+              'You are a dining-out sports nutrition coach. Identify high-protein, calorie-smart restaurant menu choices accurately without inventing exotic dishes not on the menu.',
+            thinkingConfig: { thinkingLevel: attempt.thinkingLevel },
+            responseMimeType: 'application/json',
+            responseSchema,
+          },
+        }),
+        attempt.timeoutMs,
+        'Menu analysis timed out.'
+      );
+      const txt = (response.text || '').trim();
+      if (txt) {
+        responseText = txt;
+        break;
+      }
+    } catch (err) {
+      lastError = err;
+      const details = extractGeminiErrorDetails(err);
+      if (!details.retryable) {
+        const fatal = new Error(details.message);
+        (fatal as Error & { statusCode?: number }).statusCode = details.statusCode;
+        throw fatal;
+      }
+    }
+  }
+
+  if (!responseText) {
+    const details = extractGeminiErrorDetails(lastError);
+    const wrapped = new Error(details.message);
+    (wrapped as Error & { statusCode?: number }).statusCode = details.statusCode;
+    throw wrapped;
+  }
+
+  const parsed = JSON.parse(responseText) as Record<string, unknown>;
+  const rawDishes = Array.isArray(parsed.dishes) ? parsed.dishes : [];
+  const dishes: MenuAdvisorDish[] = rawDishes.map((d) => {
+    const row = (d || {}) as Record<string, unknown>;
+    const kcal = Math.max(1, Math.round(normalizeNumber(row.estimatedCalories, 0)));
+    const protein = normalizeNumber(row.protein, 1);
+    const fitRaw = String(row.fitRating || 'good_fit');
+    const fitRating: MenuAdvisorDish['fitRating'] =
+      fitRaw === 'best_fit' || fitRaw === 'moderate_fit' ? fitRaw : 'good_fit';
+    return {
+      dishName: String(row.dishName || 'Menu Dish').trim(),
+      estimatedCalories: kcal,
+      protein,
+      carbs: normalizeNumber(row.carbs, 1),
+      fat: normalizeNumber(row.fat, 1),
+      proteinPer100Kcal: Math.round(((protein / kcal) * 100) * 10) / 10,
+      fitRating,
+      reason: String(row.reason || '').trim(),
+    };
+  });
+
+  return {
+    restaurantSummary: String(parsed.restaurantSummary || 'Menu nutrition breakdown').trim(),
+    orderingTip: String(parsed.orderingTip || 'Ask for sauces/dressings on the side and double protein where possible.').trim(),
+    dishes: dishes.sort((a, b) => b.proteinPer100Kcal - a.proteinPer100Kcal),
+  };
+}
+
+function buildDeterministicCoachAdvice(req: {
+  prompt: string;
+  remainingCalories: number;
+  remainingProtein: number;
+  remainingCarbs: number;
+  remainingFat: number;
+  dietaryPreference?: string;
+}): CoachAdviceResult {
+  const cal = Math.max(0, Math.round(req.remainingCalories));
+  const pro = Math.max(0, Math.round(req.remainingProtein));
+  const diet = (req.dietaryPreference || 'omnivore').toLowerCase();
+  const isVeg = diet.includes('veg') || diet.includes('vegan') || diet.includes('jain');
+  const isVegan = diet.includes('vegan');
+
+  const suggestions: CoachSuggestionItem[] = [];
+  if (cal < 150) {
+    suggestions.push({
+      title: 'Mint Chaas / Spiced Buttermilk (250 ml)',
+      calories: 55,
+      protein: 2.8,
+      carbs: 6.2,
+      fat: 1.8,
+      fibre: 0,
+      reason: 'Hydrating and ultra-light when calories are nearly capped.',
+    });
+  } else if (pro >= 25 && cal <= 360) {
+    if (isVegan) {
+      suggestions.push({
+        title: 'Grilled Herb Tofu + Steamed Edamame',
+        calories: 270,
+        protein: 28,
+        carbs: 14,
+        fat: 11,
+        fibre: 6.5,
+        reason: 'Hits high protein within a compact calorie budget.',
+      });
+    } else if (isVeg) {
+      suggestions.push({
+        title: '1 Scoop Whey Isolate + Low-Fat Paneer Cubes (80g)',
+        calories: 295,
+        protein: 38,
+        carbs: 6,
+        fat: 12,
+        fibre: 0,
+        reason: 'Rapidly closes remaining protein gap without carb spillover.',
+      });
+    } else {
+      suggestions.push({
+        title: 'Tandoori Chicken Breast (150g) + Cucumber Mint Salad',
+        calories: 265,
+        protein: 42,
+        carbs: 6,
+        fat: 7.5,
+        fibre: 2.2,
+        reason: 'Maximum lean protein per calorie to finish your day.',
+      });
+    }
+  } else {
+    suggestions.push(
+      isVegan
+        ? {
+            title: 'Moong Dal Chilla (2 pcs) + Mint Chutney',
+            calories: 255,
+            protein: 14.5,
+            carbs: 34,
+            fat: 6.2,
+            fibre: 6.0,
+            reason: 'Balanced plant protein and high fibre finish.',
+          }
+        : isVeg
+        ? {
+            title: 'Paneer Tikka (140g) + 1 Phulka Roti',
+            calories: 390,
+            protein: 24,
+            carbs: 32,
+            fat: 18,
+            fibre: 4.5,
+            reason: 'Satisfying vegetarian meal hitting both protein and steady energy.',
+          }
+        : {
+            title: '3 Boiled Eggs + 1 Whole Wheat Toast',
+            calories: 315,
+            protein: 22.5,
+            carbs: 18,
+            fat: 16.5,
+            fibre: 2.8,
+            reason: 'Quick 3-minute finish with bioavailable protein.',
+          }
+    );
+  }
+
+  if (cal >= 350 && !isVeg) {
+    suggestions.push({
+      title: 'Chicken Tikka (160g) + 1 Katori Dal',
+      calories: 410,
+      protein: 44,
+      carbs: 26,
+      fat: 13,
+      fibre: 5.2,
+      reason: 'High-satiety protein + legume fibre combo.',
+    });
+  } else if (cal >= 220) {
+    suggestions.push({
+      title: 'Greek Yogurt / Hung Curd Bowl (180g) + Blueberries',
+      calories: 195,
+      protein: 17.5,
+      carbs: 19,
+      fat: 4.5,
+      fibre: 2.5,
+      reason: 'Gut-friendly casein protein ideal before sleep.',
+    });
+  }
+
+  return {
+    provider: 'deterministic',
+    reply:
+      cal > 0
+        ? `You have ${cal} kcal and ${pro}g protein left today. Focus on lean protein first (${Math.round(req.remainingCarbs)}g C / ${Math.round(req.remainingFat)}g F remaining).`
+        : `You are at your daily calorie target with ${pro}g protein remaining — stick to ultra-lean protein or light hydration.`,
+    suggestions,
+  };
+}
+
+export async function coachChatWithGemini(req: {
+  prompt: string;
+  remainingCalories: number;
+  remainingProtein: number;
+  remainingCarbs: number;
+  remainingFat: number;
+  goalCalories: number;
+  goalProtein: number;
+  dietaryPreference?: string;
+  restrictions?: string[];
+}): Promise<CoachAdviceResult> {
+  const hasKey = Boolean((process.env.GEMINI_API_KEY || '').trim());
+  if (!hasKey) {
+    return buildDeterministicCoachAdvice(req);
+  }
+
+  try {
+    const ai = getGeminiClient();
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        reply: { type: Type.STRING, description: 'Concise practical 2-3 sentence coaching response.' },
+        suggestions: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              calories: { type: Type.NUMBER },
+              protein: { type: Type.NUMBER },
+              carbs: { type: Type.NUMBER },
+              fat: { type: Type.NUMBER },
+              fibre: { type: Type.NUMBER },
+              reason: { type: Type.STRING },
+            },
+            required: ['title', 'calories', 'protein', 'carbs', 'fat', 'fibre', 'reason'],
+          },
+        },
+      },
+      required: ['reply', 'suggestions'],
+    };
+
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: {
+          parts: [
+            {
+              text: `User question: "${req.prompt}". Daily goals: ${req.goalCalories} kcal, ${req.goalProtein}g protein. Remaining today: ${Math.round(req.remainingCalories)} kcal, ${Math.round(req.remainingProtein)}g protein, ${Math.round(req.remainingCarbs)}g carbs, ${Math.round(req.remainingFat)}g fat. Diet: ${req.dietaryPreference || 'omnivore'}. Restrictions: ${(req.restrictions || []).join(', ') || 'none'}. Give direct, realistic Indian + global meal/snack suggestions with exact macro estimates that respect remaining budget.`,
+            },
+          ],
+        },
+        config: {
+          systemInstruction:
+            'You are Calothrix Nutrition Coach. Give concise, actionable advice grounded in realistic portions and user dietary preferences. Suggest 2-3 loggable food ideas.',
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+          responseMimeType: 'application/json',
+          responseSchema,
+        },
+      }),
+      10000,
+      'Coach request timed out.'
+    );
+
+    const txt = (response.text || '').trim();
+    if (!txt) return buildDeterministicCoachAdvice(req);
+    const parsed = JSON.parse(txt) as Record<string, unknown>;
+    const rawSugs = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
+    const suggestions: CoachSuggestionItem[] = rawSugs.map((s) => {
+      const row = (s || {}) as Record<string, unknown>;
+      return {
+        title: String(row.title || 'Balanced Snack').trim(),
+        calories: Math.round(normalizeNumber(row.calories, 0)),
+        protein: normalizeNumber(row.protein, 1),
+        carbs: normalizeNumber(row.carbs, 1),
+        fat: normalizeNumber(row.fat, 1),
+        fibre: normalizeNumber(row.fibre, 1),
+        reason: String(row.reason || '').trim(),
+      };
+    });
+
+    return {
+      provider: 'gemini',
+      reply: String(parsed.reply || '').trim() || buildDeterministicCoachAdvice(req).reply,
+      suggestions: suggestions.length > 0 ? suggestions : buildDeterministicCoachAdvice(req).suggestions,
+    };
+  } catch {
+    return buildDeterministicCoachAdvice(req);
+  }
 }

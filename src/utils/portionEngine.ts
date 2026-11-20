@@ -450,23 +450,25 @@ export const STANDARD_FOOD_PORTIONS: Record<string, FoodPortion[]> = {
 };
 
 /**
- * Pattern-based fallback portion inference for IFCT raw items & packaged items
- * ONLY attaches scientifically sensible portions (never attaches "1 piece" to oil or "ml" to rice).
+ * Universal Household & Category Portion Inference + Serving-Size Memory
+ * Attaches realistic unit options (slice, piece, scoop, bowl, katori, cup, tbsp, tsp, fillet)
+ * without polluting liquids/solids inconsistently.
  */
 export function getPortionsForFood(food: FoodItem): FoodPortion[] {
   const result: FoodPortion[] = [];
+  const pushUnique = (p: FoodPortion) => {
+    if (!result.some((r) => r.portionName.toLowerCase() === p.portionName.toLowerCase())) {
+      result.push(p);
+    }
+  };
 
   if (food.portions && food.portions.length > 0) {
-    result.push(...food.portions);
+    food.portions.forEach(pushUnique);
   }
 
   const catalogPortions = STANDARD_FOOD_PORTIONS[food.id];
   if (catalogPortions) {
-    for (const p of catalogPortions) {
-      if (!result.some((r) => r.portionName === p.portionName)) {
-        result.push(p);
-      }
-    }
+    catalogPortions.forEach(pushUnique);
   }
 
   // Add item's native serving if it differs from 100 g
@@ -475,7 +477,7 @@ export function getPortionsForFood(food: FoodItem): FoodPortion[] {
     food.servingWeightGrams !== 100 &&
     !result.some((p) => Math.abs(p.gramOrMlWeight - food.servingWeightGrams) < 0.5)
   ) {
-    result.push({
+    pushUnique({
       id: `${food.id}-native-serving`,
       foodId: food.id,
       portionName: food.servingName || `${food.servingWeightGrams} g serving`,
@@ -485,104 +487,341 @@ export function getPortionsForFood(food: FoodItem): FoodPortion[] {
       measurementMethod: 'source_serving_definition',
       sourceReference: food.sourceName || 'Reference',
       confidenceLevel: 'high',
+      isDefault: result.length === 0,
     });
   }
 
-  // Context-aware Indian portions by food group / name when no explicit catalog row matched
-  if (result.length === 0) {
-    const n = food.name.toLowerCase();
-    const g = (food.foodGroup || '').toLowerCase();
-    if (food.liquidDensityGPerMl) {
-      const d = food.liquidDensityGPerMl;
-      result.push(
-        {
-          id: `${food.id}-cup`,
-          foodId: food.id,
-          portionName: `1 cup (200 ml · ${Math.round(200 * d)} g)`,
-          sizeVariant: 'small',
-          gramOrMlWeight: Math.round(200 * d * 10) / 10,
-          unitType: 'cup',
-          measurementMethod: `liquid_density_${d}`,
-          sourceReference: 'Verified Liquid Density',
-          confidenceLevel: 'high',
-        },
-        {
-          id: `${food.id}-glass`,
-          foodId: food.id,
-          portionName: `1 glass (250 ml · ${Math.round(250 * d)} g)`,
-          sizeVariant: 'medium',
-          gramOrMlWeight: Math.round(250 * d * 10) / 10,
-          unitType: 'glass',
-          measurementMethod: `liquid_density_${d}`,
-          sourceReference: 'Verified Liquid Density',
-          confidenceLevel: 'high',
-        }
-      );
-    } else if (n.includes('egg,') || n.includes('egg ')) {
-      result.push({
-        id: `${food.id}-1egg`,
+  // Add universal category & food-type portions so nearly every food has household units
+  const n = food.name.toLowerCase();
+  const cat = (food.category || '').toLowerCase();
+  const g = (food.foodGroup || '').toLowerCase();
+
+  if (food.liquidDensityGPerMl) {
+    const d = food.liquidDensityGPerMl;
+    if (/oil|ghee/.test(n)) {
+      pushUnique({
+        id: `${food.id}-tsp`,
         foodId: food.id,
-        portionName: '1 whole egg edible (~50 g)',
-        sizeVariant: 'medium',
-        gramOrMlWeight: 50,
-        unitType: 'piece',
-        measurementMethod: 'edible_portion_reference',
-        sourceReference: 'NIN Egg Reference',
-        confidenceLevel: 'high',
-      });
-    } else if (g.includes('grain legumes') || n.includes('dal') || n.includes('lentil')) {
-      result.push({
-        id: `${food.id}-dry-katori`,
-        foodId: food.id,
-        portionName: '1 small katori dry uncooked (~50 g)',
+        portionName: `1 tsp (5 ml · ${Math.round(5 * d * 10) / 10} g)`,
         sizeVariant: 'small',
-        gramOrMlWeight: 50,
-        unitType: 'katori',
-        measurementMethod: 'dry_measure',
-        sourceReference: 'Indian Kitchen Measure',
-        confidenceLevel: 'moderate',
-      });
-    } else if (g.includes('nuts') || n.includes('almond') || n.includes('cashew') || n.includes('peanut')) {
-      result.push({
-        id: `${food.id}-handful`,
-        foodId: food.id,
-        portionName: '1 handful / 1 oz (~28 g)',
-        sizeVariant: 'medium',
-        gramOrMlWeight: 28,
-        unitType: 'piece',
-        measurementMethod: 'standard_nut_serving',
-        sourceReference: 'USDA / NIN Nut Serving',
+        gramOrMlWeight: Math.round(5 * d * 10) / 10,
+        unitType: 'tsp',
+        measurementMethod: `liquid_density_${d}`,
+        sourceReference: 'Household Spoon Measure',
         confidenceLevel: 'high',
       });
-    } else if (g.includes('spices') || n.includes('oil') || n.includes('ghee') || n.includes('butter')) {
-      result.push(
-        {
-          id: `${food.id}-tsp`,
-          foodId: food.id,
-          portionName: '1 tsp (~5 g)',
-          sizeVariant: 'small',
-          gramOrMlWeight: 5,
-          unitType: 'tsp',
-          measurementMethod: 'kitchen_spoon_measure',
-          sourceReference: 'NIN Household Spoon',
-          confidenceLevel: 'moderate',
-        },
-        {
-          id: `${food.id}-tbsp`,
-          foodId: food.id,
-          portionName: '1 tbsp (~15 g)',
-          sizeVariant: 'medium',
-          gramOrMlWeight: 15,
-          unitType: 'tbsp',
-          measurementMethod: 'kitchen_spoon_measure',
-          sourceReference: 'NIN Household Spoon',
-          confidenceLevel: 'moderate',
-        }
-      );
+      pushUnique({
+        id: `${food.id}-tbsp`,
+        foodId: food.id,
+        portionName: `1 tbsp (15 ml · ${Math.round(15 * d * 10) / 10} g)`,
+        sizeVariant: 'medium',
+        gramOrMlWeight: Math.round(15 * d * 10) / 10,
+        unitType: 'tbsp',
+        measurementMethod: `liquid_density_${d}`,
+        sourceReference: 'Household Spoon Measure',
+        confidenceLevel: 'high',
+        isDefault: result.length === 0,
+      });
+    } else {
+      pushUnique({
+        id: `${food.id}-cup`,
+        foodId: food.id,
+        portionName: `1 cup (200 ml · ${Math.round(200 * d)} g)`,
+        sizeVariant: 'small',
+        gramOrMlWeight: Math.round(200 * d * 10) / 10,
+        unitType: 'cup',
+        measurementMethod: `liquid_density_${d}`,
+        sourceReference: 'Verified Liquid Density',
+        confidenceLevel: 'high',
+      });
+      pushUnique({
+        id: `${food.id}-glass`,
+        foodId: food.id,
+        portionName: `1 glass (250 ml · ${Math.round(250 * d)} g)`,
+        sizeVariant: 'medium',
+        gramOrMlWeight: Math.round(250 * d * 10) / 10,
+        unitType: 'glass',
+        measurementMethod: `liquid_density_${d}`,
+        sourceReference: 'Verified Liquid Density',
+        confidenceLevel: 'high',
+      });
     }
+  } else if (/\bwhey\b|\bprotein powder\b|\bcasein\b|\bscoop\b/.test(n) || cat === 'supplements') {
+    const scoopWeight = food.servingWeightGrams > 15 && food.servingWeightGrams <= 55 ? food.servingWeightGrams : 32;
+    pushUnique({
+      id: `${food.id}-1scoop`,
+      foodId: food.id,
+      portionName: `1 scoop (${scoopWeight} g)`,
+      sizeVariant: 'medium',
+      gramOrMlWeight: scoopWeight,
+      unitType: 'scoop',
+      measurementMethod: 'standard_supplement_scoop',
+      sourceReference: 'Standard Protein Scoop',
+      confidenceLevel: 'high',
+    });
+    pushUnique({
+      id: `${food.id}-1.5scoop`,
+      foodId: food.id,
+      portionName: `1.5 scoops (${Math.round(scoopWeight * 1.5)} g)`,
+      sizeVariant: 'large',
+      gramOrMlWeight: Math.round(scoopWeight * 1.5),
+      unitType: 'scoop',
+      measurementMethod: 'standard_supplement_scoop',
+      sourceReference: 'Standard Protein Scoop',
+      confidenceLevel: 'high',
+    });
+  } else if (/\bbread\b|\btoast\b|\bsourdough\b/.test(n)) {
+    pushUnique({
+      id: `${food.id}-1slice`,
+      foodId: food.id,
+      portionName: '1 slice (~32 g)',
+      sizeVariant: 'small',
+      gramOrMlWeight: 32,
+      unitType: 'slice',
+      measurementMethod: 'standard_bakery_slice',
+      sourceReference: 'USDA / Bakery Standard',
+      confidenceLevel: 'high',
+    });
+    pushUnique({
+      id: `${food.id}-2slices`,
+      foodId: food.id,
+      portionName: '2 slices (~64 g)',
+      sizeVariant: 'medium',
+      gramOrMlWeight: 64,
+      unitType: 'slice',
+      measurementMethod: 'standard_bakery_slice',
+      sourceReference: 'USDA / Bakery Standard',
+      confidenceLevel: 'high',
+    });
+  } else if (/\bparatha\b|\bnaan\b|\bkulcha\b|\bthepla\b|\bchilla\b|\bpancake\b/.test(n)) {
+    const pieceG = food.servingWeightGrams !== 100 && food.servingWeightGrams > 25 ? food.servingWeightGrams : 75;
+    pushUnique({
+      id: `${food.id}-1pc`,
+      foodId: food.id,
+      portionName: `1 medium piece (${pieceG} g)`,
+      sizeVariant: 'medium',
+      gramOrMlWeight: pieceG,
+      unitType: 'piece',
+      measurementMethod: 'weighed_household_standard',
+      sourceReference: 'Indian Flatbread Benchmark',
+      confidenceLevel: 'moderate',
+    });
+    pushUnique({
+      id: `${food.id}-2pc`,
+      foodId: food.id,
+      portionName: `2 pieces (${Math.round(pieceG * 2)} g)`,
+      sizeVariant: 'large',
+      gramOrMlWeight: Math.round(pieceG * 2),
+      unitType: 'piece',
+      measurementMethod: 'weighed_household_standard',
+      sourceReference: 'Indian Flatbread Benchmark',
+      confidenceLevel: 'moderate',
+    });
+  } else if (n.includes('egg,') || n.includes('egg ') || n === 'egg') {
+    pushUnique({
+      id: `${food.id}-1egg`,
+      foodId: food.id,
+      portionName: '1 whole egg edible (~50 g)',
+      sizeVariant: 'medium',
+      gramOrMlWeight: 50,
+      unitType: 'piece',
+      measurementMethod: 'edible_portion_reference',
+      sourceReference: 'NIN Egg Reference',
+      confidenceLevel: 'high',
+    });
+    pushUnique({
+      id: `${food.id}-2egg`,
+      foodId: food.id,
+      portionName: '2 whole eggs (~100 g)',
+      sizeVariant: 'large',
+      gramOrMlWeight: 100,
+      unitType: 'piece',
+      measurementMethod: 'edible_portion_reference',
+      sourceReference: 'NIN Egg Reference',
+      confidenceLevel: 'high',
+    });
+  } else if (
+    /\bchicken\b|\bfish\b|\bsalmon\b|\bsteak\b|\bpaneer\b|\btofu\b/.test(n) &&
+    !/curry|biryani|sub|bowl|tikka/.test(n)
+  ) {
+    pushUnique({
+      id: `${food.id}-palm`,
+      foodId: food.id,
+      portionName: '1 palm fillet / block (120 g)',
+      sizeVariant: 'medium',
+      gramOrMlWeight: 120,
+      unitType: 'piece',
+      measurementMethod: 'hand_portion_benchmark',
+      sourceReference: 'Precision Protein Portion Guide',
+      confidenceLevel: 'moderate',
+    });
+    pushUnique({
+      id: `${food.id}-large-fillet`,
+      foodId: food.id,
+      portionName: '1 large serving (180 g)',
+      sizeVariant: 'large',
+      gramOrMlWeight: 180,
+      unitType: 'piece',
+      measurementMethod: 'hand_portion_benchmark',
+      sourceReference: 'Precision Protein Portion Guide',
+      confidenceLevel: 'moderate',
+    });
+  } else if (/\boil\b|\bghee\b|\bbutter\b|\bhoney\b|\bpeanut butter\b|\bsauce\b|\bhummus\b/.test(n) || g.includes('spices')) {
+    pushUnique({
+      id: `${food.id}-tsp`,
+      foodId: food.id,
+      portionName: '1 tsp (~5 g)',
+      sizeVariant: 'small',
+      gramOrMlWeight: 5,
+      unitType: 'tsp',
+      measurementMethod: 'kitchen_spoon_measure',
+      sourceReference: 'NIN Household Spoon',
+      confidenceLevel: 'moderate',
+    });
+    pushUnique({
+      id: `${food.id}-tbsp`,
+      foodId: food.id,
+      portionName: '1 tbsp (~15 g)',
+      sizeVariant: 'medium',
+      gramOrMlWeight: 15,
+      unitType: 'tbsp',
+      measurementMethod: 'kitchen_spoon_measure',
+      sourceReference: 'NIN Household Spoon',
+      confidenceLevel: 'moderate',
+    });
+  } else if (cat === 'fruits' || /\bapple\b|\bbanana\b|\borange\b|\bmango\b|\bpear\b/.test(n)) {
+    pushUnique({
+      id: `${food.id}-fruit-s`,
+      foodId: food.id,
+      portionName: '1 small piece (~90 g)',
+      sizeVariant: 'small',
+      gramOrMlWeight: 90,
+      unitType: 'piece',
+      measurementMethod: 'edible_fruit_standard',
+      sourceReference: 'USDA / NIN Fruit Portion',
+      confidenceLevel: 'moderate',
+    });
+    pushUnique({
+      id: `${food.id}-fruit-m`,
+      foodId: food.id,
+      portionName: '1 medium piece (~130 g)',
+      sizeVariant: 'medium',
+      gramOrMlWeight: 130,
+      unitType: 'piece',
+      measurementMethod: 'edible_fruit_standard',
+      sourceReference: 'USDA / NIN Fruit Portion',
+      confidenceLevel: 'moderate',
+    });
+  } else if (g.includes('nuts') || /\balmond\b|\bcashew\b|\bpeanut\b|\bwalnut\b|\bseeds\b/.test(n)) {
+    pushUnique({
+      id: `${food.id}-handful`,
+      foodId: food.id,
+      portionName: '1 handful / 1 oz (~28 g)',
+      sizeVariant: 'medium',
+      gramOrMlWeight: 28,
+      unitType: 'piece',
+      measurementMethod: 'standard_nut_serving',
+      sourceReference: 'USDA / NIN Nut Serving',
+      confidenceLevel: 'high',
+    });
+    pushUnique({
+      id: `${food.id}-tbsp`,
+      foodId: food.id,
+      portionName: '1 tbsp (~12 g)',
+      sizeVariant: 'small',
+      gramOrMlWeight: 12,
+      unitType: 'tbsp',
+      measurementMethod: 'kitchen_spoon_measure',
+      sourceReference: 'NIN Household Spoon',
+      confidenceLevel: 'moderate',
+    });
+  } else if (
+    food.foodState === 'cooked' ||
+    /\bcurry\b|\bdal\b|\bpulao\b|\brice\b|\boatmeal\b|\bporridge\b|\bsoup\b|\bbowl\b/.test(n)
+  ) {
+    pushUnique({
+      id: `${food.id}-katori`,
+      foodId: food.id,
+      portionName: '1 katori / small bowl (150 g)',
+      sizeVariant: 'small',
+      gramOrMlWeight: 150,
+      unitType: 'katori',
+      measurementMethod: 'weighed_household_standard',
+      sourceReference: 'NIN Standard Household Katori',
+      confidenceLevel: 'moderate',
+    });
+    pushUnique({
+      id: `${food.id}-bowl`,
+      foodId: food.id,
+      portionName: '1 medium bowl / cup (220 g)',
+      sizeVariant: 'medium',
+      gramOrMlWeight: 220,
+      unitType: 'bowl',
+      measurementMethod: 'weighed_household_standard',
+      sourceReference: 'Standard Bowl Benchmark',
+      confidenceLevel: 'moderate',
+    });
+  } else if (g.includes('grain legumes') || /\blentil\b|\bchana\b/.test(n)) {
+    pushUnique({
+      id: `${food.id}-dry-katori`,
+      foodId: food.id,
+      portionName: '1 small katori dry uncooked (~50 g)',
+      sizeVariant: 'small',
+      gramOrMlWeight: 50,
+      unitType: 'katori',
+      measurementMethod: 'dry_measure',
+      sourceReference: 'Indian Kitchen Measure',
+      confidenceLevel: 'moderate',
+    });
   }
 
   return result;
+}
+
+const PORTION_MEMORY_KEY = 'calothrix_portion_memory_v1';
+
+export interface RememberedPortion {
+  grams: number;
+  unitLabel: string;
+  updatedAt: number;
+}
+
+export function getLastUsedPortion(foodId: string): RememberedPortion | null {
+  if (typeof window === 'undefined' || !foodId) return null;
+  try {
+    const raw = localStorage.getItem(PORTION_MEMORY_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, RememberedPortion>;
+    const hit = map[foodId];
+    if (hit && Number.isFinite(hit.grams) && hit.grams > 0) {
+      return hit;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastUsedPortion(foodId: string, grams: number, unitLabel: string): void {
+  if (typeof window === 'undefined' || !foodId || !Number.isFinite(grams) || grams <= 0) return;
+  try {
+    const raw = localStorage.getItem(PORTION_MEMORY_KEY);
+    const map: Record<string, RememberedPortion> = raw ? (JSON.parse(raw) as Record<string, RememberedPortion>) : {};
+    map[foodId] = {
+      grams: Math.round(grams * 10) / 10,
+      unitLabel,
+      updatedAt: Date.now(),
+    };
+    const entries = Object.entries(map);
+    if (entries.length > 180) {
+      entries.sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
+      localStorage.setItem(PORTION_MEMORY_KEY, JSON.stringify(Object.fromEntries(entries.slice(0, 180))));
+    } else {
+      localStorage.setItem(PORTION_MEMORY_KEY, JSON.stringify(map));
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
 }
 
 /**

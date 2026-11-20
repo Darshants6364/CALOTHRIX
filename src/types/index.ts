@@ -682,3 +682,77 @@ export interface WeeklySummaryResult {
   practicalSuggestions: string[];
   rateLimitNote?: string;
 }
+
+export interface SavedMealComboItem {
+  foodId: string;
+  foodName: string;
+  quantityGrams: number;
+  unitLabel?: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fibre: number;
+}
+
+export interface SavedMealCombo {
+  id: string;
+  name: string;
+  mealType?: MealCategory;
+  items: SavedMealComboItem[];
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  totalFibre: number;
+  createdAt: string;
+}
+
+export interface NutritionLabelOcrResult {
+  name: string;
+  brand?: string;
+  servingName: string;
+  servingWeightGrams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fibre: number;
+  sugarG?: number;
+  sodiumMg?: number;
+  confidence: 'high' | 'moderate' | 'low';
+}
+
+export interface MenuAdvisorDish {
+  dishName: string;
+  estimatedCalories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  proteinPer100Kcal: number;
+  fitRating: 'best_fit' | 'good_fit' | 'moderate_fit';
+  reason: string;
+}
+
+export interface MenuAdvisorResult {
+  restaurantSummary: string;
+  dishes: MenuAdvisorDish[];
+  orderingTip: string;
+}
+
+export interface CoachSuggestionItem {
+  title: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fibre: number;
+  reason: string;
+}
+
+export interface CoachAdviceResult {
+  reply: string;
+  suggestions: CoachSuggestionItem[];
+  provider: 'gemini' | 'deterministic';
+}
+

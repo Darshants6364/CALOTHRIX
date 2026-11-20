@@ -15,6 +15,7 @@ import heroAthleteImg from '../../assets/images/calothrix_hero_athlete_179497941
 interface HeroSectionProps {
   onExplore: () => void;
   onGetStarted: () => void;
+  onTryGuest?: () => void;
 }
 
 const HERO_WORDS = ['BUILT', 'TO', 'PUSH', 'YOUR', 'LIMITS.'];
@@ -68,7 +69,7 @@ const HERO_STAGE_MODES = [
   },
 ];
 
-export function HeroSection({ onExplore, onGetStarted }: HeroSectionProps) {
+export function HeroSection({ onExplore, onGetStarted, onTryGuest }: HeroSectionProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const [imgError, setImgError] = useState(false);
   const [activeStageIdx, setActiveStageIdx] = useState(0);
@@ -249,6 +250,15 @@ export function HeroSection({ onExplore, onGetStarted }: HeroSectionProps) {
                   aria-hidden="true"
                 />
               </MagneticButton>
+
+              {onTryGuest && (
+                <MagneticButton
+                  onClick={onTryGuest}
+                  className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-sm border border-[#C8FF00]/60 bg-[#C8FF00]/10 px-6 py-3.5 text-xs font-bold tracking-wider uppercase text-[#C8FF00] hover:bg-[#C8FF00]/20 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00]"
+                >
+                  Try Free (No Sign-Up)
+                </MagneticButton>
+              )}
 
               <MagneticButton
                 onClick={onExplore}

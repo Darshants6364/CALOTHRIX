@@ -34,6 +34,12 @@ const SAMPLE_INDIAN_BARCODES: { label: string; code: string }[] = [
 ];
 
 export const BarcodeScannerModal: React.FC = () => {
+  const { barcodeScannerModal } = useMacroLogStore();
+  if (!barcodeScannerModal.isOpen) return null;
+  return <BarcodeScannerModalContent />;
+};
+
+const BarcodeScannerModalContent: React.FC = () => {
   const {
     allFoods,
     barcodeScannerModal,
@@ -476,11 +482,9 @@ export const BarcodeScannerModal: React.FC = () => {
     });
   };
 
-  if (!barcodeScannerModal.isOpen) return null;
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Barcode Food Scanner"
@@ -733,12 +737,23 @@ export const BarcodeScannerModal: React.FC = () => {
                   type="button"
                   onClick={() => {
                     closeBarcodeScannerModal();
-                    openMealScannerModal({ mode: 'photo', meal: mealType, date: logDate });
+                    openMealScannerModal({ mode: 'label', meal: mealType, date: logDate });
                   }}
                   className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 font-semibold inline-flex items-center gap-1.5"
                 >
+                  <ScanLine className="w-3.5 h-3.5" />
+                  Scan Nutrition Label
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeBarcodeScannerModal();
+                    openMealScannerModal({ mode: 'photo', meal: mealType, date: logDate });
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 font-semibold inline-flex items-center gap-1.5"
+                >
                   <Sparkles className="w-3.5 h-3.5" />
-                  Scan Pack with Photo AI
+                  Photo AI
                 </button>
                 <button
                   type="button"
@@ -749,7 +764,7 @@ export const BarcodeScannerModal: React.FC = () => {
                   className="px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-700 font-semibold inline-flex items-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Search / Create Custom Food
+                  Create Custom Food
                 </button>
               </div>
             </div>

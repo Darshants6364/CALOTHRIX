@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Camera, Check, ChevronDown, ChevronUp, Loader2, Sparkles, X } from 'lucide-react';
+import { scanNutritionLabelViaApi } from '../services/mealAiService';
 import {
   FoodCategory,
   FoodItem,
@@ -60,10 +61,84 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
   const [calciumMg, setCalciumMg] = useState('');
   const [ironMg, setIronMg] = useState('');
   const [error, setError] = useState('');
+  const [scanningLabel, setScanningLabel] = useState(false);
+  const [labelScanStatus, setLabelScanStatus] = useState('');
+
+  const compressLabelToJpegBase64 = async (file: File): Promise<string> => {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('Could not read selected image file.'));
+        el.src = objectUrl;
+      });
+      const maxDim = 960;
+      const scale = Math.min(1, maxDim / Math.max(1, img.naturalWidth || img.width, img.naturalHeight || img.height));
+      const width = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+      const height = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas unavailable');
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+      return dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+
+  const handleLabelImageChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setError('');
+    setLabelScanStatus('');
+    setScanningLabel(true);
+    try {
+      const base64 = await compressLabelToJpegBase64(file);
+      const result = await scanNutritionLabelViaApi({
+        mimeType: 'image/jpeg',
+        mediaBase64: base64,
+      });
+      if (result.name) setName(result.name);
+      if (result.brand) setBrand(result.brand);
+      setCategory('Packaged foods');
+      if (result.servingName) setServingName(result.servingName);
+      if (result.servingWeightGrams > 0) setServingWeightGrams(String(result.servingWeightGrams));
+      setCalories(String(Math.round(result.calories || 0)));
+      setProtein(String(result.protein ?? 0));
+      setCarbs(String(result.carbs ?? 0));
+      setFat(String(result.fat ?? 0));
+      setFibre(String(result.fibre ?? 0));
+      if (result.sugarG != null) {
+        setSugarG(String(result.sugarG));
+        setShowOtherNutrients(true);
+      }
+      if (result.sodiumMg != null) {
+        setSodiumMg(String(result.sodiumMg));
+        setShowOtherNutrients(true);
+      }
+      setLabelScanStatus(
+        `Nutrition facts extracted (${result.confidence} confidence). Review and save below.`
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Could not extract nutrition label facts.'
+      );
+    } finally {
+      setScanningLabel(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
     setError('');
+    setLabelScanStatus('');
+    setScanningLabel(false);
     if (editingFood) {
       setName(editingFood.name);
       setBrand(editingFood.brand || '');
@@ -173,7 +248,7 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={editingFood ? 'Edit custom food' : 'Create custom food'}
@@ -201,6 +276,39 @@ export const CustomFoodModal: React.FC<CustomFoodModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[82dvh] overflow-y-auto">
+          <div className="p-3 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/80 dark:bg-[#090A0C]/70 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+                Auto-Fill from Nutrition Label
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Upload or snap a back-of-pack nutrition table
+              </p>
+            </div>
+            <label className="min-h-[36px] px-3 rounded-lg bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer hover:opacity-90 shrink-0">
+              {scanningLabel ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Camera className="w-3.5 h-3.5" />
+              )}
+              <span>{scanningLabel ? 'Reading Label...' : 'Scan Label'}</span>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={scanningLabel}
+                onChange={handleLabelImageChosen}
+                className="sr-only"
+              />
+            </label>
+          </div>
+
+          {labelScanStatus && (
+            <div className="p-3 rounded-xl bg-lime-50 dark:bg-lime-950/40 border border-lime-300 dark:border-lime-800/60 text-lime-800 dark:text-lime-300 text-xs font-medium">
+              {labelScanStatus}
+            </div>
+          )}
+
           {error && (
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-xs font-medium">
               {error}

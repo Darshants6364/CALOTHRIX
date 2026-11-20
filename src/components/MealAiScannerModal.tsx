@@ -2,41 +2,64 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Camera,
   Check,
+  Database,
   Download,
+  FileText,
   History,
   ImagePlus,
   Loader2,
   MessageSquareText,
   Mic,
   RotateCcw,
+  Save,
   Sparkles,
   Square,
+  UtensilsCrossed,
   VideoOff,
   X,
 } from 'lucide-react';
 import { openShareStudio } from './MacroShareModal';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { formatShortDate } from '../utils/dateUtils';
-import { round1 } from '../utils/nutritionUtils';
+import { calculateScaledNutrition, round1 } from '../utils/nutritionUtils';
+import { matchAnalyzedItemToDb } from '../utils/analyticsUtils';
 import {
   analyzeMealViaApi,
+  analyzeMenuViaApi,
   fetchRecentMealScansFromSupabase,
+  MealPrepStyle,
   saveMealScanToSupabase,
+  scanNutritionLabelViaApi,
   uploadMealPhotoToSupabase,
 } from '../services/mealAiService';
 import {
   AiMealScanRecord,
   AnalyzedMealItem,
+  FoodItem,
   MEAL_CATEGORIES,
   MealAiAnalysisResult,
   MealCategory,
+  MenuAdvisorDish,
+  MenuAdvisorResult,
+  NutritionLabelOcrResult,
 } from '../types';
 
-type ScannerTab = 'photo' | 'voice' | 'text';
+type ScannerTab = 'photo' | 'voice' | 'text' | 'label' | 'menu';
 
 interface EditableAnalyzedItem extends AnalyzedMealItem {
   _id: string;
   selected: boolean;
+  baseGrams: number;
+  aiBaseGrams: number;
+  aiBaseMacros: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fibre: number;
+  };
+  matchedDbFood?: FoodItem;
+  useDbMatch: boolean;
 }
 
 interface SpeechRecognitionAlternativeLike {
@@ -96,14 +119,14 @@ function blobToBase64(blob: Blob): Promise<string> {
 async function compressCanvasToJpeg(
   source: CanvasImageSource,
   srcWidth: number,
-  srcHeight: number
+  srcHeight: number,
+  maxDim = 640
 ): Promise<{
   blob: Blob;
   base64: string;
   mimeType: string;
   previewUrl: string;
 }> {
-  const maxDim = 640;
   const scale = Math.min(1, maxDim / Math.max(1, srcWidth, srcHeight));
   const width = Math.max(1, Math.round(srcWidth * scale));
   const height = Math.max(1, Math.round(srcHeight * scale));
@@ -122,7 +145,7 @@ async function compressCanvasToJpeg(
         else reject(new Error('Image compression failed'));
       },
       'image/jpeg',
-      0.7
+      maxDim > 700 ? 0.78 : 0.7
     );
   });
 
@@ -131,7 +154,10 @@ async function compressCanvasToJpeg(
   return { blob, base64, mimeType: 'image/jpeg', previewUrl };
 }
 
-async function compressImageFileToJpeg(file: File): Promise<{
+async function compressImageFileToJpeg(
+  file: File,
+  maxDim = 640
+): Promise<{
   blob: Blob;
   base64: string;
   mimeType: string;
@@ -141,11 +167,11 @@ async function compressImageFileToJpeg(file: File): Promise<{
   if (typeof createImageBitmap === 'function') {
     try {
       const bitmap = await createImageBitmap(file, {
-        resizeWidth: 720,
+        resizeWidth: maxDim > 700 ? 1024 : 720,
         resizeQuality: 'medium',
       });
       try {
-        return await compressCanvasToJpeg(bitmap, bitmap.width, bitmap.height);
+        return await compressCanvasToJpeg(bitmap, bitmap.width, bitmap.height, maxDim);
       } finally {
         bitmap.close?.();
       }
@@ -162,24 +188,41 @@ async function compressImageFileToJpeg(file: File): Promise<{
       el.onerror = () => reject(new Error('Could not decode selected photo. Try JPEG or PNG format.'));
       el.src = objectUrl;
     });
-    return await compressCanvasToJpeg(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
+    return await compressCanvasToJpeg(
+      img,
+      img.naturalWidth || img.width,
+      img.naturalHeight || img.height,
+      maxDim
+    );
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
 }
 
 export const MealAiScannerModal: React.FC = () => {
+  const { mealScannerModal } = useMacroLogStore();
+  if (!mealScannerModal.isOpen) return null;
+  return <MealAiScannerModalContent />;
+};
+
+const MealAiScannerModalContent: React.FC = () => {
   const {
     authUser,
+    state,
+    allFoods,
+    selectedDateTotals,
     mealScannerModal,
     closeMealScannerModal,
     logAnalyzedMealItems,
+    addCustomFood,
+    addFoodEntry,
     notify,
   } = useMacroLogStore();
 
-  const [mode, setMode] = useState<ScannerTab>('photo');
-  const [mealType, setMealType] = useState<MealCategory>('lunch');
+  const [mode, setMode] = useState<ScannerTab>(mealScannerModal.initialMode || 'photo');
+  const [mealType, setMealType] = useState<MealCategory>(mealScannerModal.initialMeal || 'lunch');
   const [logDate, setLogDate] = useState<string>(mealScannerModal.targetDate);
+  const [prepStyle, setPrepStyle] = useState<MealPrepStyle>('standard');
 
   // Photo state + live camera viewfinder state
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
@@ -202,6 +245,17 @@ export const MealAiScannerModal: React.FC = () => {
 
   // Quick text describe state
   const [describeText, setDescribeText] = useState('');
+
+  // Label OCR state
+  const [labelPreviewUrl, setLabelPreviewUrl] = useState<string | null>(null);
+  const [labelBase64, setLabelBase64] = useState<string | null>(null);
+  const [labelResult, setLabelResult] = useState<NutritionLabelOcrResult | null>(null);
+
+  // Menu Advisor state
+  const [menuPreviewUrl, setMenuPreviewUrl] = useState<string | null>(null);
+  const [menuBase64, setMenuBase64] = useState<string | null>(null);
+  const [menuText, setMenuText] = useState('');
+  const [menuResult, setMenuResult] = useState<MenuAdvisorResult | null>(null);
 
   // Analysis & editable items
   const [analyzing, setAnalyzing] = useState(false);
@@ -266,12 +320,14 @@ export const MealAiScannerModal: React.FC = () => {
       return;
     }
 
-    setMode(mealScannerModal.initialMode);
+    setMode(mealScannerModal.initialMode || 'photo');
     setMealType(mealScannerModal.initialMeal);
     setLogDate(mealScannerModal.targetDate);
     setError('');
     setAnalysis(null);
     setEditableItems([]);
+    setLabelResult(null);
+    setMenuResult(null);
     setShowHistory(false);
 
     if (authUser) {
@@ -293,8 +349,17 @@ export const MealAiScannerModal: React.FC = () => {
       stopLivePhotoCamera();
       if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
       if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+      if (labelPreviewUrl) URL.revokeObjectURL(labelPreviewUrl);
+      if (menuPreviewUrl) URL.revokeObjectURL(menuPreviewUrl);
     };
-  }, [audioPreviewUrl, photoPreviewUrl, stopLivePhotoCamera, stopRecordingTracks]);
+  }, [
+    audioPreviewUrl,
+    labelPreviewUrl,
+    menuPreviewUrl,
+    photoPreviewUrl,
+    stopLivePhotoCamera,
+    stopRecordingTracks,
+  ]);
 
   // Attach MediaStream only AFTER React commits the <video> mount so first-time permission grant never renders blank
   useEffect(() => {
@@ -362,8 +427,6 @@ export const MealAiScannerModal: React.FC = () => {
     );
   }, [selectedItems]);
 
-  if (!mealScannerModal.isOpen) return null;
-
   const handlePhotoChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -376,13 +439,53 @@ export const MealAiScannerModal: React.FC = () => {
     setPreparingPhoto(true);
 
     try {
-      const compressed = await compressImageFileToJpeg(file);
+      const compressed = await compressImageFileToJpeg(file, 640);
       if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
       setPhotoPreviewUrl(compressed.previewUrl);
       setPhotoBlob(compressed.blob);
       setPhotoBase64(compressed.base64);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load meal photo.');
+    } finally {
+      setPreparingPhoto(false);
+    }
+  };
+
+  const handleLabelImageChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setError('');
+    setLabelResult(null);
+    setPreparingPhoto(true);
+    try {
+      const compressed = await compressImageFileToJpeg(file, 1024);
+      if (labelPreviewUrl) URL.revokeObjectURL(labelPreviewUrl);
+      setLabelPreviewUrl(compressed.previewUrl);
+      setLabelBase64(compressed.base64);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load nutrition label photo.');
+    } finally {
+      setPreparingPhoto(false);
+    }
+  };
+
+  const handleMenuImageChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setError('');
+    setMenuResult(null);
+    setPreparingPhoto(true);
+    try {
+      const compressed = await compressImageFileToJpeg(file, 1024);
+      if (menuPreviewUrl) URL.revokeObjectURL(menuPreviewUrl);
+      setMenuPreviewUrl(compressed.previewUrl);
+      setMenuBase64(compressed.base64);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load menu photo.');
     } finally {
       setPreparingPhoto(false);
     }
@@ -594,11 +697,30 @@ export const MealAiScannerModal: React.FC = () => {
       setMealType(result.suggestedMealType);
     }
     setEditableItems(
-      (result.items || []).map((item, idx) => ({
-        ...item,
-        _id: `ai-item-${Date.now()}-${idx}`,
-        selected: true,
-      }))
+      (result.items || []).map((item, idx) => {
+        const safeGrams = Math.max(1, item.estimatedGrams || 100);
+        const aiBaseMacros = {
+          calories: item.calories || 0,
+          protein: item.protein || 0,
+          carbs: item.carbs || 0,
+          fat: item.fat || 0,
+          fibre: item.fibre || 0,
+        };
+        const dbMatch = matchAnalyzedItemToDb(item.name, safeGrams, allFoods);
+        const useDbMatch = Boolean(dbMatch && dbMatch.confidence === 'high');
+
+        return {
+          ...item,
+          ...(useDbMatch && dbMatch ? dbMatch.scaledMacros : {}),
+          _id: `ai-item-${Date.now()}-${idx}`,
+          selected: true,
+          baseGrams: safeGrams,
+          aiBaseGrams: safeGrams,
+          aiBaseMacros,
+          matchedDbFood: dbMatch?.food,
+          useDbMatch,
+        };
+      })
     );
   };
 
@@ -606,6 +728,44 @@ export const MealAiScannerModal: React.FC = () => {
     setError('');
     setAnalyzing(true);
     try {
+      if (mode === 'label') {
+        if (!labelBase64) {
+          setError('Choose or snap a nutrition label photo first.');
+          return;
+        }
+        const ocr = await scanNutritionLabelViaApi({
+          mimeType: 'image/jpeg',
+          mediaBase64: labelBase64,
+        });
+        setLabelResult(ocr);
+        return;
+      }
+
+      if (mode === 'menu') {
+        if (!menuBase64 && menuText.trim().length < 4) {
+          setError('Upload a restaurant menu photo or paste dish names first.');
+          return;
+        }
+        const remCal =
+          state.goals.calories > 0
+            ? Math.max(0, state.goals.calories - selectedDateTotals.calories)
+            : 600;
+        const remPro =
+          state.goals.protein > 0
+            ? Math.max(0, Math.round(state.goals.protein - selectedDateTotals.protein))
+            : 40;
+        const res = await analyzeMenuViaApi({
+          mimeType: menuBase64 ? 'image/jpeg' : undefined,
+          mediaBase64: menuBase64 || undefined,
+          menuText: menuText.trim() || undefined,
+          remainingCalories: remCal,
+          remainingProtein: remPro,
+          dietaryPreference: state.profile.dietaryPreference,
+        });
+        setMenuResult(res);
+        return;
+      }
+
       let res: MealAiAnalysisResult;
       if (mode === 'photo') {
         if (!photoBase64) {
@@ -618,6 +778,7 @@ export const MealAiScannerModal: React.FC = () => {
           mediaBase64: photoBase64,
           promptText: photoNote.trim() || undefined,
           mealHint: mealType,
+          prepStyle,
         });
       } else if (mode === 'voice') {
         const spokenText = voiceTranscript.trim();
@@ -630,6 +791,7 @@ export const MealAiScannerModal: React.FC = () => {
             mode: 'text',
             promptText: combinedNote,
             mealHint: mealType,
+            prepStyle,
           });
         } else if (audioBase64) {
           res = await analyzeMealViaApi({
@@ -638,6 +800,7 @@ export const MealAiScannerModal: React.FC = () => {
             mediaBase64: audioBase64,
             promptText: voiceContextNote.trim() || undefined,
             mealHint: mealType,
+            prepStyle,
           });
         } else {
           setError('Record a short voice clip or type the meal you ate first.');
@@ -652,6 +815,7 @@ export const MealAiScannerModal: React.FC = () => {
           mode: 'text',
           promptText: describeText.trim(),
           mealHint: mealType,
+          prepStyle,
         });
       }
 
@@ -662,10 +826,49 @@ export const MealAiScannerModal: React.FC = () => {
 
       applyAnalysisResult(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Meal analysis failed. Please try again.');
+      setError(err instanceof Error ? err.message : 'Analysis failed. Please try again.');
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const scaleItemToGrams = (item: EditableAnalyzedItem, nextGrams: number): EditableAnalyzedItem => {
+    const safeNext = Math.max(0, nextGrams);
+    if (safeNext <= 0) {
+      return {
+        ...item,
+        estimatedGrams: 0,
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        fibre: 0,
+      };
+    }
+
+    if (item.useDbMatch && item.matchedDbFood) {
+      const scaled = calculateScaledNutrition(item.matchedDbFood, safeNext);
+      return {
+        ...item,
+        estimatedGrams: Math.round(safeNext),
+        calories: scaled.calories,
+        protein: scaled.protein,
+        carbs: scaled.carbs,
+        fat: scaled.fat,
+        fibre: scaled.fibre,
+      };
+    }
+
+    const ratio = safeNext / Math.max(1, item.aiBaseGrams);
+    return {
+      ...item,
+      estimatedGrams: Math.round(safeNext),
+      calories: Math.round(item.aiBaseMacros.calories * ratio),
+      protein: round1(item.aiBaseMacros.protein * ratio),
+      carbs: round1(item.aiBaseMacros.carbs * ratio),
+      fat: round1(item.aiBaseMacros.fat * ratio),
+      fibre: round1(item.aiBaseMacros.fibre * ratio),
+    };
   };
 
   const updateItemField = (
@@ -676,9 +879,115 @@ export const MealAiScannerModal: React.FC = () => {
     setEditableItems((prev) =>
       prev.map((item) => {
         if (item._id !== id) return item;
+        if (field === 'estimatedGrams') {
+          return scaleItemToGrams(item, Number(value) || 0);
+        }
         return { ...item, [field]: value };
       })
     );
+  };
+
+  const applyPortionMultiplier = (id: string, multiplier: number) => {
+    setEditableItems((prev) =>
+      prev.map((item) => {
+        if (item._id !== id) return item;
+        const targetGrams = Math.max(1, Math.round(item.baseGrams * multiplier));
+        return scaleItemToGrams(item, targetGrams);
+      })
+    );
+  };
+
+  const toggleItemDbGrounding = (id: string) => {
+    setEditableItems((prev) =>
+      prev.map((item) => {
+        if (item._id !== id || !item.matchedDbFood) return item;
+        const nextUseDb = !item.useDbMatch;
+        const updated = { ...item, useDbMatch: nextUseDb };
+        return scaleItemToGrams(updated, Math.max(1, item.estimatedGrams || item.baseGrams));
+      })
+    );
+  };
+
+  const handleSaveLabelToFoodsAndLog = () => {
+    if (!labelResult) return;
+    if (!labelResult.name.trim()) {
+      setError('Enter a product name before saving.');
+      return;
+    }
+    const grams = Math.max(1, labelResult.servingWeightGrams || 100);
+    const saved = addCustomFood({
+      name: labelResult.name.trim(),
+      brand: labelResult.brand?.trim() || undefined,
+      category: 'Packaged foods',
+      servingName: labelResult.servingName.trim() || `${grams} g`,
+      servingWeightGrams: grams,
+      calories: Math.max(0, Math.round(labelResult.calories || 0)),
+      protein: Math.max(0, round1(labelResult.protein || 0)),
+      carbs: Math.max(0, round1(labelResult.carbs || 0)),
+      fat: Math.max(0, round1(labelResult.fat || 0)),
+      fibre: Math.max(0, round1(labelResult.fibre || 0)),
+      micronutrients:
+        labelResult.sugarG != null || labelResult.sodiumMg != null
+          ? {
+              sugarG: labelResult.sugarG,
+              sodiumMg: labelResult.sodiumMg,
+            }
+          : undefined,
+    });
+    addFoodEntry({
+      food: saved,
+      quantityGrams: grams,
+      mealType,
+      date: logDate,
+      unitLabel: saved.servingName,
+    });
+    closeMealScannerModal();
+  };
+
+  const handleLogLabelOnce = () => {
+    if (!labelResult) return;
+    const grams = Math.max(1, labelResult.servingWeightGrams || 100);
+    logAnalyzedMealItems({
+      items: [
+        {
+          name: labelResult.brand
+            ? `${labelResult.brand} ${labelResult.name}`.trim()
+            : labelResult.name || 'Packaged Food',
+          estimatedQuantityDescription: labelResult.servingName || `${grams} g`,
+          estimatedGrams: grams,
+          calories: Math.max(0, Math.round(labelResult.calories || 0)),
+          protein: Math.max(0, round1(labelResult.protein || 0)),
+          carbs: Math.max(0, round1(labelResult.carbs || 0)),
+          fat: Math.max(0, round1(labelResult.fat || 0)),
+          fibre: Math.max(0, round1(labelResult.fibre || 0)),
+        },
+      ],
+      mealType,
+      date: logDate,
+      sourceLabel: 'Nutrition Label OCR',
+    });
+    closeMealScannerModal();
+  };
+
+  const handleLogMenuDish = (dish: MenuAdvisorDish) => {
+    logAnalyzedMealItems({
+      items: [
+        {
+          name: dish.dishName,
+          estimatedQuantityDescription: '1 restaurant serving',
+          estimatedGrams: 250,
+          calories: Math.max(0, Math.round(dish.estimatedCalories || 0)),
+          protein: Math.max(0, round1(dish.protein || 0)),
+          carbs: Math.max(0, round1(dish.carbs || 0)),
+          fat: Math.max(0, round1(dish.fat || 0)),
+          fibre: 0,
+        },
+      ],
+      mealType,
+      date: logDate,
+      sourceLabel: 'Menu Advisor',
+    });
+    closeMealScannerModal();
   };
 
   const handleSaveToDiary = async () => {
@@ -703,7 +1012,7 @@ export const MealAiScannerModal: React.FC = () => {
         sourceLabel,
       });
 
-      if (authUser && analysis) {
+      if (authUser && analysis && (mode === 'photo' || mode === 'voice' || mode === 'text')) {
         let storagePath: string | null = null;
         if (mode === 'photo' && photoBlob) {
           storagePath = await uploadMealPhotoToSupabase({
@@ -765,12 +1074,20 @@ export const MealAiScannerModal: React.FC = () => {
     stopLivePhotoCamera();
     setAnalysis(null);
     setEditableItems([]);
+    setLabelResult(null);
+    setMenuResult(null);
     setError('');
     if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
     if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
+    if (labelPreviewUrl) URL.revokeObjectURL(labelPreviewUrl);
+    if (menuPreviewUrl) URL.revokeObjectURL(menuPreviewUrl);
     setPhotoPreviewUrl(null);
     setPhotoBlob(null);
     setPhotoBase64(null);
+    setLabelPreviewUrl(null);
+    setLabelBase64(null);
+    setMenuPreviewUrl(null);
+    setMenuBase64(null);
     setAudioBase64(null);
     setAudioPreviewUrl(null);
     setVoiceTranscript('');
@@ -783,11 +1100,13 @@ export const MealAiScannerModal: React.FC = () => {
     !isRecording &&
     ((mode === 'photo' && Boolean(photoBase64)) ||
       (mode === 'voice' && (Boolean(audioBase64) || voiceTranscript.trim().length >= 3)) ||
-      (mode === 'text' && describeText.trim().length >= 3));
+      (mode === 'text' && describeText.trim().length >= 3) ||
+      (mode === 'label' && Boolean(labelBase64)) ||
+      (mode === 'menu' && (Boolean(menuBase64) || menuText.trim().length >= 4)));
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs sm:p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="AI Photo and Voice Meal Analyzer"
@@ -839,12 +1158,14 @@ export const MealAiScannerModal: React.FC = () => {
 
         {/* Mode Switcher */}
         <div className="px-5 pt-3.5 pb-2 border-b border-stone-100 dark:border-white/10 shrink-0">
-          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C]">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C]">
             {(
               [
-                { id: 'photo', label: 'Photo Scan', icon: Camera },
-                { id: 'voice', label: 'Voice Log', icon: Mic },
-                { id: 'text', label: 'Describe Meal', icon: MessageSquareText },
+                { id: 'photo', label: 'Photo', icon: Camera },
+                { id: 'voice', label: 'Voice', icon: Mic },
+                { id: 'text', label: 'Describe', icon: MessageSquareText },
+                { id: 'label', label: 'Label OCR', icon: FileText },
+                { id: 'menu', label: 'Menu Advisor', icon: UtensilsCrossed },
               ] as const
             ).map((tab) => {
               const Icon = tab.icon;
@@ -859,7 +1180,7 @@ export const MealAiScannerModal: React.FC = () => {
                     setError('');
                     setShowHistory(false);
                   }}
-                  className={`min-h-[38px] px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap ${
+                  className={`min-h-[36px] px-2 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap ${
                     active
                       ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -919,8 +1240,37 @@ export const MealAiScannerModal: React.FC = () => {
           )}
 
           {/* Mode Input Controls */}
-          {!analysis && (
+          {!analysis && !labelResult && !menuResult && (
             <div className="space-y-4">
+              {(mode === 'photo' || mode === 'voice' || mode === 'text') && (
+                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-stone-50/80 dark:bg-[#090A0C]/70 border border-black/10 dark:border-white/12">
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                    Cooking / Oil Prep Style:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        { id: 'homemade_low_oil', label: 'Homemade low oil' },
+                        { id: 'standard', label: 'Standard' },
+                        { id: 'restaurant_rich', label: 'Restaurant ghee/butter' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setPrepStyle(opt.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                          prepStyle === opt.id
+                            ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950'
+                            : 'bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {mode === 'photo' && (
                 <div className="space-y-3.5">
                   {liveCameraActive ? (
@@ -1143,6 +1493,123 @@ export const MealAiScannerModal: React.FC = () => {
                 </div>
               )}
 
+              {mode === 'label' && (
+                <div className="space-y-3.5">
+                  {labelPreviewUrl ? (
+                    <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/12 bg-stone-100 dark:bg-[#090A0C]">
+                      <img
+                        src={labelPreviewUrl}
+                        alt="Nutrition label preview"
+                        className="w-full max-h-64 object-contain bg-black/5"
+                      />
+                      <div className="px-4 py-2.5 flex items-center justify-between bg-white dark:bg-[#111317] border-t border-black/10 dark:border-white/12">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          Ready to extract Nutrition Facts table
+                        </span>
+                        <button
+                          type="button"
+                          onClick={resetInputs}
+                          className="text-xs font-semibold text-lime-700 dark:text-lime-400 hover:underline inline-flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Choose Another
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-stone-300 dark:border-white/15 bg-stone-50/70 dark:bg-[#090A0C]/50 p-6 text-center space-y-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-lime-100 dark:bg-lime-950/60 text-lime-700 dark:text-lime-400 flex items-center justify-center mx-auto">
+                        {preparingPhoto ? (
+                          <Loader2 className="w-6 h-6 animate-spin" />
+                        ) : (
+                          <FileText className="w-6 h-6" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          Scan Packaged Nutrition Label (OCR)
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Snap the back-of-pack Nutrition Facts table for instant serving macros, sugar, and sodium.
+                        </p>
+                      </div>
+                      <label className="min-h-[42px] px-4 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-semibold inline-flex items-center gap-2 cursor-pointer">
+                        <ImagePlus className="w-4 h-4" />
+                        <span>Upload / Snap Nutrition Label</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLabelImageChosen}
+                          className="sr-only"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {mode === 'menu' && (
+                <div className="space-y-3.5">
+                  <div className="p-3 rounded-xl bg-lime-50/70 dark:bg-lime-950/25 border border-lime-500/30 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-medium text-lime-900 dark:text-lime-300">
+                      Matching dishes to your remaining budget today:
+                    </span>
+                    <span className="font-mono-nums font-bold text-slate-900 dark:text-slate-100">
+                      {state.goals.calories > 0
+                        ? `${Math.max(0, state.goals.calories - selectedDateTotals.calories)} kcal · ${Math.max(0, Math.round(state.goals.protein - selectedDateTotals.protein))}g protein left`
+                        : '600 kcal · 40g protein target'}
+                    </span>
+                  </div>
+
+                  {menuPreviewUrl ? (
+                    <div className="rounded-2xl overflow-hidden border border-black/10 dark:border-white/12 bg-stone-100 dark:bg-[#090A0C]">
+                      <img
+                        src={menuPreviewUrl}
+                        alt="Restaurant menu preview"
+                        className="w-full max-h-52 object-contain bg-black/5"
+                      />
+                      <div className="px-4 py-2 flex items-center justify-between bg-white dark:bg-[#111317] border-t border-black/10 dark:border-white/12">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          Menu photo ready
+                        </span>
+                        <button
+                          type="button"
+                          onClick={resetInputs}
+                          className="text-xs font-semibold text-lime-700 dark:text-lime-400 hover:underline inline-flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Clear Photo
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="w-full min-h-[44px] px-4 rounded-xl border border-dashed border-stone-300 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C]/50 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center justify-center gap-2 cursor-pointer">
+                      <ImagePlus className="w-4 h-4 text-lime-600 dark:text-lime-400" />
+                      <span>Upload / Snap Restaurant Menu Photo (optional)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleMenuImageChosen}
+                        className="sr-only"
+                      />
+                    </label>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                      Or Paste Menu Items / Dish Options
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={menuText}
+                      onChange={(e) => setMenuText(e.target.value)}
+                      placeholder="e.g., Paneer Tikka, Dal Makhani with Butter Naan, Tandoori Chicken Half, Caesar Salad with Grilled Chicken"
+                      className="w-full p-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-end pt-1">
                 <button
                   type="button"
@@ -1153,15 +1620,286 @@ export const MealAiScannerModal: React.FC = () => {
                   {analyzing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Analyzing Meal Macros...</span>
+                      <span>
+                        {mode === 'label'
+                          ? 'Reading Label...'
+                          : mode === 'menu'
+                          ? 'Ranking Menu Options...'
+                          : 'Analyzing Meal Macros...'}
+                      </span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>Analyze Nutrition</span>
+                      <span>
+                        {mode === 'label'
+                          ? 'Extract Nutrition Facts'
+                          : mode === 'menu'
+                          ? 'Find Best Macro Dishes'
+                          : 'Analyze Nutrition'}
+                      </span>
                     </>
                   )}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Label OCR Result Editor */}
+          {labelResult && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-semibold text-lime-700 dark:text-lime-400">
+                    Label OCR Extracted · Confidence: {labelResult.confidence}
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">
+                    Review &amp; Save Packaged Product
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetInputs}
+                  className="min-h-[34px] px-3 rounded-lg border border-stone-300 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Rescan
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-500 dark:text-slate-400 mb-1">Product Name</label>
+                  <input
+                    type="text"
+                    value={labelResult.name}
+                    onChange={(e) => setLabelResult({ ...labelResult, name: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 dark:text-slate-400 mb-1">Brand</label>
+                  <input
+                    type="text"
+                    value={labelResult.brand || ''}
+                    onChange={(e) => setLabelResult({ ...labelResult, brand: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 dark:text-slate-400 mb-1">Serving Label</label>
+                  <input
+                    type="text"
+                    value={labelResult.servingName}
+                    onChange={(e) =>
+                      setLabelResult({ ...labelResult, servingName: e.target.value })
+                    }
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 dark:text-slate-400 mb-1">Serving Weight (g/ml)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={labelResult.servingWeightGrams}
+                    onChange={(e) =>
+                      setLabelResult({
+                        ...labelResult,
+                        servingWeightGrams: Number(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] font-mono-nums"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 sm:grid-cols-7 gap-2 text-xs">
+                {(
+                  [
+                    { key: 'calories', label: 'kcal' },
+                    { key: 'protein', label: 'Protein (g)' },
+                    { key: 'carbs', label: 'Carbs (g)' },
+                    { key: 'fat', label: 'Fat (g)' },
+                    { key: 'fibre', label: 'Fibre (g)' },
+                    { key: 'sugarG', label: 'Sugar (g)' },
+                    { key: 'sodiumMg', label: 'Sodium (mg)' },
+                  ] as const
+                ).map((field) => (
+                  <div key={field.key}>
+                    <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                      {field.label}
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={labelResult[field.key] ?? ''}
+                      onChange={(e) =>
+                        setLabelResult({
+                          ...labelResult,
+                          [field.key]: e.target.value === '' ? undefined : Number(e.target.value),
+                        })
+                      }
+                      className="w-full h-9 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] font-mono-nums"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                    Meal Category
+                  </label>
+                  <select
+                    value={mealType}
+                    onChange={(e) => setMealType(e.target.value as MealCategory)}
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-semibold"
+                  >
+                    {MEAL_CATEGORIES.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                    Log Date
+                  </label>
+                  <input
+                    type="date"
+                    value={logDate}
+                    onChange={(e) => setLogDate(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleLogLabelOnce}
+                  className="min-h-[46px] px-4 rounded-xl border border-black/15 dark:border-white/15 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 hover:border-lime-500"
+                >
+                  Log Serving Once
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveLabelToFoodsAndLog}
+                  className="flex-1 min-h-[46px] px-4 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs sm:text-sm font-bold inline-flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  Save to My Foods &amp; Log
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Menu Advisor Results */}
+          {menuResult && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-lime-500/40 bg-lime-50/60 dark:bg-lime-950/20 p-4 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-lime-800 dark:text-lime-300">
+                    Restaurant Menu Advisor
+                  </span>
+                  <button
+                    type="button"
+                    onClick={resetInputs}
+                    className="min-h-[30px] px-2.5 rounded-lg border border-stone-300 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold inline-flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    New Menu
+                  </button>
+                </div>
+                <p className="text-xs text-slate-800 dark:text-slate-200 font-medium">
+                  {menuResult.restaurantSummary}
+                </p>
+                {menuResult.orderingTip && (
+                  <p className="text-xs text-lime-800 dark:text-lime-300">
+                    Ordering Tip: {menuResult.orderingTip}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                    Log into Meal
+                  </label>
+                  <select
+                    value={mealType}
+                    onChange={(e) => setMealType(e.target.value as MealCategory)}
+                    className="w-full h-9 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs font-semibold"
+                  >
+                    {MEAL_CATEGORIES.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                    Log Date
+                  </label>
+                  <input
+                    type="date"
+                    value={logDate}
+                    onChange={(e) => setLogDate(e.target.value)}
+                    className="w-full h-9 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                {menuResult.dishes.map((dish, idx) => (
+                  <div
+                    key={`${dish.dishName}-${idx}`}
+                    className="p-3.5 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/60 dark:bg-[#090A0C]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {dish.dishName}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                            dish.fitRating === 'best_fit'
+                              ? 'bg-lime-500/20 text-lime-800 dark:text-lime-300'
+                              : dish.fitRating === 'good_fit'
+                              ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
+                              : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                          }`}
+                        >
+                          {dish.fitRating === 'best_fit'
+                            ? 'Best Macro Fit'
+                            : dish.fitRating === 'good_fit'
+                            ? 'Good Fit'
+                            : 'Moderate Fit'}
+                        </span>
+                        <span className="text-[11px] font-mono-nums text-slate-500 dark:text-slate-400">
+                          {dish.proteinPer100Kcal}g P / 100 kcal
+                        </span>
+                      </div>
+                      <div className="text-xs font-mono-nums text-slate-700 dark:text-slate-300">
+                        {dish.estimatedCalories} kcal · P {dish.protein}g · C {dish.carbs}g · F {dish.fat}g
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {dish.reason}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleLogMenuDish(dish)}
+                      className="min-h-[38px] px-4 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-bold shrink-0 whitespace-nowrap"
+                    >
+                      Log Dish
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1236,7 +1974,7 @@ export const MealAiScannerModal: React.FC = () => {
                         : 'border-black/10/50 dark:border-white/12/40 opacity-55'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input
                         type="checkbox"
                         checked={item.selected}
@@ -1247,11 +1985,52 @@ export const MealAiScannerModal: React.FC = () => {
                         type="text"
                         value={item.name}
                         onChange={(e) => updateItemField(item._id, 'name', e.target.value)}
-                        className="flex-1 h-9 px-2.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-900 dark:text-slate-100"
+                        className="flex-1 min-w-[140px] h-9 px-2.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-900 dark:text-slate-100"
                       />
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
+                      {item.matchedDbFood && (
+                        <button
+                          type="button"
+                          onClick={() => toggleItemDbGrounding(item._id)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-semibold inline-flex items-center gap-1 transition-colors ${
+                            item.useDbMatch
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                              : 'bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 border border-black/10 dark:border-white/15'
+                          }`}
+                          title={`Verified match: ${item.matchedDbFood.name} (${item.matchedDbFood.sourceName || 'Verified DB'})`}
+                        >
+                          <Database className="w-3 h-3" />
+                          <span>{item.useDbMatch ? 'Verified DB' : 'Use Verified DB'}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <span className="text-slate-500 dark:text-slate-400">
                         {item.estimatedQuantityDescription}
+                        {item.useDbMatch && item.matchedDbFood
+                          ? ` · Grounded to ${item.matchedDbFood.name}`
+                          : ''}
                       </span>
+                      <div className="flex items-center gap-1">
+                        {[0.5, 1, 1.5, 2].map((mult) => {
+                          const targetG = Math.max(1, Math.round(item.baseGrams * mult));
+                          const active = Math.abs(item.estimatedGrams - targetG) <= 1;
+                          return (
+                            <button
+                              key={mult}
+                              type="button"
+                              onClick={() => applyPortionMultiplier(item._id, mult)}
+                              className={`px-2 py-0.5 rounded-md font-mono-nums font-semibold transition-colors ${
+                                active
+                                  ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950'
+                                  : 'bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300 hover:border-lime-500'
+                              }`}
+                            >
+                              {mult}x
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-[11px]">

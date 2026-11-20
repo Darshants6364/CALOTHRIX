@@ -31,6 +31,7 @@ import { MEAL_CATEGORIES } from '../types';
 import {
   evaluateAdaptiveCalorieAdjustment,
   getMultiWeekProgressSeries,
+  getWeeklyCalorieBankSummary,
 } from '../utils/analyticsUtils';
 import {
   addDaysToDateKey,
@@ -383,6 +384,16 @@ export const ProgressPage: React.FC = () => {
         todayKey: today,
       }),
     [foodEntries, goals, profile, today, weightEntries]
+  );
+
+  const weeklyBank = useMemo(
+    () =>
+      getWeeklyCalorieBankSummary({
+        foodEntries,
+        goals,
+        referenceDateKey: today,
+      }),
+    [foodEntries, goals, today]
   );
 
   const handleApplyAdaptiveTarget = () => {
@@ -915,6 +926,87 @@ export const ProgressPage: React.FC = () => {
               <div className="mt-0.5 text-[11px] text-slate-400">
                 {heatmapData.loggedCount}/28 days active
               </div>
+            </div>
+          </div>
+
+          {/* Weekly Calorie Bank & Adaptive TDEE Intelligence */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Weekly Calorie Bank &amp; Flex Adherence
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Rolling Mon–Sun energy budget + protein-first consistency
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-lime-500/15 text-[#4E6800] dark:text-[#C8FF00] text-xs font-bold font-mono-nums shrink-0">
+                  {weeklyBank.proteinTargetDaysHit}/7d Protein ≥85%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5 text-xs">
+                <div className="p-2.5 rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/8 dark:border-white/10">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">Weekly Bank Left</div>
+                  <div className="text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-100 mt-0.5">
+                    {weeklyBank.remainingWeeklyBudget.toLocaleString()} kcal
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/8 dark:border-white/10">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Next {weeklyBank.daysRemaining}d Target
+                  </div>
+                  <div className="text-sm font-bold font-mono-nums text-lime-700 dark:text-lime-400 mt-0.5">
+                    {weeklyBank.recommendedPerRemainingDay > 0
+                      ? `${weeklyBank.recommendedPerRemainingDay.toLocaleString()} kcal/d`
+                      : '—'}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/8 dark:border-white/10">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">Daily Flex Band</div>
+                  <div className="text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-100 mt-0.5">
+                    {weeklyBank.dailyTarget > 0
+                      ? `${weeklyBank.flexRangeLow.toLocaleString()}–${weeklyBank.flexRangeHigh.toLocaleString()}`
+                      : '—'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 flex flex-col justify-between gap-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Adaptive TDEE &amp; Calorie Coach
+                  </h3>
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-200 mt-0.5">
+                    {adaptiveSuggestion.headline}
+                  </p>
+                </div>
+                {adaptiveSuggestion.observedTdee && (
+                  <span className="px-2.5 py-1 rounded-lg bg-stone-100 dark:bg-slate-800 text-xs font-bold font-mono-nums text-slate-900 dark:text-slate-100 shrink-0">
+                    Est. TDEE: {adaptiveSuggestion.observedTdee.toLocaleString()} kcal
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                {adaptiveSuggestion.rationale}
+              </p>
+
+              {adaptiveSuggestion.suggestedTargetCalories && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleApplyAdaptiveTarget}
+                    className="min-h-[34px] px-3.5 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-bold inline-flex items-center gap-1.5"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Apply Suggested Target ({adaptiveSuggestion.suggestedTargetCalories.toLocaleString()} kcal)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

@@ -2,9 +2,14 @@ import { supabase } from '../lib/supabaseClient';
 import {
   AiMealScanRecord,
   AnalyzedMealItem,
+  CoachAdviceResult,
   MealAiAnalysisResult,
   MealCategory,
+  MenuAdvisorResult,
+  NutritionLabelOcrResult,
 } from '../types';
+
+export type MealPrepStyle = 'homemade_low_oil' | 'standard' | 'restaurant_rich';
 
 export async function analyzeMealViaApi(params: {
   mode: 'photo' | 'voice' | 'text';
@@ -12,6 +17,7 @@ export async function analyzeMealViaApi(params: {
   mediaBase64?: string;
   promptText?: string;
   mealHint?: MealCategory;
+  prepStyle?: MealPrepStyle;
 }): Promise<MealAiAnalysisResult> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), 28000);
@@ -43,6 +49,71 @@ export async function analyzeMealViaApi(params: {
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+export async function scanNutritionLabelViaApi(params: {
+  mimeType?: string;
+  mediaBase64: string;
+}): Promise<NutritionLabelOcrResult> {
+  const res = await fetch('/api/ai/scan-label', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = (await res.json().catch(() => ({}))) as NutritionLabelOcrResult & {
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Label scan failed (${res.status})`);
+  }
+  return data;
+}
+
+export async function analyzeMenuViaApi(params: {
+  mimeType?: string;
+  mediaBase64?: string;
+  menuText?: string;
+  remainingCalories: number;
+  remainingProtein: number;
+  dietaryPreference?: string;
+}): Promise<MenuAdvisorResult> {
+  const res = await fetch('/api/ai/analyze-menu', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = (await res.json().catch(() => ({}))) as MenuAdvisorResult & {
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Menu analysis failed (${res.status})`);
+  }
+  return data;
+}
+
+export async function askNutritionCoachViaApi(params: {
+  prompt: string;
+  remainingCalories: number;
+  remainingProtein: number;
+  remainingCarbs: number;
+  remainingFat: number;
+  goalCalories: number;
+  goalProtein: number;
+  dietaryPreference?: string;
+  restrictions?: string[];
+}): Promise<CoachAdviceResult> {
+  const res = await fetch('/api/ai/coach', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const data = (await res.json().catch(() => ({}))) as CoachAdviceResult & {
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Coach request failed (${res.status})`);
+  }
+  return data;
 }
 
 export async function uploadMealPhotoToSupabase(params: {

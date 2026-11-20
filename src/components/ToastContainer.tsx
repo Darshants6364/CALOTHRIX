@@ -1,9 +1,9 @@
 import React from 'react';
 import { CheckCircle2, Info, AlertCircle, X } from 'lucide-react';
-import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { useToasts } from '../hooks/useMacroLogStore';
 
 export const ToastContainer: React.FC = () => {
-  const { toasts, dismissToast } = useMacroLogStore();
+  const { toasts, dismissToast } = useToasts();
 
   if (toasts.length === 0) return null;
 

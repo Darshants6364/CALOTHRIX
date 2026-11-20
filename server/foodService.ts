@@ -10,7 +10,7 @@ import type {
   RawNutrientValues,
 } from '../src/types/index.ts';
 import { GLOBAL_REFERENCE_FOODS } from '../src/data/globalReferenceFoods.ts';
-import { searchFoodsIntelligent } from '../src/utils/foodSearchEngine.ts';
+import { scoreFoodMatch, searchFoodsIntelligent } from '../src/utils/foodSearchEngine.ts';
 import {
   calculateAtwaterCaloriesPer100g,
   deriveVerificationStatus,
@@ -865,6 +865,101 @@ export function scoreSemanticMatch(food: FoodItem, query: string): number {
   return score;
 }
 
+function normalizeDedupKey(food: FoodItem): string {
+  if (food.barcode && /^\d{6,14}$/.test(food.barcode.trim())) {
+    return `barcode:${food.barcode.trim()}`;
+  }
+  const cleanName = food.name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const cleanBrand = (food.brand || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const state = (food.foodState || 'unknown').toLowerCase();
+  return `name:${cleanName}|brand:${cleanBrand}|state:${state}`;
+}
+
+function computeMacroCompleteness(food: FoodItem): number {
+  let score = 0;
+  if (food.calories > 0) score += 20;
+  if (food.protein >= 0 && !food.missingFields?.includes('protein')) score += 12;
+  if (food.carbs >= 0 && !food.missingFields?.includes('carbs')) score += 12;
+  if (food.fat >= 0 && !food.missingFields?.includes('fat')) score += 12;
+  if (food.fibre > 0 || !food.missingFields?.includes('fibre')) score += 6;
+  if (food.verificationStatus === 'verified') score += 18;
+  if (food.verificationStatus === 'needs_review') score -= 22;
+  // Penalize sparse 0-calorie external junk unless it's water/tea/black coffee
+  const isZeroCalDrink = /water|black coffee|green tea|black tea|americano|zero/i.test(food.name);
+  if (food.calories === 0 && food.protein === 0 && food.carbs === 0 && food.fat === 0 && !isZeroCalDrink) {
+    score -= 80;
+  }
+  return score;
+}
+
+export function dedupeAndRankGlobalFoods(
+  candidates: FoodItem[],
+  query: string,
+  country?: string,
+  semantic?: boolean
+): FoodItem[] {
+  const dedupMap = new Map<string, FoodItem>();
+
+  for (const food of candidates) {
+    const key = normalizeDedupKey(food);
+    const existing = dedupMap.get(key);
+    if (!existing) {
+      dedupMap.set(key, food);
+      continue;
+    }
+    const existingPriority = existing.sourcePriority ?? 6;
+    const nextPriority = food.sourcePriority ?? 6;
+    const existingComp = computeMacroCompleteness(existing);
+    const nextComp = computeMacroCompleteness(food);
+    if (nextPriority < existingPriority || (nextPriority === existingPriority && nextComp > existingComp)) {
+      dedupMap.set(key, food);
+    }
+  }
+
+  const unique = [...dedupMap.values()];
+  if (!query) return unique;
+
+  const preferredCountry = country && country !== 'All' ? country.toLowerCase() : null;
+
+  const scored = unique.map((food) => {
+    const baseMatch = semantic
+      ? scoreSemanticMatch(food, query)
+      : scoreFoodMatch(food, query)?.score ?? 0;
+
+    const completeness = computeMacroCompleteness(food);
+    const priority = food.sourcePriority ?? 6;
+    const priorityBonus = Math.max(0, 7 - priority) * 8;
+    const countryBonus =
+      preferredCountry && food.country?.toLowerCase() === preferredCountry
+        ? 18
+        : !preferredCountry && food.country === 'India' && !food.isCustom && priority <= 2
+        ? 6
+        : 0;
+
+    return {
+      food,
+      totalScore: baseMatch + completeness + priorityBonus + countryBonus,
+      priority,
+    };
+  });
+
+  scored.sort((a, b) => {
+    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return a.food.name.localeCompare(b.food.name);
+  });
+
+  return scored.map((s) => s.food);
+}
+
 export async function searchGlobalFoods(
   options: GlobalSearchOptions
 ): Promise<GlobalSearchResponse> {
@@ -917,7 +1012,7 @@ export async function searchGlobalFoods(
       .filter((food) => scoreSemanticMatch(food, query) > 10)
       .sort((a, b) => scoreSemanticMatch(b, query) - scoreSemanticMatch(a, query));
   } else {
-    localMatches = searchFoodsIntelligent(preFiltered, query, { limit: 40 });
+    localMatches = searchFoodsIntelligent(preFiltered, query, { limit: 45 });
   }
 
   // 2. External APIs (only queried after local verified DB when query >= 2 chars)
@@ -973,8 +1068,13 @@ export async function searchGlobalFoods(
   const filteredUsda = applyPostFilters(usdaItems);
   const filteredOff = applyPostFilters(offItems);
 
-  // Strict hierarchy ordering: IFCT 2017 & Verified Indian Reference -> USDA -> Open Food Facts
-  const merged = [...localMatches, ...filteredUsda, ...filteredOff];
+  // Unified cross-source relevance re-ranking & deduplication while enforcing source priority & completeness
+  const merged = dedupeAndRankGlobalFoods(
+    [...localMatches, ...filteredUsda, ...filteredOff],
+    query,
+    country,
+    Boolean(options.semantic)
+  );
   const response: GlobalSearchResponse = {
     items: merged,
     sourceMeta: {

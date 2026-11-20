@@ -23,8 +23,12 @@ import {
 } from './src/utils/fitnessCalculator.ts';
 import {
   analyzeMealWithGemini,
+  analyzeMenuWithGemini,
+  coachChatWithGemini,
+  parseNutritionLabelWithGemini,
   readBarcodeFromImageWithGemini,
   type AnalyzeMealInputMode,
+  type MealPrepStyle,
 } from './server/mealAiService.ts';
 
 async function verifyAdminRequest(req: express.Request): Promise<{ ok: boolean; status: number; error?: string }> {
@@ -249,6 +253,7 @@ async function startServer() {
         mediaBase64?: string;
         promptText?: string;
         mealHint?: string;
+        prepStyle?: MealPrepStyle;
       };
 
       const mode: AnalyzeMealInputMode =
@@ -263,6 +268,7 @@ async function startServer() {
         mimeType: body.mimeType,
         mediaBase64: body.mediaBase64,
         promptText: body.promptText,
+        prepStyle: body.prepStyle,
         mealHint: body.mealHint as
           | 'breakfast'
           | 'lunch'
@@ -278,6 +284,92 @@ async function startServer() {
       const status = e.statusCode || e.status || 500;
       return res.status(status >= 400 && status < 600 ? status : 500).json({
         error: e.message || 'Meal analysis failed.',
+      });
+    }
+  });
+
+  // Nutrition Facts Label OCR -> Structured Custom Food
+  app.post('/api/ai/scan-label', async (req, res) => {
+    try {
+      const body = (req.body || {}) as { mimeType?: string; mediaBase64?: string };
+      if (!body.mediaBase64) {
+        return res.status(400).json({ error: 'Missing nutrition label image payload.' });
+      }
+      const result = await parseNutritionLabelWithGemini({
+        mimeType: body.mimeType,
+        mediaBase64: body.mediaBase64,
+      });
+      return res.json(result);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number; status?: number };
+      const status = e.statusCode || e.status || 500;
+      return res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: e.message || 'Failed to read nutrition label.',
+      });
+    }
+  });
+
+  // Restaurant Menu Macro Advisor
+  app.post('/api/ai/analyze-menu', async (req, res) => {
+    try {
+      const body = (req.body || {}) as {
+        mimeType?: string;
+        mediaBase64?: string;
+        menuText?: string;
+        remainingCalories?: number;
+        remainingProtein?: number;
+        dietaryPreference?: string;
+      };
+      const result = await analyzeMenuWithGemini({
+        mimeType: body.mimeType,
+        mediaBase64: body.mediaBase64,
+        menuText: body.menuText,
+        remainingCalories: Number(body.remainingCalories ?? 600),
+        remainingProtein: Number(body.remainingProtein ?? 35),
+        dietaryPreference: body.dietaryPreference,
+      });
+      return res.json(result);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number; status?: number };
+      const status = e.statusCode || e.status || 500;
+      return res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: e.message || 'Failed to analyze menu.',
+      });
+    }
+  });
+
+  // Interactive Nutrition Coach ("Finish My Day" / Rebalance)
+  app.post('/api/ai/coach', async (req, res) => {
+    try {
+      const body = (req.body || {}) as {
+        prompt?: string;
+        remainingCalories?: number;
+        remainingProtein?: number;
+        remainingCarbs?: number;
+        remainingFat?: number;
+        goalCalories?: number;
+        goalProtein?: number;
+        dietaryPreference?: string;
+        restrictions?: string[];
+      };
+      const prompt = (body.prompt || '').trim() || 'Suggest high-protein ideas to finish my remaining macros today.';
+      const result = await coachChatWithGemini({
+        prompt,
+        remainingCalories: Number(body.remainingCalories ?? 400),
+        remainingProtein: Number(body.remainingProtein ?? 30),
+        remainingCarbs: Number(body.remainingCarbs ?? 40),
+        remainingFat: Number(body.remainingFat ?? 15),
+        goalCalories: Number(body.goalCalories ?? 2000),
+        goalProtein: Number(body.goalProtein ?? 120),
+        dietaryPreference: body.dietaryPreference,
+        restrictions: Array.isArray(body.restrictions) ? body.restrictions : [],
+      });
+      return res.json(result);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number; status?: number };
+      const status = e.statusCode || e.status || 500;
+      return res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: e.message || 'Coach request failed.',
       });
     }
   });

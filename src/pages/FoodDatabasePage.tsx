@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Barcode,
   BookmarkPlus,
@@ -26,6 +26,8 @@ import {
 import { FoodItem } from '../types';
 import { formatNutrientValue, searchFoods } from '../utils/nutritionUtils';
 import { getPortionsForFood } from '../utils/portionEngine';
+
+const DATABASE_PAGE_SIZE = 40;
 
 type DietaryFilterOption = 'all' | 'vegetarian' | 'vegan' | 'eggetarian' | 'non_veg';
 
@@ -110,6 +112,307 @@ function getVerificationPill(status?: FoodItem['verificationStatus']): {
   }
 }
 
+interface FoodDatabaseRowProps {
+  food: FoodItem;
+  isFav: boolean;
+  isExpanded: boolean;
+  onToggleFavorite: (foodId: string) => void;
+  onToggleExpand: (foodId: string) => void;
+  onSaveExternal: (food: FoodItem) => void;
+  onEditCustom: (food: FoodItem) => void;
+  onDeleteCustom: (food: FoodItem) => void;
+  onQuickAdd: (food: FoodItem) => void;
+}
+
+const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
+  ({
+    food,
+    isFav,
+    isExpanded,
+    onToggleFavorite,
+    onToggleExpand,
+    onSaveExternal,
+    onEditCustom,
+    onDeleteCustom,
+    onQuickAdd,
+  }) => {
+    const sourceLabel = getSourceTypeDisplay(food);
+    const badge = getVerificationPill(food.verificationStatus);
+    const isExternalApiResult =
+      !food.isCustom && (food.id.startsWith('off-') || food.id.startsWith('usda-'));
+    const portions = isExpanded ? getPortionsForFood(food) : [];
+    const hasDetails =
+      Boolean(food.ingredientsText) ||
+      Boolean(food.barcode) ||
+      Boolean(food.micronutrients && Object.keys(food.micronutrients).length > 0) ||
+      Boolean(food.license) ||
+      Boolean(food.foodCode || food.sourceId) ||
+      food.solubleFibreG != null ||
+      food.insolubleFibreG != null ||
+      food.waterG != null ||
+      (food.aliases && food.aliases.length > 0);
+
+    return (
+      <div className="px-4 sm:px-5 py-4 hover:bg-stone-50/70 dark:hover:bg-slate-800/30 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="min-w-0 flex items-start gap-3">
+            <button
+              type="button"
+              onClick={() => onToggleFavorite(food.id)}
+              aria-label={isFav ? `Unfavorite ${food.name}` : `Favorite ${food.name}`}
+              className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-400 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0"
+            >
+              <Star className={`w-4 h-4 ${isFav ? 'text-amber-500 fill-amber-500' : ''}`} />
+            </button>
+
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {food.name}
+                </h3>
+                {food.foodState && (
+                  <span className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/10 text-[10px] font-medium capitalize text-slate-600 dark:text-slate-300">
+                    {food.foodState}
+                  </span>
+                )}
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}>
+                  {badge.label}
+                </span>
+                {food.brand && (
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                    {food.brand}
+                  </span>
+                )}
+                <span className="text-xs text-slate-500 dark:text-slate-400">{food.category}</span>
+              </div>
+
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums">
+                <span>Serving: {food.servingName}</span>
+                <span aria-hidden="true">·</span>
+                <span>P {formatNutrientValue(food, 'protein', 'g')}</span>
+                <span aria-hidden="true">·</span>
+                <span>C {formatNutrientValue(food, 'carbs', 'g')}</span>
+                <span aria-hidden="true">·</span>
+                <span>F {formatNutrientValue(food, 'fat', 'g')}</span>
+                <span aria-hidden="true">·</span>
+                <span>Fibre {formatNutrientValue(food, 'fibre', 'g')}</span>
+              </div>
+
+              <div className="mt-1 text-[11px] text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span
+                  className={
+                    food.isCustom
+                      ? 'text-amber-600 dark:text-amber-400 font-medium'
+                      : food.sourceType === 'verified_reference'
+                      ? 'text-lime-700 dark:text-lime-400 font-medium'
+                      : ''
+                  }
+                >
+                  {sourceLabel}
+                </span>
+                {food.sourceName && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{food.sourceName}</span>
+                  </>
+                )}
+                {(food.foodCode || food.sourceId) && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="font-mono-nums">{food.foodCode || food.sourceId}</span>
+                  </>
+                )}
+                {food.country && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{food.country}</span>
+                  </>
+                )}
+                {hasDetails && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      type="button"
+                      onClick={() => onToggleExpand(food.id)}
+                      className="text-lime-700 dark:text-lime-400 hover:underline inline-flex items-center gap-0.5 font-medium"
+                    >
+                      {isExpanded ? 'Hide details' : 'Provenance & nutrients'}
+                      {isExpanded ? (
+                        <ChevronUp className="w-3 h-3" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3" />
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between sm:justify-end gap-2 pl-11 sm:pl-0 shrink-0">
+            <div className="text-right mr-2">
+              <span className="text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-100">
+                {formatNutrientValue(food, 'calories')}
+              </span>{' '}
+              {!food.missingFields?.includes('calories') && (
+                <span className="text-xs text-slate-500 dark:text-slate-400">kcal</span>
+              )}
+            </div>
+
+            {isExternalApiResult && (
+              <button
+                type="button"
+                onClick={() => onSaveExternal(food)}
+                title="Save verified external food to My Foods"
+                className="min-h-[38px] px-2.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-medium text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+              >
+                <BookmarkPlus className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+                Save
+              </button>
+            )}
+
+            {food.isCustom && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onEditCustom(food)}
+                  aria-label={`Edit ${food.name}`}
+                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-800"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeleteCustom(food)}
+                  aria-label={`Delete ${food.name}`}
+                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onQuickAdd(food)}
+              className="min-h-[38px] px-3.5 rounded-xl bg-lime-100 dark:bg-lime-950/70 text-lime-800 dark:text-lime-300 text-xs font-semibold hover:bg-lime-200/80 dark:hover:bg-lime-900/70 transition-colors inline-flex items-center gap-1 whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Quick Add
+            </button>
+          </div>
+        </div>
+
+        {/* Expanded provenance, ingredients, IFCT proximate composition & micronutrients */}
+        {isExpanded && (
+          <div className="mt-3 ml-0 sm:ml-12 p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C]/80 border border-black/10 dark:border-white/12 text-xs space-y-2">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-600 dark:text-slate-300 font-mono-nums">
+              {food.energyKj != null && <span>Energy: {food.energyKj} kJ</span>}
+              {food.atwaterCalories != null && (
+                <span>Atwater check: {food.atwaterCalories} kcal/100g</span>
+              )}
+              {food.waterG != null && <span>Moisture/Water: {food.waterG}g</span>}
+              {food.ashG != null && <span>Ash: {food.ashG}g</span>}
+              {food.solubleFibreG != null && <span>Soluble Fibre: {food.solubleFibreG}g</span>}
+              {food.insolubleFibreG != null && (
+                <span>Insoluble Fibre: {food.insolubleFibreG}g</span>
+              )}
+              {food.liquidDensityGPerMl != null && (
+                <span>Density: {food.liquidDensityGPerMl} g/ml</span>
+              )}
+            </div>
+
+            {food.barcode && (
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-mono-nums">
+                <Barcode className="w-3.5 h-3.5 text-slate-400" />
+                Barcode: {food.barcode}
+              </div>
+            )}
+            {food.ingredientsText && (
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  Ingredients:{' '}
+                </span>
+                {food.ingredientsText}
+              </p>
+            )}
+            {(food.aliases?.length || 0) > 0 && (
+              <p className="text-slate-500 dark:text-slate-400">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Also known as:{' '}
+                </span>
+                {food.aliases!.join(', ')}
+              </p>
+            )}
+            {portions.length > 0 && (
+              <p className="text-slate-500 dark:text-slate-400">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Standard portions:{' '}
+                </span>
+                {portions.map((p) => `${p.portionName} (${p.gramOrMlWeight}g)`).join(' · ')}
+              </p>
+            )}
+            {food.micronutrients && Object.keys(food.micronutrients).length > 0 && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-slate-600 dark:text-slate-300 tabular-nums">
+                {food.micronutrients.sugarG != null && (
+                  <span>Sugar: {food.micronutrients.sugarG}g</span>
+                )}
+                {food.micronutrients.saturatedFatG != null && (
+                  <span>Sat. Fat: {food.micronutrients.saturatedFatG}g</span>
+                )}
+                {food.micronutrients.sodiumMg != null && (
+                  <span>Sodium: {food.micronutrients.sodiumMg}mg</span>
+                )}
+                {food.micronutrients.potassiumMg != null && (
+                  <span>Potassium: {food.micronutrients.potassiumMg}mg</span>
+                )}
+                {food.micronutrients.calciumMg != null && (
+                  <span>Calcium: {food.micronutrients.calciumMg}mg</span>
+                )}
+                {food.micronutrients.ironMg != null && (
+                  <span>Iron: {food.micronutrients.ironMg}mg</span>
+                )}
+                {food.micronutrients.vitaminCMg != null && (
+                  <span>Vitamin C: {food.micronutrients.vitaminCMg}mg</span>
+                )}
+              </div>
+            )}
+            {food.validationIssues &&
+              food.validationIssues.some((i) => i.severity !== 'info') && (
+                <div className="text-[11px] text-amber-700 dark:text-amber-300 space-y-0.5">
+                  {food.validationIssues
+                    .filter((i) => i.severity !== 'info')
+                    .map((issue, idx) => (
+                      <div key={idx}>Notice: {issue.message}</div>
+                    ))}
+                </div>
+              )}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-black/10 dark:border-white/12">
+              <span>
+                License: {food.license || 'Verified Reference'}
+                {food.sourceId ? ` · ID ${food.sourceId}` : ''}
+                {food.measurementBasis ? ` · Basis ${food.measurementBasis}` : ''}
+              </span>
+              {food.sourceUrl && (
+                <a
+                  href={food.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-lime-700 dark:text-lime-400 hover:underline inline-flex items-center gap-1"
+                >
+                  View Source Record
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+);
+FoodDatabaseRow.displayName = 'FoodDatabaseRow';
+
 export const FoodDatabasePage: React.FC = () => {
   const {
     state,
@@ -126,6 +429,7 @@ export const FoodDatabasePage: React.FC = () => {
   } = useMacroLogStore();
 
   const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [dietaryFilter, setDietaryFilter] = useState<DietaryFilterOption>(() => {
     try {
@@ -151,6 +455,8 @@ export const FoodDatabasePage: React.FC = () => {
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteNote, setRemoteNote] = useState<string>('');
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  const [visibleCount, setVisibleCount] = useState(DATABASE_PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const [customModalOpen, setCustomModalOpen] = useState(false);
   const [editingFood, setEditingFood] = useState<FoodItem | undefined>(undefined);
@@ -236,32 +542,32 @@ export const FoodDatabasePage: React.FC = () => {
     };
   }, [query, selectedCategory, semanticMode]);
 
+  const favoriteSet = useMemo(
+    () => new Set(state.favoriteFoodIds),
+    [state.favoriteFoodIds]
+  );
+
   const filteredLocalFoods = useMemo(
     () =>
       searchFoods(
         allFoods,
-        semanticMode ? '' : query,
+        deferredQuery,
         selectedCategory,
         state.favoriteFoodIds,
         state.recentFoodIds
       ),
-    [allFoods, query, selectedCategory, semanticMode, state.favoriteFoodIds, state.recentFoodIds]
+    [allFoods, deferredQuery, selectedCategory, state.favoriteFoodIds, state.recentFoodIds]
   );
 
   const displayedFoods = useMemo(() => {
+    const trimmedDeferred = deferredQuery.trim();
     let base: FoodItem[];
-    if (semanticMode && query.trim()) {
+    if (semanticMode && trimmedDeferred) {
       const seen = new Set(remoteFoods.map((f) => f.id));
-      const localMatches = searchFoods(
-        allFoods,
-        query,
-        selectedCategory,
-        state.favoriteFoodIds,
-        state.recentFoodIds
-      ).filter((f) => !seen.has(f.id));
+      const localMatches = filteredLocalFoods.filter((f) => !seen.has(f.id));
       base = [...remoteFoods, ...localMatches];
     } else if (
-      query.trim() &&
+      trimmedDeferred &&
       selectedCategory !== 'Favorites' &&
       selectedCategory !== 'Recent'
     ) {
@@ -271,22 +577,65 @@ export const FoodDatabasePage: React.FC = () => {
       base = filteredLocalFoods;
     }
 
+    if (dietaryFilter === 'all') return base;
     return base.filter((food) => matchesDietaryFilter(food, dietaryFilter));
   }, [
-    allFoods,
+    deferredQuery,
     dietaryFilter,
     filteredLocalFoods,
-    query,
     remoteFoods,
     selectedCategory,
     semanticMode,
-    state.favoriteFoodIds,
-    state.recentFoodIds,
   ]);
 
-  const toggleExpand = (id: string) => {
+  // Reset pagination when filter criteria change
+  useEffect(() => {
+    setVisibleCount(DATABASE_PAGE_SIZE);
+  }, [deferredQuery, selectedCategory, dietaryFilter, semanticMode]);
+
+  const visibleFoods = useMemo(
+    () => displayedFoods.slice(0, visibleCount),
+    [displayedFoods, visibleCount]
+  );
+
+  const hasMoreFoods = visibleCount < displayedFoods.length;
+
+  useEffect(() => {
+    if (!hasMoreFoods) return;
+    const target = loadMoreRef.current;
+    if (!target || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((prev) => prev + DATABASE_PAGE_SIZE);
+        }
+      },
+      { rootMargin: '240px' }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMoreFoods]);
+
+  const toggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  }, []);
+
+  const handleEditCustomFood = useCallback((food: FoodItem) => {
+    setEditingFood(food);
+    setCustomModalOpen(true);
+  }, []);
+
+  const handleDeleteCustomFood = useCallback((food: FoodItem) => {
+    setPendingDeleteFood(food);
+  }, []);
+
+  const handleQuickAddFood = useCallback(
+    (food: FoodItem) => {
+      openAddFoodModal({ food, date: selectedDate });
+    },
+    [openAddFoodModal, selectedDate]
+  );
 
   return (
     <div className="space-y-6">
@@ -336,7 +685,7 @@ export const FoodDatabasePage: React.FC = () => {
 
       {/* Search Bar + Smart Semantic Toggle + Filters */}
       <section className="space-y-3">
-        <div className="sticky top-[calc(52px+env(safe-area-inset-top))] lg:static z-20 bg-[#F4F3EF]/95 dark:bg-[#090A0C]/95 backdrop-blur-md py-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:py-0 sm:bg-transparent flex flex-col sm:flex-row gap-2.5">
+        <div className="sticky top-[calc(52px+env(safe-area-inset-top))] lg:static z-20 bg-[#F4F3EF]/98 dark:bg-[#090A0C]/98 py-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:py-0 sm:bg-transparent flex flex-col sm:flex-row gap-2.5">
           <div className="relative flex-1">
             {semanticMode ? (
               <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -471,295 +820,32 @@ export const FoodDatabasePage: React.FC = () => {
         </section>
       ) : (
         <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl divide-y divide-stone-100 dark:divide-slate-800/80 overflow-hidden">
-          {displayedFoods.map((food) => {
-            const isFav = state.favoriteFoodIds.includes(food.id);
-            const isExpanded = Boolean(expandedIds[food.id]);
-            const sourceLabel = getSourceTypeDisplay(food);
-            const badge = getVerificationPill(food.verificationStatus);
-            const isExternalApiResult =
-              !food.isCustom && (food.id.startsWith('off-') || food.id.startsWith('usda-'));
-            const portions = isExpanded ? getPortionsForFood(food) : [];
-            const hasDetails =
-              Boolean(food.ingredientsText) ||
-              Boolean(food.barcode) ||
-              Boolean(food.micronutrients && Object.keys(food.micronutrients).length > 0) ||
-              Boolean(food.license) ||
-              Boolean(food.foodCode || food.sourceId) ||
-              food.solubleFibreG != null ||
-              food.insolubleFibreG != null ||
-              food.waterG != null ||
-              (food.aliases && food.aliases.length > 0);
+          {visibleFoods.map((food) => (
+            <FoodDatabaseRow
+              key={food.id}
+              food={food}
+              isFav={favoriteSet.has(food.id)}
+              isExpanded={Boolean(expandedIds[food.id])}
+              onToggleFavorite={toggleFavoriteFood}
+              onToggleExpand={toggleExpand}
+              onSaveExternal={saveExternalFoodToMyFoods}
+              onEditCustom={handleEditCustomFood}
+              onDeleteCustom={handleDeleteCustomFood}
+              onQuickAdd={handleQuickAddFood}
+            />
+          ))}
 
-            return (
-              <div
-                key={food.id}
-                className="px-4 sm:px-5 py-4 hover:bg-stone-50/70 dark:hover:bg-slate-800/30 transition-colors"
+          {hasMoreFoods && (
+            <div ref={loadMoreRef} className="px-4 py-4 flex items-center justify-center bg-stone-50/40 dark:bg-white/[0.02]">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => prev + DATABASE_PAGE_SIZE)}
+                className="min-h-[38px] px-4 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500 transition-colors"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="min-w-0 flex items-start gap-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleFavoriteFood(food.id)}
-                      aria-label={isFav ? `Unfavorite ${food.name}` : `Favorite ${food.name}`}
-                      className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-400 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0"
-                    >
-                      <Star
-                        className={`w-4 h-4 ${isFav ? 'text-amber-500 fill-amber-500' : ''}`}
-                      />
-                    </button>
-
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          {food.name}
-                        </h3>
-                        {food.foodState && (
-                          <span className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/10 text-[10px] font-medium capitalize text-slate-600 dark:text-slate-300">
-                            {food.foodState}
-                          </span>
-                        )}
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}>
-                          {badge.label}
-                        </span>
-                        {food.brand && (
-                          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                            {food.brand}
-                          </span>
-                        )}
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                          {food.category}
-                        </span>
-                      </div>
-
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums">
-                        <span>Serving: {food.servingName}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>P {formatNutrientValue(food, 'protein', 'g')}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>C {formatNutrientValue(food, 'carbs', 'g')}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>F {formatNutrientValue(food, 'fat', 'g')}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>Fibre {formatNutrientValue(food, 'fibre', 'g')}</span>
-                      </div>
-
-                      <div className="mt-1 text-[11px] text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <span
-                          className={
-                            food.isCustom
-                              ? 'text-amber-600 dark:text-amber-400 font-medium'
-                              : food.sourceType === 'verified_reference'
-                              ? 'text-lime-700 dark:text-lime-400 font-medium'
-                              : ''
-                          }
-                        >
-                          {sourceLabel}
-                        </span>
-                        {food.sourceName && (
-                          <>
-                            <span aria-hidden="true">·</span>
-                            <span>{food.sourceName}</span>
-                          </>
-                        )}
-                        {(food.foodCode || food.sourceId) && (
-                          <>
-                            <span aria-hidden="true">·</span>
-                            <span className="font-mono-nums">{food.foodCode || food.sourceId}</span>
-                          </>
-                        )}
-                        {food.country && (
-                          <>
-                            <span aria-hidden="true">·</span>
-                            <span>{food.country}</span>
-                          </>
-                        )}
-                        {hasDetails && (
-                          <>
-                            <span aria-hidden="true">·</span>
-                            <button
-                              type="button"
-                              onClick={() => toggleExpand(food.id)}
-                              className="text-lime-700 dark:text-lime-400 hover:underline inline-flex items-center gap-0.5 font-medium"
-                            >
-                              {isExpanded ? 'Hide details' : 'Provenance & nutrients'}
-                              {isExpanded ? (
-                                <ChevronUp className="w-3 h-3" />
-                              ) : (
-                                <ChevronDown className="w-3 h-3" />
-                              )}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-2 pl-11 sm:pl-0 shrink-0">
-                    <div className="text-right mr-2">
-                      <span className="text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-100">
-                        {formatNutrientValue(food, 'calories')}
-                      </span>{' '}
-                      {!food.missingFields?.includes('calories') && (
-                        <span className="text-xs text-slate-500 dark:text-slate-400">kcal</span>
-                      )}
-                    </div>
-
-                    {isExternalApiResult && (
-                      <button
-                        type="button"
-                        onClick={() => saveExternalFoodToMyFoods(food)}
-                        title="Save verified external food to My Foods"
-                        className="min-h-[38px] px-2.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-medium text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
-                      >
-                        <BookmarkPlus className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
-                        Save
-                      </button>
-                    )}
-
-                    {food.isCustom && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingFood(food);
-                            setCustomModalOpen(true);
-                          }}
-                          aria-label={`Edit ${food.name}`}
-                          className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-800"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPendingDeleteFood(food)}
-                          aria-label={`Delete ${food.name}`}
-                          className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => openAddFoodModal({ food, date: selectedDate })}
-                      className="min-h-[38px] px-3.5 rounded-xl bg-lime-100 dark:bg-lime-950/70 text-lime-800 dark:text-lime-300 text-xs font-semibold hover:bg-lime-200/80 dark:hover:bg-lime-900/70 transition-colors inline-flex items-center gap-1 whitespace-nowrap"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Quick Add
-                    </button>
-                  </div>
-                </div>
-
-                {/* Expanded provenance, ingredients, IFCT proximate composition & micronutrients */}
-                {isExpanded && (
-                  <div className="mt-3 ml-0 sm:ml-12 p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C]/80 border border-black/10 dark:border-white/12 text-xs space-y-2">
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-600 dark:text-slate-300 font-mono-nums">
-                      {food.energyKj != null && <span>Energy: {food.energyKj} kJ</span>}
-                      {food.atwaterCalories != null && (
-                        <span>Atwater check: {food.atwaterCalories} kcal/100g</span>
-                      )}
-                      {food.waterG != null && <span>Moisture/Water: {food.waterG}g</span>}
-                      {food.ashG != null && <span>Ash: {food.ashG}g</span>}
-                      {food.solubleFibreG != null && (
-                        <span>Soluble Fibre: {food.solubleFibreG}g</span>
-                      )}
-                      {food.insolubleFibreG != null && (
-                        <span>Insoluble Fibre: {food.insolubleFibreG}g</span>
-                      )}
-                      {food.liquidDensityGPerMl != null && (
-                        <span>Density: {food.liquidDensityGPerMl} g/ml</span>
-                      )}
-                    </div>
-
-                    {food.barcode && (
-                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-mono-nums">
-                        <Barcode className="w-3.5 h-3.5 text-slate-400" />
-                        Barcode: {food.barcode}
-                      </div>
-                    )}
-                    {food.ingredientsText && (
-                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          Ingredients:{' '}
-                        </span>
-                        {food.ingredientsText}
-                      </p>
-                    )}
-                    {(food.aliases?.length || 0) > 0 && (
-                      <p className="text-slate-500 dark:text-slate-400">
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">
-                          Also known as:{' '}
-                        </span>
-                        {food.aliases!.join(', ')}
-                      </p>
-                    )}
-                    {portions.length > 0 && (
-                      <p className="text-slate-500 dark:text-slate-400">
-                        <span className="font-semibold text-slate-700 dark:text-slate-300">
-                          Standard portions:{' '}
-                        </span>
-                        {portions.map((p) => `${p.portionName} (${p.gramOrMlWeight}g)`).join(' · ')}
-                      </p>
-                    )}
-                    {food.micronutrients && Object.keys(food.micronutrients).length > 0 && (
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-slate-600 dark:text-slate-300 tabular-nums">
-                        {food.micronutrients.sugarG != null && (
-                          <span>Sugar: {food.micronutrients.sugarG}g</span>
-                        )}
-                        {food.micronutrients.saturatedFatG != null && (
-                          <span>Sat. Fat: {food.micronutrients.saturatedFatG}g</span>
-                        )}
-                        {food.micronutrients.sodiumMg != null && (
-                          <span>Sodium: {food.micronutrients.sodiumMg}mg</span>
-                        )}
-                        {food.micronutrients.potassiumMg != null && (
-                          <span>Potassium: {food.micronutrients.potassiumMg}mg</span>
-                        )}
-                        {food.micronutrients.calciumMg != null && (
-                          <span>Calcium: {food.micronutrients.calciumMg}mg</span>
-                        )}
-                        {food.micronutrients.ironMg != null && (
-                          <span>Iron: {food.micronutrients.ironMg}mg</span>
-                        )}
-                        {food.micronutrients.vitaminCMg != null && (
-                          <span>Vitamin C: {food.micronutrients.vitaminCMg}mg</span>
-                        )}
-                      </div>
-                    )}
-                    {food.validationIssues &&
-                      food.validationIssues.some((i) => i.severity !== 'info') && (
-                        <div className="text-[11px] text-amber-700 dark:text-amber-300 space-y-0.5">
-                          {food.validationIssues
-                            .filter((i) => i.severity !== 'info')
-                            .map((issue, idx) => (
-                              <div key={idx}>Notice: {issue.message}</div>
-                            ))}
-                        </div>
-                      )}
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-black/10 dark:border-white/12">
-                      <span>
-                        License: {food.license || 'Verified Reference'}
-                        {food.sourceId ? ` · ID ${food.sourceId}` : ''}
-                        {food.measurementBasis ? ` · Basis ${food.measurementBasis}` : ''}
-                      </span>
-                      {food.sourceUrl && (
-                        <a
-                          href={food.sourceUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-lime-700 dark:text-lime-400 hover:underline inline-flex items-center gap-1"
-                        >
-                          View Source Record
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                Load more ({displayedFoods.length - visibleCount} remaining)
+              </button>
+            </div>
+          )}
         </section>
       )}
 

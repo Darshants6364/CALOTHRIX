@@ -12,6 +12,7 @@ import { AccountRole } from '../types';
 
 interface LandingPageProps {
   onSelectAuth: (role: AccountRole) => void;
+  onTryGuest?: () => void;
 }
 
 const sectionRevealVariants: Variants = {
@@ -30,7 +31,7 @@ const sectionRevealVariants: Variants = {
   }),
 };
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onSelectAuth }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onSelectAuth, onTryGuest }) => {
   const scrollToPhilosophy = () => {
     const target = document.querySelector('#philosophy');
     if (target) target.scrollIntoView({ behavior: 'smooth' });
@@ -47,6 +48,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectAuth }) => {
           <HeroSection
             onExplore={scrollToPhilosophy}
             onGetStarted={() => onSelectAuth('individual')}
+            onTryGuest={onTryGuest}
           />
 
           <motion.div

@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  Activity,
   ArrowRight,
   Barcode,
   Calculator,
@@ -18,13 +19,18 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { AiCoachDrawer } from '../components/AiCoachDrawer';
 import { CalorieRing } from '../components/CalorieRing';
 import { DailyQuestArena } from '../components/DailyQuestArena';
 import { DateStrip } from '../components/DateStrip';
 import { MacroCard } from '../components/MacroCard';
+import { QuickAiLogBar } from '../components/QuickAiLogBar';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { MEAL_CATEGORIES, MealCategory } from '../types';
-import { getSmartFoodRecommendations } from '../utils/analyticsUtils';
+import {
+  getSmartFoodRecommendations,
+  getWeeklyCalorieBankSummary,
+} from '../utils/analyticsUtils';
 import {
   addDaysToDateKey,
   formatReadableDate,
@@ -83,8 +89,12 @@ export const HomePage: React.FC = () => {
     dailyWaterGoalMl,
     addWaterMl,
     setDailyWaterGoalMl,
+    activeBurnKcalByDate,
+    addActiveBurnKcal,
     copyMealFromPreviousDay,
   } = useMacroLogStore();
+
+  const [coachOpen, setCoachOpen] = useState(false);
 
   const isDark = resolvedTheme === 'dark';
   const todayKey = getTodayDateKey();
@@ -93,6 +103,20 @@ export const HomePage: React.FC = () => {
   const { goals, settings, profile, weightGoal } = state;
   const greeting = getTimeOfDayGreeting();
   const firstName = (authDetails?.name || profile.name).split(' ')[0] || 'there';
+
+  const todayBurnKcal = activeBurnKcalByDate[selectedDate] || 0;
+  const effectiveDailyCalorieGoal =
+    goals.calories > 0 ? goals.calories + todayBurnKcal : 0;
+
+  const weeklyBank = useMemo(
+    () =>
+      getWeeklyCalorieBankSummary({
+        foodEntries: state.foodEntries,
+        goals,
+        referenceDateKey: selectedDate,
+      }),
+    [goals, selectedDate, state.foodEntries]
+  );
 
   const macroSplit = useMemo(
     () => getMacroCalorieSplit(selectedDateTotals),
@@ -481,6 +505,9 @@ export const HomePage: React.FC = () => {
       {/* Date Strip */}
       <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} />
 
+      {/* 1-Line Quick AI & Verified DB Log Bar */}
+      <QuickAiLogBar targetDate={selectedDate} />
+
       {/* Main Focal Section: Calorie Ring + Macro Ratio Comparison */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         <div className="lg:col-span-7 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-7 flex flex-col justify-between">
@@ -492,7 +519,9 @@ export const HomePage: React.FC = () => {
               {goals.calories > 0 && (
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {goalSummaryLabel}
-                  {goals.estimatedWeeks
+                  {todayBurnKcal > 0
+                    ? ` · Base ${goals.calories.toLocaleString()} + ${todayBurnKcal} active burn`
+                    : goals.estimatedWeeks
                     ? ` · Est. ${goals.estimatedWeeks} weeks to target`
                     : ''}
                 </p>
@@ -508,7 +537,7 @@ export const HomePage: React.FC = () => {
               </button>
             </div>
           </div>
-          <CalorieRing consumed={selectedDateTotals.calories} goal={goals.calories} />
+          <CalorieRing consumed={selectedDateTotals.calories} goal={effectiveDailyCalorieGoal} />
         </div>
 
         {/* Daily Macro Split & Target Alignment (MyFitnessPal Nutrition Style) */}
@@ -650,6 +679,99 @@ export const HomePage: React.FC = () => {
             target={goals.fibre}
             tone="fibre"
           />
+        </div>
+      </section>
+
+      {/* Weekly Calorie Bank, Active Burn Allowance & Finish My Day Coach */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        <div className="lg:col-span-5 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                Weekly Calorie Bank
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                {weeklyBank.weeklyBudget > 0
+                  ? `${weeklyBank.remainingWeeklyBudget.toLocaleString()} kcal left over ${weeklyBank.daysRemaining} remaining ${
+                      weeklyBank.daysRemaining === 1 ? 'day' : 'days'
+                    }`
+                  : 'Set daily goals to unlock weekly calorie banking'}
+              </p>
+            </div>
+            {weeklyBank.recommendedPerRemainingDay > 0 && (
+              <span className="px-2.5 py-1 rounded-lg bg-lime-500/15 text-[#4E6800] dark:text-[#C8FF00] text-xs font-bold font-mono-nums shrink-0">
+                {weeklyBank.recommendedPerRemainingDay.toLocaleString()} kcal/d
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-stone-100 dark:border-white/10 tabular-nums">
+            <span>
+              Week consumed: {weeklyBank.consumedThisWeek.toLocaleString()} /{' '}
+              {weeklyBank.weeklyBudget.toLocaleString()} kcal
+            </span>
+            <span>Protein ≥85%: {weeklyBank.proteinTargetDaysHit}/7d</span>
+          </div>
+        </div>
+
+        <div className="lg:col-span-4 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+              <div>
+                <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                  Active Workout Burn
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums">
+                  +{todayBurnKcal.toLocaleString()} kcal allowance today
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              disabled={todayBurnKcal <= 0}
+              onClick={() => addActiveBurnKcal(selectedDate, -50)}
+              className="min-h-[34px] px-2.5 rounded-lg border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-600 dark:text-slate-300 disabled:opacity-40"
+            >
+              -50
+            </button>
+            <button
+              type="button"
+              onClick={() => addActiveBurnKcal(selectedDate, 150)}
+              className="min-h-[34px] px-3 rounded-lg bg-stone-100 dark:bg-slate-800 hover:bg-stone-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-900 dark:text-slate-100"
+            >
+              +150 kcal
+            </button>
+            <button
+              type="button"
+              onClick={() => addActiveBurnKcal(selectedDate, 300)}
+              className="min-h-[34px] px-3 rounded-lg bg-stone-100 dark:bg-slate-800 hover:bg-stone-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-900 dark:text-slate-100"
+            >
+              +300 kcal
+            </button>
+          </div>
+        </div>
+
+        <div className="lg:col-span-3 bg-[#111317] dark:bg-[#14161C] border border-black/10 dark:border-white/15 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3 text-white">
+          <div>
+            <div className="text-xs font-bold text-[#C8FF00] flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Finish My Day Coach
+            </div>
+            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+              Get instant snack or dinner ideas tailored to your remaining macros.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCoachOpen(true)}
+            className="w-full min-h-[38px] px-3 rounded-xl bg-[#C8FF00] text-black text-xs font-bold hover:brightness-95 transition-all"
+          >
+            Ask AI Coach →
+          </button>
         </div>
       </section>
 
@@ -1001,55 +1123,133 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Real Logged Micronutrients & Sugar Summary (shown when logged foods contain nutrient data) */}
-      {loggedMicronutrients.hasAny && (
+      {/* Micronutrient RDA Progress Bars & Limit Watch */}
+      {(loggedMicronutrients.hasAny || selectedDateTotals.fibre > 0) && (
         <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div>
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Daily Nutrients & Sugar Watch
+                Micronutrient RDA &amp; Limit Watch
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Calculated from micronutrient data on your logged foods today
+                Tracked against daily upper limits (Sugar, Sat. Fat, Sodium) and RDA minimums
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
             {[
-              { label: 'Sugar', value: `${loggedMicronutrients.sugarG} g`, note: 'Ref: <50 g' },
+              {
+                label: 'Fibre',
+                current: selectedDateTotals.fibre,
+                target: goals.fibre || 30,
+                unit: 'g',
+                isUpperLimit: false,
+              },
+              {
+                label: 'Sugar',
+                current: loggedMicronutrients.sugarG,
+                target: 50,
+                unit: 'g',
+                isUpperLimit: true,
+              },
               {
                 label: 'Sat. Fat',
-                value: `${loggedMicronutrients.saturatedFatG} g`,
-                note: 'Ref: <20 g',
+                current: loggedMicronutrients.saturatedFatG,
+                target: 20,
+                unit: 'g',
+                isUpperLimit: true,
               },
               {
                 label: 'Sodium',
-                value: `${loggedMicronutrients.sodiumMg.toLocaleString()} mg`,
-                note: 'Ref: <2,300 mg',
+                current: loggedMicronutrients.sodiumMg,
+                target: 2300,
+                unit: 'mg',
+                isUpperLimit: true,
               },
               {
                 label: 'Potassium',
-                value: `${loggedMicronutrients.potassiumMg.toLocaleString()} mg`,
-                note: 'Ref: 3,400 mg',
+                current: loggedMicronutrients.potassiumMg,
+                target: 3400,
+                unit: 'mg',
+                isUpperLimit: false,
               },
-              { label: 'Calcium', value: `${loggedMicronutrients.calciumMg} mg`, note: 'Ref: 1,000 mg' },
-              { label: 'Iron', value: `${loggedMicronutrients.ironMg} mg`, note: 'Ref: 8–18 mg' },
-              { label: 'Vitamin C', value: `${loggedMicronutrients.vitaminCMg} mg`, note: 'Ref: 90 mg' },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="p-3 rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/60 border border-black/10 dark:border-white/12"
-              >
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">{item.label}</div>
-                <div className="mt-1 text-base font-bold font-mono-nums text-slate-900 dark:text-slate-100">
-                  {item.value}
+              {
+                label: 'Calcium',
+                current: loggedMicronutrients.calciumMg,
+                target: 1000,
+                unit: 'mg',
+                isUpperLimit: false,
+              },
+              {
+                label: 'Iron',
+                current: loggedMicronutrients.ironMg,
+                target: profile.biologicalSex === 'female' ? 18 : 8,
+                unit: 'mg',
+                isUpperLimit: false,
+              },
+              {
+                label: 'Vitamin C',
+                current: loggedMicronutrients.vitaminCMg,
+                target: 90,
+                unit: 'mg',
+                isUpperLimit: false,
+              },
+            ].map((item) => {
+              const pct = Math.min(100, Math.round((item.current / Math.max(1, item.target)) * 100));
+              const isOverLimit = item.isUpperLimit && item.current > item.target;
+              const isLowRda = !item.isUpperLimit && pct < 40 && selectedDateEntries.length > 0;
+              const barColor = item.isUpperLimit
+                ? isOverLimit
+                  ? 'bg-rose-500'
+                  : pct > 80
+                  ? 'bg-amber-500'
+                  : 'bg-emerald-500'
+                : pct >= 75
+                ? 'bg-lime-500'
+                : 'bg-sky-500';
+
+              return (
+                <div
+                  key={item.label}
+                  className="p-3 rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/60 border border-black/10 dark:border-white/12 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-medium text-slate-600 dark:text-slate-300">
+                      {item.label}
+                    </span>
+                    <span
+                      className={`font-semibold ${
+                        isOverLimit
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : isLowRda
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {isOverLimit
+                        ? 'Over Limit'
+                        : item.isUpperLimit
+                        ? 'Watch'
+                        : `${pct}% RDA`}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-100">
+                    {item.current.toLocaleString()}{' '}
+                    <span className="text-[11px] font-normal text-slate-500">
+                      / {item.isUpperLimit ? '<' : ''}
+                      {item.target.toLocaleString()} {item.unit}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 tabular-nums">
-                  {item.note}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
@@ -1179,6 +1379,32 @@ export const HomePage: React.FC = () => {
           </div>
         </section>
       )}
+
+      <AiCoachDrawer
+        isOpen={coachOpen}
+        onClose={() => setCoachOpen(false)}
+        targetDate={selectedDate}
+        remainingCalories={
+          effectiveDailyCalorieGoal > 0
+            ? Math.max(0, effectiveDailyCalorieGoal - selectedDateTotals.calories)
+            : 500
+        }
+        remainingProtein={
+          goals.protein > 0
+            ? Math.max(0, round1(goals.protein - selectedDateTotals.protein))
+            : 35
+        }
+        remainingCarbs={
+          goals.carbs > 0
+            ? Math.max(0, round1(goals.carbs - selectedDateTotals.carbs))
+            : 50
+        }
+        remainingFat={
+          goals.fat > 0
+            ? Math.max(0, round1(goals.fat - selectedDateTotals.fat))
+            : 18
+        }
+      />
     </div>
   );
 };

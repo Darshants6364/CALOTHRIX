@@ -104,55 +104,119 @@ function normalizeText(s: string): string {
     .trim();
 }
 
+// Reusable flat DP rows to avoid allocating nested arrays on every keystroke
+const MAX_DP_LEN = 64;
+let dpPrev2 = new Int32Array(MAX_DP_LEN + 1);
+let dpPrev1 = new Int32Array(MAX_DP_LEN + 1);
+let dpCurr = new Int32Array(MAX_DP_LEN + 1);
+
 function damerauLevenshtein(a: string, b: string): number {
   const m = a.length;
   const n = b.length;
   if (m === 0) return n;
   if (n === 0) return m;
   if (Math.abs(m - n) > 3) return 99;
+  if (n > MAX_DP_LEN || m > MAX_DP_LEN) {
+    // Rare very long token fallback
+    const p2 = new Int32Array(n + 1);
+    const p1 = new Int32Array(n + 1);
+    const cur = new Int32Array(n + 1);
+    for (let j = 0; j <= n; j++) p1[j] = j;
+    for (let i = 1; i <= m; i++) {
+      cur[0] = i;
+      const ai = a.charCodeAt(i - 1);
+      for (let j = 1; j <= n; j++) {
+        const bj = b.charCodeAt(j - 1);
+        const cost = ai === bj ? 0 : 1;
+        let best = Math.min(p1[j] + 1, cur[j - 1] + 1, p1[j - 1] + cost);
+        if (i > 1 && j > 1 && ai === b.charCodeAt(j - 2) && a.charCodeAt(i - 2) === bj) {
+          const trans = p2[j - 2] + 1;
+          if (trans < best) best = trans;
+        }
+        cur[j] = best;
+      }
+      p2.set(p1);
+      p1.set(cur);
+    }
+    return p1[n];
+  }
 
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let j = 0; j <= n; j++) dpPrev1[j] = j;
 
   for (let i = 1; i <= m; i++) {
+    dpCurr[0] = i;
+    const ai = a.charCodeAt(i - 1);
+    const aiPrev = i > 1 ? a.charCodeAt(i - 2) : 0;
     for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + 1);
+      const bj = b.charCodeAt(j - 1);
+      const cost = ai === bj ? 0 : 1;
+      let best = dpPrev1[j] + 1;
+      const ins = dpCurr[j - 1] + 1;
+      const sub = dpPrev1[j - 1] + cost;
+      if (ins < best) best = ins;
+      if (sub < best) best = sub;
+      if (i > 1 && j > 1 && ai === b.charCodeAt(j - 2) && aiPrev === bj) {
+        const trans = dpPrev2[j - 2] + 1;
+        if (trans < best) best = trans;
       }
+      dpCurr[j] = best;
     }
+    const tmp = dpPrev2;
+    dpPrev2 = dpPrev1;
+    dpPrev1 = dpCurr;
+    dpCurr = tmp;
   }
-  return dp[m][n];
+  return dpPrev1[n];
 }
 
 function getQueryVariants(normalizedQuery: string): string[] {
-  const variants = new Set<string>([normalizedQuery]);
-  if (ALIAS_EXPANSIONS[normalizedQuery]) {
-    ALIAS_EXPANSIONS[normalizedQuery].forEach((v) => variants.add(v));
-  }
+  const direct = ALIAS_EXPANSIONS[normalizedQuery];
   const tokens = normalizedQuery.split(' ').filter(Boolean);
-  for (const t of tokens) {
-    const exp = ALIAS_EXPANSIONS[t];
-    if (exp) {
-      exp.forEach((e) => {
-        variants.add(normalizedQuery.replace(t, e));
-      });
+  let hasTokenExp = false;
+  for (let i = 0; i < tokens.length; i++) {
+    if (ALIAS_EXPANSIONS[tokens[i]]) {
+      hasTokenExp = true;
+      break;
+    }
+  }
+  if (!direct && !hasTokenExp) {
+    return [normalizedQuery];
+  }
+
+  const variants = new Set<string>([normalizedQuery]);
+  if (direct) {
+    for (let i = 0; i < direct.length; i++) variants.add(direct[i]);
+  }
+  if (hasTokenExp) {
+    for (const t of tokens) {
+      const exp = ALIAS_EXPANSIONS[t];
+      if (exp) {
+        for (let i = 0; i < exp.length; i++) {
+          variants.add(normalizedQuery.replace(t, exp[i]));
+        }
+      }
     }
   }
   return [...variants];
 }
 
-function getSearchableCorpus(food: FoodItem): {
+interface SearchableCorpus {
   nameNorm: string;
   aliasesNorm: string[];
   ingredientsNorm: string;
   brandNorm: string;
-  codeNorm: string;
+  codeLower: string;
+  sourceIdLower: string;
   stateNorm: string;
   tokens: string[];
-} {
+}
+
+const CORPUS_CACHE = new WeakMap<FoodItem, SearchableCorpus>();
+
+function getSearchableCorpus(food: FoodItem): SearchableCorpus {
+  const cached = CORPUS_CACHE.get(food);
+  if (cached) return cached;
+
   const nameNorm = normalizeText(food.name);
   const aliasesNorm = [
     ...(food.aliases || []),
@@ -160,19 +224,24 @@ function getSearchableCorpus(food: FoodItem): {
   ].map(normalizeText);
   const ingredientsNorm = normalizeText(food.ingredientsText || '');
   const brandNorm = normalizeText(food.brand || '');
-  const codeNorm = normalizeText(`${food.foodCode || ''} ${food.sourceId || ''} ${food.barcode || ''}`);
+  const codeLower = (food.foodCode || '').toLowerCase();
+  const sourceIdLower = (food.sourceId || '').toLowerCase();
   const stateNorm = normalizeText(food.foodState || '');
   const allText = `${nameNorm} ${aliasesNorm.join(' ')} ${brandNorm} ${ingredientsNorm} ${stateNorm}`;
   const tokens = [...new Set(allText.split(' ').filter((w) => w.length >= 2))];
-  return {
+
+  const corpus: SearchableCorpus = {
     nameNorm,
     aliasesNorm,
     ingredientsNorm,
     brandNorm,
-    codeNorm,
+    codeLower,
+    sourceIdLower,
     stateNorm,
     tokens,
   };
+  CORPUS_CACHE.set(food, corpus);
+  return corpus;
 }
 
 export interface ScoredFoodMatch {
@@ -192,10 +261,7 @@ export function scoreFoodMatch(food: FoodItem, rawQuery: string): ScoredFoodMatc
   if (cleanDigits.length >= 6 && food.barcode === cleanDigits) {
     return { food, score: 1000, matchReason: 'barcode_exact' };
   }
-  if (
-    food.foodCode?.toLowerCase() === qNorm ||
-    food.sourceId?.toLowerCase() === qNorm
-  ) {
+  if (corpus.codeLower === qNorm || corpus.sourceIdLower === qNorm) {
     return { food, score: 950, matchReason: 'code_exact' };
   }
 
@@ -238,29 +304,54 @@ export function scoreFoodMatch(food: FoodItem, rawQuery: string): ScoredFoodMatc
     let tokenScore = 0;
 
     for (const qt of queryTokens) {
-      const qtVariants = [qt, ...(ALIAS_EXPANSIONS[qt] || []).map(normalizeText)];
+      const qtExp = ALIAS_EXPANSIONS[qt];
       let tokenBest = 0;
 
-      for (const qtv of qtVariants) {
-        const subTokens = qtv.split(' ').filter(Boolean);
-        if (subTokens.every((st) => corpus.nameNorm.includes(st))) {
-          tokenBest = Math.max(tokenBest, qtv === qt ? 95 : 68);
-        } else if (subTokens.every((st) => corpus.aliasesNorm.some((a) => a.includes(st)))) {
-          tokenBest = Math.max(tokenBest, 74);
-        } else if (subTokens.every((st) => corpus.ingredientsNorm.includes(st))) {
-          tokenBest = Math.max(tokenBest, 38);
-        } else if (subTokens.every((st) => corpus.stateNorm.includes(st))) {
-          tokenBest = Math.max(tokenBest, 45);
-        } else if (qt.length >= 4) {
-          // Typo tolerance against food tokens (exclude ambiguous modifier false positives like butter<->batter)
-          for (const ft of corpus.tokens) {
-            if (Math.abs(ft.length - qt.length) <= 2 && !(qt === 'butter' && ft === 'batter')) {
-              const dist = damerauLevenshtein(qt, ft);
-              if (dist === 1 || (qt.length >= 6 && dist <= 2)) {
-                tokenBest = Math.max(tokenBest, dist === 1 ? 30 : 20);
-                if (!matchReason) matchReason = 'fuzzy_typo';
-                break;
-              }
+      // First check exact token & alias token substrings (zero DP cost)
+      if (corpus.nameNorm.includes(qt)) {
+        tokenBest = 95;
+      } else if (corpus.aliasesNorm.some((a) => a.includes(qt))) {
+        tokenBest = 74;
+      } else if (corpus.ingredientsNorm.includes(qt)) {
+        tokenBest = 38;
+      } else if (corpus.stateNorm.includes(qt)) {
+        tokenBest = 45;
+      }
+
+      if (tokenBest < 74 && qtExp) {
+        for (let i = 0; i < qtExp.length; i++) {
+          const qtv = normalizeText(qtExp[i]);
+          const subTokens = qtv.split(' ').filter(Boolean);
+          if (subTokens.every((st) => corpus.nameNorm.includes(st))) {
+            tokenBest = Math.max(tokenBest, 68);
+          } else if (subTokens.every((st) => corpus.aliasesNorm.some((a) => a.includes(st)))) {
+            tokenBest = Math.max(tokenBest, 74);
+          } else if (subTokens.every((st) => corpus.ingredientsNorm.includes(st))) {
+            tokenBest = Math.max(tokenBest, 38);
+          } else if (subTokens.every((st) => corpus.stateNorm.includes(st))) {
+            tokenBest = Math.max(tokenBest, 45);
+          }
+        }
+      }
+
+      // Only run Damerau-Levenshtein typo tolerance once per unmatched token >= 4 chars
+      if (tokenBest === 0 && qt.length >= 4) {
+        const qtLen = qt.length;
+        const maxAllowedDist = qtLen >= 6 ? 2 : 1;
+        const qt0 = qt.charCodeAt(0);
+        const qt1 = qt.charCodeAt(1);
+        for (let i = 0; i < corpus.tokens.length; i++) {
+          const ft = corpus.tokens[i];
+          if (Math.abs(ft.length - qtLen) <= maxAllowedDist && !(qt === 'butter' && ft === 'batter')) {
+            // Fast 2-char prefix/overlap pre-filter for edit distance <= 2
+            if (ft.charCodeAt(0) !== qt0 && ft.charCodeAt(0) !== qt1 && ft.charCodeAt(1) !== qt0) {
+              continue;
+            }
+            const dist = damerauLevenshtein(qt, ft);
+            if (dist <= maxAllowedDist) {
+              tokenBest = dist === 1 ? 30 : 20;
+              if (!matchReason) matchReason = 'fuzzy_typo';
+              break;
             }
           }
         }
@@ -318,20 +409,22 @@ export function searchFoodsIntelligent(
   }
 ): FoodItem[] {
   const category = options?.category || 'All';
-  const favoriteIds = options?.favoriteIds || [];
-  const recentIds = options?.recentIds || [];
+  const favoriteSet = options?.favoriteIds?.length ? new Set(options.favoriteIds) : null;
+  const recentSet = options?.recentIds?.length ? new Set(options.recentIds) : null;
 
-  const categoryFiltered = foods.filter((food) => {
-    if (category === 'All') return true;
-    if (category === 'Favorites') return favoriteIds.includes(food.id);
-    if (category === 'Recent') return recentIds.includes(food.id);
-    if (category === 'My Custom Foods' || category === 'Custom') return food.isCustom;
-    return food.category === category;
-  });
+  const categoryFiltered =
+    category === 'All'
+      ? foods
+      : foods.filter((food) => {
+          if (category === 'Favorites') return favoriteSet ? favoriteSet.has(food.id) : false;
+          if (category === 'Recent') return recentSet ? recentSet.has(food.id) : false;
+          if (category === 'My Custom Foods' || category === 'Custom') return food.isCustom;
+          return food.category === category;
+        });
 
   const q = query.trim();
   if (!q) {
-    return categoryFiltered;
+    return options?.limit ? categoryFiltered.slice(0, options.limit) : categoryFiltered;
   }
 
   const scored: ScoredFoodMatch[] = [];

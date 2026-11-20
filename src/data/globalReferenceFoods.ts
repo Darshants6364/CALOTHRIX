@@ -1,5 +1,6 @@
 import type { FoodItem } from '../types/index.ts';
 import { validateFoodCatalog } from '../utils/foodValidationEngine.ts';
+import { GLOBAL_POPULAR_FOODS } from './globalPopularFoods.ts';
 import { IFCT_2017_MASTER_FOODS } from './ifct2017Master.ts';
 import { INDIAN_FOODS_CATALOG } from './indianFoods.ts';
 
@@ -1101,6 +1102,7 @@ function enrichIndianCatalogFood(food: FoodItem): FoodItem {
 const RAW_COMBINED: FoodItem[] = [
   ...INDIAN_FOODS_CATALOG.map(enrichIndianCatalogFood),
   ...CURATED_BASE_FOODS,
+  ...GLOBAL_POPULAR_FOODS,
   ...IFCT_2017_MASTER_FOODS,
 ];
 
