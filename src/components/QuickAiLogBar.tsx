@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, Check, FileText, Loader2, Mic, Sparkles, X } from 'lucide-react';
+import { Check, Loader2, Sparkles, X } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { analyzeMealViaApi, recordAiTrainingEventApi } from '../services/mealAiService';
 import {
@@ -165,7 +165,7 @@ export const QuickAiLogBar: React.FC<QuickAiLogBarProps> = ({
       setError(
         err instanceof Error
           ? err.message
-          : 'Could not parse meal right now. Try Photo / Voice AI.'
+          : 'Could not parse meal right now. Try AI Meal Logger.'
       );
     } finally {
       setParsing(false);
@@ -291,32 +291,11 @@ export const QuickAiLogBar: React.FC<QuickAiLogBarProps> = ({
             onClick={() =>
               openMealScannerModal({ mode: 'photo', meal: defaultMeal, date: effectiveDate })
             }
-            className="min-h-[44px] px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-slate-800 dark:text-slate-100 text-xs font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+            title="Log with Photo, Voice, Description, or Label OCR"
+            className="min-h-[44px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-slate-800 dark:text-slate-100 text-xs font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
-            <Camera className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Photo AI</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              openMealScannerModal({ mode: 'voice', meal: defaultMeal, date: effectiveDate })
-            }
-            className="min-h-[44px] px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-slate-800 dark:text-slate-100 text-xs font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
-          >
-            <Mic className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Voice AI</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              openMealScannerModal({ mode: 'label', meal: defaultMeal, date: effectiveDate })
-            }
-            className="min-h-[44px] px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-slate-800 dark:text-slate-100 text-xs font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
-          >
-            <FileText className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Label OCR</span>
+            <Sparkles className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
+            <span>AI Meal Logger</span>
           </button>
         </div>
       </form>

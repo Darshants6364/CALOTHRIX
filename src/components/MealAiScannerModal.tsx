@@ -1145,10 +1145,10 @@ const MealAiScannerModalContent: React.FC = () => {
             </div>
             <div className="min-w-0">
               <h2 className="text-base font-bold text-slate-900 dark:text-slate-50 truncate">
-                AI Photo &amp; Voice Meal Logger
+                AI Meal Logger
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                Snap a plate photo, speak what you ate, or type a meal description
+                Snap a plate photo, speak, describe, or scan a nutrition label
               </p>
             </div>
           </div>

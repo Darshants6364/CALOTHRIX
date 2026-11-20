@@ -2,12 +2,10 @@ import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useSt
 import {
   Barcode,
   BookmarkPlus,
-  Camera,
   ChevronDown,
   ChevronUp,
   ExternalLink,
   Globe,
-  Mic,
   Pencil,
   Plus,
   Search,
@@ -723,11 +721,11 @@ export const FoodDatabasePage: React.FC = () => {
           <button
             type="button"
             onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
+            title="Log with Photo, Voice, Description, or Label OCR"
             className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
           >
-            <Camera className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <Mic className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00] -ml-1" />
-            <span>Photo / Voice AI</span>
+            <Sparkles className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+            <span>AI Meal Logger</span>
           </button>
 
           <button
