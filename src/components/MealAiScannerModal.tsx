@@ -264,6 +264,7 @@ const MealAiScannerModalContent: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const speechRef = useRef<BrowserSpeechRecognition | null>(null);
   const voiceTranscriptRef = useRef('');
+  const voiceTranscriptEditedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
 
   const photoVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -529,6 +530,7 @@ const MealAiScannerModalContent: React.FC = () => {
     setAudioPreviewUrl(null);
     setVoiceTranscript('');
     voiceTranscriptRef.current = '';
+    voiceTranscriptEditedRef.current = false;
 
     const SpeechCtor = getSpeechRecognitionCtor();
     const hasMediaRecorder =
@@ -593,9 +595,16 @@ const MealAiScannerModalContent: React.FC = () => {
 
       const preferredTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
       const chosenMime = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) || '';
-      const recorder = chosenMime
-        ? new MediaRecorder(stream, { mimeType: chosenMime })
-        : new MediaRecorder(stream);
+      let recorder: MediaRecorder;
+      try {
+        recorder = chosenMime
+          ? new MediaRecorder(stream, { mimeType: chosenMime, audioBitsPerSecond: 24000 })
+          : new MediaRecorder(stream, { audioBitsPerSecond: 24000 });
+      } catch {
+        recorder = chosenMime
+          ? new MediaRecorder(stream, { mimeType: chosenMime })
+          : new MediaRecorder(stream);
+      }
 
       audioChunksRef.current = [];
       recorder.ondataavailable = (ev) => {
@@ -654,6 +663,13 @@ const MealAiScannerModalContent: React.FC = () => {
   };
 
   const stopVoiceRecording = () => {
+    if (speechRef.current) {
+      try {
+        speechRef.current.stop();
+      } catch {
+        // Ignore stop errors
+      }
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     } else {
@@ -765,8 +781,8 @@ const MealAiScannerModalContent: React.FC = () => {
         });
       } else if (mode === 'voice') {
         const spokenText = voiceTranscript.trim();
-        if (spokenText.length >= 3) {
-          // Fast path: analyze the recognized spoken sentence directly (~1-2s)
+        if (voiceTranscriptEditedRef.current && spokenText.length >= 3) {
+          // User explicitly edited the spoken sentence -> analyze text directly
           const combinedNote = voiceContextNote.trim()
             ? `${spokenText}. Extra context: ${voiceContextNote.trim()}`
             : spokenText;
@@ -777,11 +793,23 @@ const MealAiScannerModalContent: React.FC = () => {
             prepStyle,
           });
         } else if (audioBase64) {
+          // Single-pass multimodal voice analysis (accurate + low latency)
+          const hintParts = [spokenText, voiceContextNote.trim()].filter(Boolean);
           res = await analyzeMealViaApi({
             mode: 'voice',
             mimeType: audioMimeType,
             mediaBase64: audioBase64,
-            promptText: voiceContextNote.trim() || undefined,
+            promptText: hintParts.length > 0 ? hintParts.join('. ') : undefined,
+            mealHint: mealType,
+            prepStyle,
+          });
+        } else if (spokenText.length >= 3) {
+          const combinedNote = voiceContextNote.trim()
+            ? `${spokenText}. Extra context: ${voiceContextNote.trim()}`
+            : spokenText;
+          res = await analyzeMealViaApi({
+            mode: 'text',
+            promptText: combinedNote,
             mealHint: mealType,
             prepStyle,
           });
@@ -1116,6 +1144,7 @@ const MealAiScannerModalContent: React.FC = () => {
     setAudioPreviewUrl(null);
     setVoiceTranscript('');
     voiceTranscriptRef.current = '';
+    voiceTranscriptEditedRef.current = false;
   };
 
   const canAnalyze =
@@ -1134,21 +1163,21 @@ const MealAiScannerModalContent: React.FC = () => {
       aria-modal="true"
       aria-label="AI Photo and Voice Meal Analyzer"
     >
-      <div className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
-        <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3 shrink-0" />
+      <div className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden pb-[env(safe-area-inset-bottom)] sm:pb-0">
+        <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-2.5 shrink-0" />
 
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-black/10 dark:border-white/12 shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center justify-between gap-2 sm:gap-3 px-4 sm:px-5 py-3 sm:py-4 border-b border-black/10 dark:border-white/12 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="w-9 h-9 rounded-xl bg-lime-100 dark:bg-lime-950/60 text-lime-700 dark:text-lime-400 flex items-center justify-center shrink-0">
               <Sparkles className="w-4 h-4" />
             </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-50 truncate">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-50 leading-tight">
                 AI Meal Logger
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                Snap a plate photo, speak, describe, or scan a nutrition label
+                Photo, voice, describe, or label OCR
               </p>
             </div>
           </div>
@@ -1158,14 +1187,16 @@ const MealAiScannerModalContent: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowHistory((s) => !s)}
-                className={`min-h-[36px] px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 ${
+                aria-label={`History (${recentScans.length})`}
+                className={`min-h-[36px] px-2.5 sm:px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap ${
                   showHistory
                     ? 'border-lime-500 bg-lime-50 dark:bg-lime-950/40 text-lime-800 dark:text-lime-300'
                     : 'border-black/10 dark:border-white/15 text-slate-600 dark:text-slate-300'
                 }`}
               >
-                <History className="w-3.5 h-3.5" />
-                <span>History ({recentScans.length})</span>
+                <History className="w-3.5 h-3.5 shrink-0" />
+                <span className="sm:hidden font-mono-nums">{recentScans.length}</span>
+                <span className="hidden sm:inline">History ({recentScans.length})</span>
               </button>
             )}
             <button
@@ -1179,9 +1210,9 @@ const MealAiScannerModalContent: React.FC = () => {
           </div>
         </div>
 
-        {/* Mode Switcher */}
-        <div className="px-5 pt-3.5 pb-2 border-b border-stone-100 dark:border-white/10 shrink-0">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C]">
+        {/* Mode Switcher — always 1 horizontal line on mobile and desktop */}
+        <div className="px-3 sm:px-5 pt-3 pb-2 border-b border-stone-100 dark:border-white/10 shrink-0">
+          <div className="flex sm:grid sm:grid-cols-4 items-center gap-1 p-1 rounded-xl bg-stone-100 dark:bg-[#090A0C] overflow-x-auto no-scrollbar">
             {(
               [
                 { id: 'photo', label: 'Photo', icon: Camera },
@@ -1202,13 +1233,13 @@ const MealAiScannerModalContent: React.FC = () => {
                     setError('');
                     setShowHistory(false);
                   }}
-                  className={`min-h-[36px] px-2 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap ${
+                  className={`flex-1 sm:flex-none min-h-[36px] px-2 sm:px-2.5 rounded-lg text-[11px] sm:text-xs font-semibold inline-flex items-center justify-center gap-1 sm:gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
                     active
                       ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -1217,7 +1248,7 @@ const MealAiScannerModalContent: React.FC = () => {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-5">
           {error && (
             <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/60 text-xs font-medium text-red-700 dark:text-red-300 leading-relaxed">
               {error}
@@ -1265,29 +1296,30 @@ const MealAiScannerModalContent: React.FC = () => {
           {!analysis && !labelResult && (
             <div className="space-y-4">
               {(mode === 'photo' || mode === 'voice' || mode === 'text') && (
-                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-stone-50/80 dark:bg-[#090A0C]/70 border border-black/10 dark:border-white/12">
-                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2.5 sm:p-3 rounded-xl bg-stone-50/80 dark:bg-[#090A0C]/70 border border-black/10 dark:border-white/12">
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 shrink-0">
                     Cooking / Oil Prep Style:
                   </span>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="grid grid-cols-3 sm:flex sm:items-center gap-1.5 w-full sm:w-auto">
                     {(
                       [
-                        { id: 'homemade_low_oil', label: 'Homemade low oil' },
-                        { id: 'standard', label: 'Standard' },
-                        { id: 'restaurant_rich', label: 'Restaurant ghee/butter' },
+                        { id: 'homemade_low_oil', label: 'Homemade low oil', shortLabel: 'Low oil' },
+                        { id: 'standard', label: 'Standard', shortLabel: 'Standard' },
+                        { id: 'restaurant_rich', label: 'Restaurant ghee/butter', shortLabel: 'Restaurant' },
                       ] as const
                     ).map((opt) => (
                       <button
                         key={opt.id}
                         type="button"
                         onClick={() => setPrepStyle(opt.id)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                        className={`min-h-[34px] px-2 sm:px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors inline-flex items-center justify-center text-center whitespace-nowrap ${
                           prepStyle === opt.id
                             ? 'bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950'
                             : 'bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300'
                         }`}
                       >
-                        {opt.label}
+                        <span className="sm:hidden">{opt.shortLabel}</span>
+                        <span className="hidden sm:inline">{opt.label}</span>
                       </button>
                     ))}
                   </div>
@@ -1310,11 +1342,11 @@ const MealAiScannerModalContent: React.FC = () => {
                           <span>Starting camera preview...</span>
                         </div>
                       )}
-                      <div className="p-3 bg-white dark:bg-[#111317] border-t border-black/10 dark:border-white/12 flex items-center justify-between gap-2">
+                      <div className="p-3 bg-white dark:bg-[#111317] border-t border-black/10 dark:border-white/12 flex flex-wrap items-center justify-between gap-2">
                         <button
                           type="button"
                           onClick={stopLivePhotoCamera}
-                          className="min-h-[40px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
+                          className="min-h-[40px] px-3 sm:px-3.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5 whitespace-nowrap"
                         >
                           <VideoOff className="w-3.5 h-3.5" />
                           Close Camera
@@ -1322,7 +1354,7 @@ const MealAiScannerModalContent: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => void captureFromLiveCamera()}
-                          className="min-h-[40px] px-4 rounded-xl bg-lime-500 hover:bg-lime-400 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5"
+                          className="min-h-[40px] px-3.5 sm:px-4 rounded-xl bg-lime-500 hover:bg-lime-400 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap"
                         >
                           <Camera className="w-4 h-4" />
                           Capture Meal Photo
@@ -1477,6 +1509,7 @@ const MealAiScannerModalContent: React.FC = () => {
                       rows={2}
                       value={voiceTranscript}
                       onChange={(e) => {
+                        voiceTranscriptEditedRef.current = true;
                         voiceTranscriptRef.current = e.target.value;
                         setVoiceTranscript(e.target.value);
                       }}
@@ -1788,7 +1821,7 @@ const MealAiScannerModalContent: React.FC = () => {
               </div>
 
               {/* Live Totals of Selected Items */}
-              <div className="grid grid-cols-5 gap-2 text-center font-mono-nums">
+              <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-center font-mono-nums">
                 {[
                   { label: 'Calories', val: `${selectedTotals.calories}` },
                   { label: 'Protein', val: `${selectedTotals.protein}g` },
@@ -1798,10 +1831,10 @@ const MealAiScannerModalContent: React.FC = () => {
                 ].map((stat) => (
                   <div
                     key={stat.label}
-                    className="p-2.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12"
+                    className="p-1.5 sm:p-2.5 rounded-xl bg-stone-50 dark:bg-[#090A0C] border border-black/10 dark:border-white/12 min-w-0"
                   >
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400">{stat.label}</div>
-                    <div className="text-sm font-bold text-slate-900 dark:text-slate-50 mt-0.5">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{stat.label}</div>
+                    <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-50 mt-0.5 truncate">
                       {stat.val}
                     </div>
                   </div>

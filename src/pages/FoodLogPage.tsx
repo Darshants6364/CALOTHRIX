@@ -2,11 +2,9 @@ import React, { memo, useCallback, useMemo, useState } from 'react';
 import {
   Barcode,
   BookmarkPlus,
-  Camera,
   Check,
   Copy,
   Download,
-  FileText,
   History,
   Mic,
   Pencil,
@@ -370,28 +368,11 @@ export const FoodLogPage: React.FC = () => {
           <button
             type="button"
             onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
+            title="Log with Photo, Voice, Description, or Label OCR"
             className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
           >
-            <Camera className="w-4 h-4" />
-            <span>Photo AI</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => openMealScannerModal({ mode: 'voice', date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-          >
-            <Mic className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Voice AI</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => openMealScannerModal({ mode: 'label', date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-          >
-            <FileText className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Label OCR</span>
+            <Sparkles className="w-4 h-4" />
+            <span>AI Meal Logger</span>
           </button>
 
           <button

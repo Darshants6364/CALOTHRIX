@@ -59,13 +59,13 @@ export const DateStrip: React.FC<DateStripProps> = ({ selectedDate, onSelectDate
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-between gap-2 w-full">
+        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
           <button
             type="button"
             onClick={() => onSelectDate(addDaysToDateKey(selectedDate, -1))}
             aria-label="Previous day"
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-[#14161C] transition-colors"
+            className="min-h-[38px] min-w-[38px] sm:min-h-[40px] sm:min-w-[40px] flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-[#14161C] transition-colors shrink-0"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -73,10 +73,10 @@ export const DateStrip: React.FC<DateStripProps> = ({ selectedDate, onSelectDate
           <button
             type="button"
             onClick={openNativePicker}
-            className="relative min-h-[40px] px-3.5 rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-sm font-medium text-slate-800 dark:text-slate-100 hover:bg-stone-50 dark:hover:bg-[#14161C] transition-colors inline-flex items-center gap-2 whitespace-nowrap"
+            className="relative min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-3.5 rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-100 hover:bg-stone-50 dark:hover:bg-[#14161C] transition-colors inline-flex items-center gap-1.5 sm:gap-2 whitespace-nowrap min-w-0"
           >
-            <Calendar className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
-            <span>{formatReadableDate(selectedDate)}</span>
+            <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
+            <span className="truncate">{formatReadableDate(selectedDate)}</span>
             <input
               ref={inputRef}
               type="date"
@@ -93,16 +93,27 @@ export const DateStrip: React.FC<DateStripProps> = ({ selectedDate, onSelectDate
             type="button"
             onClick={() => onSelectDate(addDaysToDateKey(selectedDate, 1))}
             aria-label="Next day"
-            className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-[#14161C] transition-colors"
+            className="min-h-[38px] min-w-[38px] sm:min-h-[40px] sm:min-w-[40px] flex items-center justify-center rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-[#14161C] transition-colors shrink-0"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex items-center gap-2 ml-auto">
-          {/* Streak counter pinned right at the top of the calendar strip */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {selectedDate !== today && (
+            <button
+              type="button"
+              onClick={() => onSelectDate(today)}
+              className="min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-3.5 rounded-xl bg-[#C8FF00]/20 text-[#4E6800] dark:text-[#C8FF00] border border-[#C8FF00]/35 text-xs font-semibold hover:bg-[#C8FF00]/30 transition-colors whitespace-nowrap shrink-0"
+            >
+              <span className="sm:hidden">Today</span>
+              <span className="hidden sm:inline">Jump to Today</span>
+            </button>
+          )}
+
+          {/* Streak counter pinned on the right of the calendar bar */}
           <div
-            className={`min-h-[40px] px-3 rounded-xl border bg-white dark:bg-[#111317] inline-flex items-center gap-1.5 text-xs font-semibold tabular-nums whitespace-nowrap ${
+            className={`min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-3 rounded-xl border bg-white dark:bg-[#111317] inline-flex items-center gap-1 sm:gap-1.5 text-xs font-semibold tabular-nums whitespace-nowrap shrink-0 ${
               streakAnalytics.currentStreak > 0
                 ? 'border-orange-500/35 dark:border-orange-400/35'
                 : 'border-black/10 dark:border-white/12'
@@ -113,25 +124,16 @@ export const DateStrip: React.FC<DateStripProps> = ({ selectedDate, onSelectDate
             <span className="text-slate-900 dark:text-slate-100 font-mono-nums">
               {streakAnalytics.currentStreak}
             </span>
-            <span className="text-slate-500 dark:text-slate-400">
+            <span className="sm:hidden text-slate-500 dark:text-slate-400">d</span>
+            <span className="hidden sm:inline text-slate-500 dark:text-slate-400">
               {streakAnalytics.currentStreak === 1 ? 'Day Streak' : 'Days Streak'}
             </span>
           </div>
-
-          {selectedDate !== today && (
-            <button
-              type="button"
-              onClick={() => onSelectDate(today)}
-              className="min-h-[40px] px-3.5 rounded-xl bg-[#C8FF00]/20 text-[#4E6800] dark:text-[#C8FF00] border border-[#C8FF00]/35 text-xs font-semibold hover:bg-[#C8FF00]/30 transition-colors whitespace-nowrap shrink-0"
-            >
-              Jump to Today
-            </button>
-          )}
         </div>
       </div>
 
       {/* 7-day horizontal touch strip with daily intake progress rings */}
-      <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+      <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {stripDates.map((dKey) => {
           const isSelected = dKey === selectedDate;
           const isToday = dKey === today;

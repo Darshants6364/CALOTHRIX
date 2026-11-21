@@ -14,6 +14,23 @@ import type {
 } from '../src/types/index.ts';
 
 const FALLBACK_STORE_PATH = '/tmp/calothrix-ai-training-store.json';
+const CACHE_TTL_MS = 60 * 1000;
+const MISSING_TABLE_BACKOFF_MS = 5 * 60 * 1000;
+
+interface CachedTrainingSnapshot {
+  events: AiTrainingEvent[];
+  priors: AiLearnedPrior[];
+  runs: AiTrainingRun[];
+  backend: 'supabase' | 'hybrid_fallback';
+  expiresAt: number;
+}
+
+let cachedTrainingSnapshot: CachedTrainingSnapshot | null = null;
+let tablesMissingUntil = 0;
+
+function invalidateTrainingCache(): void {
+  cachedTrainingSnapshot = null;
+}
 
 interface FallbackTrainingStore {
   events: AiTrainingEvent[];
@@ -301,13 +318,30 @@ function mapRunRow(row: Record<string, unknown>): AiTrainingRun {
   };
 }
 
-async function fetchAllEventsAndPriors(userToken?: string): Promise<{
+async function fetchAllEventsAndPriors(
+  userToken?: string,
+  options?: { bypassCache?: boolean }
+): Promise<{
   events: AiTrainingEvent[];
   priors: AiLearnedPrior[];
   runs: AiTrainingRun[];
   backend: 'supabase' | 'hybrid_fallback';
 }> {
-  const sb = getTrainingSupabase(userToken);
+  if (
+    !options?.bypassCache &&
+    !userToken &&
+    cachedTrainingSnapshot &&
+    Date.now() < cachedTrainingSnapshot.expiresAt
+  ) {
+    return {
+      events: cachedTrainingSnapshot.events,
+      priors: cachedTrainingSnapshot.priors,
+      runs: cachedTrainingSnapshot.runs,
+      backend: cachedTrainingSnapshot.backend,
+    };
+  }
+
+  const sb = Date.now() < tablesMissingUntil ? null : getTrainingSupabase(userToken);
   const fallback = readFallbackStore();
   let backend: 'supabase' | 'hybrid_fallback' = 'hybrid_fallback';
 
@@ -334,6 +368,11 @@ async function fetchAllEventsAndPriors(userToken?: string): Promise<{
           .order('created_at', { ascending: false })
           .limit(40),
       ]);
+
+      const errCode = (evRes.error as { code?: string } | null)?.code;
+      if (errCode === '42P01' || errCode === 'PGRST205') {
+        tablesMissingUntil = Date.now() + MISSING_TABLE_BACKOFF_MS;
+      }
 
       if (!evRes.error && evRes.data) {
         backend = 'supabase';
@@ -365,12 +404,21 @@ async function fetchAllEventsAndPriors(userToken?: string): Promise<{
   const sortDesc = <T extends { createdAt: string }>(arr: T[]) =>
     arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  return {
+  const snapshot = {
     events: sortDesc(Array.from(eventMap.values())),
     priors: Array.from(priorMap.values()).sort((a, b) => b.sampleCount - a.sampleCount),
     runs: sortDesc(Array.from(runMap.values())),
     backend,
   };
+
+  if (!userToken) {
+    cachedTrainingSnapshot = {
+      ...snapshot,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    };
+  }
+
+  return snapshot;
 }
 
 export async function recordAiTrainingEvent(params: {
@@ -452,6 +500,7 @@ export async function recordAiTrainingEvent(params: {
   const store = readFallbackStore();
   store.events = [event, ...store.events.filter((e) => e.id !== event.id)].slice(0, 400);
   writeFallbackStore(store);
+  invalidateTrainingCache();
 
   // Run lightweight daily / self-calibration check asynchronously
   void ensureDailySelfTraining(params.userToken);
@@ -685,6 +734,7 @@ export async function runReinforcementTrainingCycle(params: {
   store.runs = [run, ...store.runs].slice(0, 40);
   store.lastAutoDailyDate = new Date().toISOString().slice(0, 10);
   writeFallbackStore(store);
+  invalidateTrainingCache();
 
   return { ok: true, run, priorsUpdated: updatedPriors.length };
 }
@@ -748,6 +798,7 @@ export async function verifyTrainingEventAndPromote(params: {
   if (idx >= 0) store.events[idx] = updatedEvent;
   else store.events.unshift(updatedEvent);
   writeFallbackStore(store);
+  invalidateTrainingCache();
 
   if (params.verified) {
     await runReinforcementTrainingCycle({
@@ -787,6 +838,7 @@ export async function updateLearnedPriorSharedStatus(params: {
       : p
   );
   writeFallbackStore(store);
+  invalidateTrainingCache();
   return { ok: true };
 }
 

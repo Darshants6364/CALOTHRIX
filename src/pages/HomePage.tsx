@@ -2,16 +2,11 @@ import React, { useMemo, useState } from 'react';
 import {
   Activity,
   ArrowRight,
-  Barcode,
   Calculator,
-  Camera,
   CheckCircle2,
   ClipboardCheck,
   Copy,
   Droplets,
-  FileText,
-  Flame,
-  Mic,
   Minus,
   Plus,
   Scale,
@@ -25,7 +20,6 @@ import { CalorieRing } from '../components/CalorieRing';
 import { DailyQuestArena } from '../components/DailyQuestArena';
 import { DateStrip } from '../components/DateStrip';
 import { MacroCard } from '../components/MacroCard';
-import { QuickAiLogBar } from '../components/QuickAiLogBar';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { MEAL_CATEGORIES, MealCategory } from '../types';
 import {
@@ -78,7 +72,6 @@ export const HomePage: React.FC = () => {
     openAddFoodModal,
     openEditFoodModal,
     openMealScannerModal,
-    openBarcodeScannerModal,
     openWeightModal,
     setActiveTab,
     pendingInvitations,
@@ -299,33 +292,37 @@ export const HomePage: React.FC = () => {
       <section className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <span>{formatReadableDate(selectedDate)}</span>
+            <span className="hidden sm:inline">{formatReadableDate(selectedDate)}</span>
             {authMode === 'authenticated' && authDetails?.email ? (
               <>
-                <span aria-hidden="true">·</span>
-                <span>{authDetails.email}</span>
+                <span aria-hidden="true" className="hidden sm:inline">·</span>
+                <span className="truncate">{authDetails.email}</span>
               </>
-            ) : null}
+            ) : (
+              <span className="sm:hidden">{formatReadableDate(selectedDate)}</span>
+            )}
           </div>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          <h1 className="mt-0.5 sm:mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             {greeting}, {firstName}
           </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-300 tabular-nums">
-            <span className="inline-flex items-center gap-1 font-medium">
-              <Flame className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
-              {momentumStats.streak} {momentumStats.streak === 1 ? 'day' : 'days'} streak
+          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-600 dark:text-slate-300 tabular-nums">
+            <span>
+              <span className="sm:hidden">{momentumStats.weekLoggedDays}/7d logged</span>
+              <span className="hidden sm:inline">This week: {momentumStats.weekLoggedDays} / 7 days logged</span>
             </span>
-            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-            <span>This week: {momentumStats.weekLoggedDays} / 7 days logged</span>
             {goals.calories > 0 && (
               <>
                 <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
-                <span>{momentumStats.weekOnTargetDays} days on calorie target</span>
+                <span>
+                  <span className="sm:hidden">{momentumStats.weekOnTargetDays} on target</span>
+                  <span className="hidden sm:inline">{momentumStats.weekOnTargetDays} days on calorie target</span>
+                </span>
                 {selectedDateTotals.calories > 0 && (
                   <>
                     <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
                     <span className="font-semibold text-lime-700 dark:text-lime-400">
-                      Daily score: {momentumStats.dailyScore}%
+                      <span className="sm:hidden">Score {momentumStats.dailyScore}%</span>
+                      <span className="hidden sm:inline">Daily score: {momentumStats.dailyScore}%</span>
                     </span>
                   </>
                 )}
@@ -334,49 +331,23 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto shrink-0">
           <button
             type="button"
             onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
-            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            title="Log with Photo, Voice, Description, or Label OCR"
+            className="min-h-[44px] px-3 sm:px-4 py-2.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0"
           >
-            <Camera className="w-4 h-4" />
-            <span>Photo AI</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => openMealScannerModal({ mode: 'voice', date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-          >
-            <Mic className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Voice AI</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => openMealScannerModal({ mode: 'label', date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-          >
-            <FileText className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Label OCR</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => openBarcodeScannerModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-          >
-            <Barcode className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Barcode</span>
+            <Sparkles className="w-4 h-4 shrink-0" />
+            <span>AI Meal Logger</span>
           </button>
 
           <button
             type="button"
             onClick={() => openAddFoodModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3 sm:px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
           >
-            <Plus className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+            <Plus className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
             <span>Search Food</span>
           </button>
         </div>
@@ -522,9 +493,6 @@ export const HomePage: React.FC = () => {
 
       {/* Date Strip */}
       <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-
-      {/* 1-Line Quick AI & Verified DB Log Bar */}
-      <QuickAiLogBar targetDate={selectedDate} />
 
       {/* Main Focal Section: Calorie Ring + Macro Ratio Comparison */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">

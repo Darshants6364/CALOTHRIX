@@ -625,8 +625,19 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const init = async () => {
       try {
         const {
-          data: { session },
+          data: { session: initialSession },
         } = await supabase.auth.getSession();
+
+        let session = initialSession;
+        if (session) {
+          const expiresAtMs = (session.expires_at || 0) * 1000;
+          if (!expiresAtMs || expiresAtMs < Date.now() + 60_000) {
+            const { data: refreshed } = await supabase.auth.refreshSession();
+            if (refreshed?.session) {
+              session = refreshed.session;
+            }
+          }
+        }
 
         if (!mounted) return;
         if (session?.user) {

@@ -33,6 +33,17 @@ async function getAccessTokenHeader(): Promise<Record<string, string>> {
     const {
       data: { session },
     } = await supabase.auth.getSession();
+    const expiresAtMs = (session?.expires_at || 0) * 1000;
+    const isExpiringSoon = !expiresAtMs || expiresAtMs < Date.now() + 60_000;
+    if (session?.access_token && !isExpiringSoon) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+    if (session) {
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      if (refreshed?.session?.access_token) {
+        return { Authorization: `Bearer ${refreshed.session.access_token}` };
+      }
+    }
     if (session?.access_token) {
       return { Authorization: `Bearer ${session.access_token}` };
     }

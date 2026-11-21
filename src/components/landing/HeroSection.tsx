@@ -238,15 +238,15 @@ export function HeroSection({ onExplore, onGetStarted, onTryGuest }: HeroSection
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 1.05, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-8 flex flex-wrap items-center gap-3.5"
+              className="mt-8 grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 sm:gap-3.5 w-full sm:w-auto"
             >
               <MagneticButton
                 onClick={onGetStarted}
-                className="group inline-flex min-h-[48px] items-center justify-center gap-2.5 rounded-sm bg-[#C8FF00] px-7 py-3.5 text-xs font-bold tracking-wider uppercase text-[#090A0C] hover:bg-[#D9FF4D] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="group inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 sm:gap-2.5 rounded-sm bg-[#C8FF00] px-3 sm:px-7 py-3.5 text-[11px] sm:text-xs font-bold tracking-wide sm:tracking-wider uppercase text-[#090A0C] hover:bg-[#D9FF4D] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               >
                 Get Started
                 <ArrowRight
-                  className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
+                  className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1 shrink-0"
                   aria-hidden="true"
                 />
               </MagneticButton>
@@ -254,15 +254,15 @@ export function HeroSection({ onExplore, onGetStarted, onTryGuest }: HeroSection
               {onTryGuest && (
                 <MagneticButton
                   onClick={onTryGuest}
-                  className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-sm border border-[#C8FF00]/60 bg-[#C8FF00]/10 px-6 py-3.5 text-xs font-bold tracking-wider uppercase text-[#C8FF00] hover:bg-[#C8FF00]/20 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00]"
+                  className="inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-sm border border-[#C8FF00]/60 bg-[#C8FF00]/10 px-2.5 sm:px-6 py-3.5 text-[11px] sm:text-xs font-bold tracking-wide sm:tracking-wider uppercase text-[#C8FF00] hover:bg-[#C8FF00]/20 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00]"
                 >
-                  Try Free (No Sign-Up)
+                  TRY(NO SIGN-UP)
                 </MagneticButton>
               )}
 
               <MagneticButton
                 onClick={onExplore}
-                className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-sm border border-white/30 bg-black/40 px-6 py-3.5 text-xs font-bold tracking-wider uppercase text-white hover:border-[#C8FF00] hover:text-[#C8FF00] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00]"
+                className={`${onTryGuest ? 'col-span-2 ' : ''}inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-sm border border-white/30 bg-black/40 px-4 sm:px-6 py-3.5 text-xs font-bold tracking-wider uppercase text-white hover:border-[#C8FF00] hover:text-[#C8FF00] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00]`}
               >
                 Explore CALOTHRIX
               </MagneticButton>

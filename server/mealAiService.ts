@@ -136,39 +136,6 @@ function extractGeminiErrorDetails(err: unknown): {
   return { statusCode, message: cleanMessage, retryable };
 }
 
-async function transcribeVoiceAudio(
-  ai: GoogleGenAI,
-  mimeType: string,
-  base64Data: string
-): Promise<string | null> {
-  try {
-    const response = await withTimeout(
-      ai.models.generateContent({
-        model: 'gemini-3.5-transcribe',
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType,
-                data: base64Data,
-              },
-            },
-            {
-              text: 'Transcribe the spoken foods, quantities, and meal description cleanly into a single plain English sentence. Preserve Indian food names and household measures (e.g. roti, dosa, idli, katori, bowl, cup, grams). Return only the transcript text.',
-            },
-          ],
-        },
-      }),
-      10000,
-      'Audio transcription timed out.'
-    );
-    const text = (response.text || '').trim();
-    return text.length >= 2 ? text : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function analyzeMealWithGemini(
   req: AnalyzeMealRequest
 ): Promise<MealAiAnalysisResult> {
@@ -181,7 +148,6 @@ export async function analyzeMealWithGemini(
 
   const contextNote = (req.promptText || '').trim();
   const mealHintText = req.mealHint ? `Expected meal slot hint: ${req.mealHint}.` : '';
-  let resolvedTranscript = '';
 
   if (req.mode === 'photo') {
     const cleanBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
@@ -202,19 +168,13 @@ export async function analyzeMealWithGemini(
     const rawMime = (req.mimeType || 'audio/webm').split(';')[0].trim() || 'audio/webm';
 
     if (cleanBase64) {
-      // Dedicated fast transcription first (gemini-3.5-transcribe)
-      const transcribed = await transcribeVoiceAudio(ai, rawMime, cleanBase64);
-      if (transcribed) {
-        resolvedTranscript = transcribed;
-      } else {
-        // Fallback: pass audio directly to multimodal model
-        parts.push({
-          inlineData: {
-            mimeType: rawMime,
-            data: cleanBase64,
-          },
-        });
-      }
+      // Single-pass multimodal audio: transcribe & extract nutrition in 1 fast Gemini call
+      parts.push({
+        inlineData: {
+          mimeType: rawMime,
+          data: cleanBase64,
+        },
+      });
     } else if (!contextNote) {
       const err = new Error('No voice recording or spoken sentence received.');
       (err as Error & { statusCode?: number }).statusCode = 400;
@@ -233,16 +193,12 @@ export async function analyzeMealWithGemini(
     req.mode === 'photo'
       ? `Analyze the meal photograph. Identify every visible dish, food item, and drink (Indian dishes like roti, dal, sambar, dosa, idli, paneer, rice, curd as well as international foods). Estimate realistic cooked weights in grams and calculate calories, protein (g), carbs (g), fat (g), and fibre (g). ${prepInstruction} ${contextNote ? `User note: "${contextNote}". ` : ''}${mealHintText}`
       : req.mode === 'voice'
-      ? resolvedTranscript
-        ? `The user spoke this meal description: "${resolvedTranscript}".${contextNote ? ` Extra user note: "${contextNote}".` : ''} Set "detectedDescription" to "${resolvedTranscript}". Break down every food or drink mentioned with realistic serving weights in grams and nutrition estimates (calories, protein, carbs, fat, fibre). Understand Indian household portions (katori, bowl, roti, piece, glass, spoon). ${prepInstruction} ${mealHintText}`
-        : `Listen carefully to the voice recording. First transcribe accurately what the user ate into "detectedDescription", then break down every food or drink with realistic weights in grams and nutritional estimates (calories, protein, carbs, fat, fibre). Understand Indian household portions (katori, bowl, roti, piece, glass, spoon). ${prepInstruction} ${contextNote ? `Extra note: "${contextNote}". ` : ''}${mealHintText}`
+      ? `Listen carefully to the voice recording. First transcribe accurately what the user ate into "detectedDescription" (preserving Indian food names and household measures like katori, bowl, roti, piece, glass, spoon), then break down every food or drink with realistic weights in grams and nutritional estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${contextNote ? `Optional user note / speech hint: "${contextNote}". ` : ''}${mealHintText}`
       : `Analyze this meal description: "${contextNote}". Set "detectedDescription" to a clean summary of what was described, and break down every food or drink mentioned with realistic serving weights in grams and macronutrient estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${mealHintText}`;
 
   parts.push({ text: instructionPrompt });
 
-  const reinforcementContext = await getReinforcementPromptContext(
-    contextNote || resolvedTranscript || req.mode
-  );
+  const reinforcementContext = await getReinforcementPromptContext(contextNote || req.mode);
   const systemInstruction = [
     'You are a precision clinical & sports nutritionist. Return realistic food weights and nutrition estimates grounded in USDA FoodData Central and Indian ICMR-NIN IFCT 2017 data. Ensure item calories match (protein*4 + carbs*4 + fat*9) closely. Return strictly valid JSON matching the schema.',
     reinforcementContext,
@@ -416,8 +372,7 @@ export async function analyzeMealWithGemini(
 
   return {
     mealTitle: String(parsed.mealTitle || items[0].name).trim(),
-    detectedDescription:
-      resolvedTranscript || String(parsed.detectedDescription || '').trim(),
+    detectedDescription: String(parsed.detectedDescription || contextNote || '').trim(),
     suggestedMealType,
     confidence,
     items,

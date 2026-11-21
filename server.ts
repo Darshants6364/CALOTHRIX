@@ -50,9 +50,15 @@ async function verifyAdminRequest(
   if (!token) {
     return { ok: false, status: 401, error: 'Authentication required' };
   }
-  const supabaseUrl = (
+  const rawUrl = (
     process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
   ).trim();
+  let supabaseUrl = 'https://zzncijlmoskbilxjgiua.supabase.co';
+  try {
+    supabaseUrl = new URL(rawUrl).origin;
+  } catch {
+    supabaseUrl = 'https://zzncijlmoskbilxjgiua.supabase.co';
+  }
   const anonKey = (
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
@@ -62,7 +68,14 @@ async function verifyAdminRequest(
   });
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data?.user) {
-    return { ok: false, status: 401, error: 'Invalid session token' };
+    const msg = error?.message || '';
+    return {
+      ok: false,
+      status: 401,
+      error: /expired/i.test(msg)
+        ? 'Your session has expired. Please refresh or sign in again.'
+        : 'Invalid or expired session token. Please sign out and sign back in.',
+    };
   }
   if (!isDatabaseAdmin(data.user, null)) {
     return { ok: false, status: 403, error: 'Admin privileges required' };

@@ -208,17 +208,60 @@ function mapScanRow(row: Record<string, unknown>): AiMealScanRecord {
   };
 }
 
-async function getAccessTokenHeader(): Promise<Record<string, string>> {
+async function getAccessTokenHeader(forceRefresh = false): Promise<Record<string, string>> {
   try {
-    const { data } = await supabase.auth.getSession();
-    const token = data?.session?.access_token;
-    if (token) {
-      return { Authorization: `Bearer ${token}` };
+    if (!forceRefresh) {
+      const { data } = await supabase.auth.getSession();
+      const session = data?.session;
+      const expiresAtMs = (session?.expires_at || 0) * 1000;
+      const isExpiringSoon = !expiresAtMs || expiresAtMs < Date.now() + 60_000;
+      if (session?.access_token && !isExpiringSoon) {
+        return { Authorization: `Bearer ${session.access_token}` };
+      }
+    }
+
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    const freshToken = refreshed?.session?.access_token;
+    if (freshToken) {
+      return { Authorization: `Bearer ${freshToken}` };
+    }
+
+    const { data: fallback } = await supabase.auth.getSession();
+    if (fallback?.session?.access_token) {
+      return { Authorization: `Bearer ${fallback.session.access_token}` };
     }
   } catch {
     // Ignore session lookup errors for guest mode
   }
   return {};
+}
+
+async function fetchWithFreshAuth(url: string, init: RequestInit = {}): Promise<Response> {
+  const firstHeaders = await getAccessTokenHeader(false);
+  const firstRes = await fetch(url, {
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+      ...firstHeaders,
+    },
+  });
+
+  if (firstRes.status !== 401) {
+    return firstRes;
+  }
+
+  const retryHeaders = await getAccessTokenHeader(true);
+  if (!retryHeaders.Authorization) {
+    return firstRes;
+  }
+
+  return fetch(url, {
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+      ...retryHeaders,
+    },
+  });
 }
 
 export async function recordAiTrainingEventApi(params: {
@@ -232,12 +275,10 @@ export async function recordAiTrainingEventApi(params: {
   userFeedbackNote?: string;
 }): Promise<{ ok: boolean; event?: AiTrainingEvent } | null> {
   try {
-    const authHeader = await getAccessTokenHeader();
-    const res = await fetch('/api/ai/training-event', {
+    const res = await fetchWithFreshAuth('/api/ai/training-event', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeader,
       },
       body: JSON.stringify(params),
     });
@@ -249,10 +290,7 @@ export async function recordAiTrainingEventApi(params: {
 }
 
 export async function fetchAdminAiInsightsApi(): Promise<AiPerformanceInsightsResponse> {
-  const authHeader = await getAccessTokenHeader();
-  const res = await fetch('/api/admin/ai/insights', {
-    headers: { ...authHeader },
-  });
+  const res = await fetchWithFreshAuth('/api/admin/ai/insights');
   const data = (await res.json().catch(() => ({}))) as AiPerformanceInsightsResponse & {
     error?: string;
   };
@@ -267,10 +305,9 @@ export async function triggerAdminAiTrainingApi(): Promise<{
   run: AiTrainingRun;
   priorsUpdated: number;
 }> {
-  const authHeader = await getAccessTokenHeader();
-  const res = await fetch('/api/admin/ai/train', {
+  const res = await fetchWithFreshAuth('/api/admin/ai/train', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader },
+    headers: { 'Content-Type': 'application/json' },
   });
   const data = (await res.json().catch(() => ({}))) as {
     ok: boolean;
@@ -288,10 +325,9 @@ export async function verifyAdminAiEventApi(
   eventId: string,
   verified: boolean
 ): Promise<{ ok: boolean; event?: AiTrainingEvent }> {
-  const authHeader = await getAccessTokenHeader();
-  const res = await fetch(`/api/admin/ai/events/${encodeURIComponent(eventId)}/verify`, {
+  const res = await fetchWithFreshAuth(`/api/admin/ai/events/${encodeURIComponent(eventId)}/verify`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ verified }),
   });
   const data = (await res.json().catch(() => ({}))) as {
@@ -309,10 +345,9 @@ export async function toggleAdminAiPriorShareApi(
   priorId: string,
   isVerifiedShared: boolean
 ): Promise<{ ok: boolean }> {
-  const authHeader = await getAccessTokenHeader();
-  const res = await fetch(`/api/admin/ai/priors/${encodeURIComponent(priorId)}/share`, {
+  const res = await fetchWithFreshAuth(`/api/admin/ai/priors/${encodeURIComponent(priorId)}/share`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ isVerifiedShared }),
   });
   const data = (await res.json().catch(() => ({}))) as {

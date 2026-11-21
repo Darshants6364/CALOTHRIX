@@ -39,7 +39,7 @@ const MODE_LABELS: Record<AiTrainingInputMode, string> = {
 };
 
 export const AdminQualityPage: React.FC = () => {
-  const { notify } = useMacroLogStore();
+  const { notify, signOut } = useMacroLogStore();
 
   const [insights, setInsights] = useState<AiPerformanceInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,18 +150,30 @@ export const AdminQualityPage: React.FC = () => {
   }
 
   if (error && !insights) {
+    const isAuthError = /session|token|authentication|sign in/i.test(error);
     return (
       <div className="space-y-6">
         <div className="bg-white dark:bg-[#111317] border border-rose-500/30 rounded-2xl p-6 text-sm text-rose-700 dark:text-rose-300 space-y-3">
           <div className="font-semibold">Unable to load AI Performance Console</div>
           <p className="text-xs">{error}</p>
-          <button
-            type="button"
-            onClick={() => void loadInsights()}
-            className="min-h-[38px] px-4 rounded-xl bg-slate-900 dark:bg-[#C8FF00] text-white dark:text-black text-xs font-semibold"
-          >
-            Retry
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void loadInsights()}
+              className="min-h-[38px] px-4 rounded-xl bg-slate-900 dark:bg-[#C8FF00] text-white dark:text-black text-xs font-semibold"
+            >
+              Retry
+            </button>
+            {isAuthError && (
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="min-h-[38px] px-4 rounded-xl border border-black/15 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs font-semibold"
+              >
+                Sign Out &amp; Sign In Again
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
