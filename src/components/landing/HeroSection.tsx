@@ -8,7 +8,7 @@ import {
   useReducedMotion,
   type Variants,
 } from 'motion/react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Calculator } from 'lucide-react';
 import { MagneticButton } from './MagneticButton';
 import heroAthleteImg from '../../assets/images/calothrix_hero_athlete_1794979415410.jpg';
 
@@ -16,6 +16,7 @@ interface HeroSectionProps {
   onExplore: () => void;
   onGetStarted: () => void;
   onTryGuest?: () => void;
+  onOpenCalculator?: () => void;
 }
 
 const HERO_WORDS = ['BUILT', 'TO', 'PUSH', 'YOUR', 'LIMITS.'];
@@ -69,7 +70,12 @@ const HERO_STAGE_MODES = [
   },
 ];
 
-export function HeroSection({ onExplore, onGetStarted, onTryGuest }: HeroSectionProps) {
+export function HeroSection({
+  onExplore,
+  onGetStarted,
+  onTryGuest,
+  onOpenCalculator,
+}: HeroSectionProps) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const [imgError, setImgError] = useState(false);
   const [activeStageIdx, setActiveStageIdx] = useState(0);
@@ -260,9 +266,19 @@ export function HeroSection({ onExplore, onGetStarted, onTryGuest }: HeroSection
                 </MagneticButton>
               )}
 
+              {onOpenCalculator && (
+                <MagneticButton
+                  onClick={onOpenCalculator}
+                  className={`${onTryGuest ? 'col-span-2 ' : ''}inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-sm border border-white/30 bg-black/50 px-4 sm:px-6 py-3.5 text-xs font-bold tracking-wider uppercase text-white hover:border-[#C8FF00] hover:text-[#C8FF00] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00]`}
+                >
+                  <Calculator className="h-4 w-4 text-[#C8FF00] shrink-0" aria-hidden="true" />
+                  <span>Smart Calorie Calculator</span>
+                </MagneticButton>
+              )}
+
               <MagneticButton
                 onClick={onExplore}
-                className={`${onTryGuest ? 'col-span-2 ' : ''}inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-sm border border-white/30 bg-black/40 px-4 sm:px-6 py-3.5 text-xs font-bold tracking-wider uppercase text-white hover:border-[#C8FF00] hover:text-[#C8FF00] transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00]`}
+                className="col-span-2 sm:col-span-1 inline-flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-sm border border-white/20 bg-black/30 px-4 sm:px-6 py-3.5 text-xs font-bold tracking-wider uppercase text-white/85 hover:border-white/50 hover:text-white transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00]"
               >
                 Explore CALOTHRIX
               </MagneticButton>

@@ -152,6 +152,18 @@ export function convertDisplayWeightToKg(val: number, unit: 'kg' | 'lbs'): numbe
   return unit === 'lbs' ? round2(val / 2.20462) : round2(val);
 }
 
+export function kgToLbs(kg: number): number {
+  return round1(kg * 2.20462);
+}
+
+export function lbsToKg(lbs: number): number {
+  return round2(lbs / 2.20462);
+}
+
+export function formatWeightDisplay(kg: number, unit: 'kg' | 'lbs'): string {
+  return formatWeight(kg, unit);
+}
+
 export function formatFoodQuantity(grams: number, unit: 'g' | 'oz'): string {
   if (unit === 'oz') {
     return `${round1(grams * 0.035274)} oz`;
@@ -216,16 +228,40 @@ export function getWeeklyWeightBreakdown(
   };
 }
 
+export function isFoodNutritionallyUsable(food: FoodItem): boolean {
+  if (food.isDiscontinued) return false;
+  if (food.isSearchable === false) return false;
+  if (!food.isCustom && food.qualityStatus === 'pending_validation') return false;
+
+  const coreKeys: Array<'calories' | 'protein' | 'carbs' | 'fat' | 'fibre'> = [
+    'calories',
+    'protein',
+    'carbs',
+    'fat',
+    'fibre',
+  ];
+  const missingSet = new Set(food.missingFields || []);
+  for (const key of coreKeys) {
+    if (!food.isCustom && missingSet.has(key)) return false;
+    if (!food.isCustom && food.rawNutrients && food.rawNutrients[key] === null) return false;
+    const v = food[key];
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return false;
+  }
+
+  return true;
+}
+
 export function formatNutrientValue(
   food: FoodItem,
   field: 'calories' | 'protein' | 'carbs' | 'fat' | 'fibre',
   unitSuffix = ''
 ): string {
-  if (food.missingFields?.includes(field)) {
-    return 'Unavailable';
-  }
   const value = food[field];
-  return `${value}${unitSuffix}`;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return `0${unitSuffix}`;
+  }
+  const rounded = field === 'calories' ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded}${unitSuffix}`;
 }
 
 export function getNutrientCompleteness(food: FoodItem): {

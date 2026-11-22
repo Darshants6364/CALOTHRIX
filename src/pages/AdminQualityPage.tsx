@@ -24,8 +24,14 @@ import {
   verifyAdminAiEventApi,
 } from '../services/mealAiService';
 import {
+  fetchPendingValidationFoodsApi,
+  runAdminAiFoodCompletionApi,
+  seedMasterFoodsApi,
+} from '../services/globalFoodApiService';
+import {
   AiPerformanceInsightsResponse,
   AiTrainingInputMode,
+  FoodItem,
 } from '../types';
 
 type EventFilter = 'all' | 'edited' | 'unverified' | 'verified';
@@ -51,23 +57,72 @@ export const AdminQualityPage: React.FC = () => {
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [modeFilter, setModeFilter] = useState<'all' | AiTrainingInputMode>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingFoods, setPendingFoods] = useState<FoodItem[]>([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [completingPending, setCompletingPending] = useState(false);
+  const [seedingFoods, setSeedingFoods] = useState(false);
+
+  const loadPendingFoods = useCallback(async () => {
+    const res = await fetchPendingValidationFoodsApi();
+    if (!res.error) {
+      setPendingTotal(res.totalPending);
+      setPendingFoods(res.items);
+    }
+  }, []);
 
   const loadInsights = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await fetchAdminAiInsightsApi();
+      const [data] = await Promise.all([fetchAdminAiInsightsApi(), loadPendingFoods()]);
       setInsights(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load AI performance insights.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadPendingFoods]);
 
   useEffect(() => {
     void loadInsights();
   }, [loadInsights]);
+
+  const handleCompletePendingBatch = async () => {
+    if (pendingFoods.length === 0) return;
+    setCompletingPending(true);
+    try {
+      const batchIds = pendingFoods.slice(0, 8).map((f) => f.id);
+      const res = await runAdminAiFoodCompletionApi(batchIds);
+      if (res.error) {
+        notify(res.error, 'error');
+      } else {
+        notify(
+          `Processed ${res.processed} pending foods: ${res.updated} completed with provenance, ${res.keptPending} kept pending, ${res.skippedVerified} verified skipped.`,
+          'success'
+        );
+        await loadPendingFoods();
+      }
+    } finally {
+      setCompletingPending(false);
+    }
+  };
+
+  const handleSeedMasterCatalog = async () => {
+    setSeedingFoods(true);
+    try {
+      const res = await seedMasterFoodsApi();
+      if (!res.ok) {
+        notify(res.error || 'Failed to sync food catalog to Supabase.', 'error');
+      } else {
+        notify(
+          `Synced ${res.seededFoods} foods to Supabase (${res.skippedAdminEdited} admin-edited preserved).`,
+          'success'
+        );
+      }
+    } finally {
+      setSeedingFoods(false);
+    }
+  };
 
   const handleRunTraining = async () => {
     setTraining(true);
@@ -674,6 +729,66 @@ export const AdminQualityPage: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+      </section>
+
+      {/* Food Database Quality Control & Pending Validation Queue */}
+      <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Database className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+              <span>Food Database Quality Control &amp; Pending Validation</span>
+            </h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Quarantined records with missing source macros are excluded from user search until completed with provenance. Verified records are never overwritten.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              disabled={seedingFoods}
+              onClick={() => void handleSeedMasterCatalog()}
+              className="min-h-[36px] px-3 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50 dark:bg-[#090A0C] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-[#C8FF00] disabled:opacity-50"
+            >
+              {seedingFoods ? 'Syncing Supabase...' : 'Sync Master Catalog'}
+            </button>
+            <button
+              type="button"
+              disabled={completingPending || pendingFoods.length === 0}
+              onClick={() => void handleCompletePendingBatch()}
+              className="min-h-[36px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>
+                {completingPending
+                  ? 'Running AI Batch...'
+                  : `Complete Pending Batch (${pendingTotal})`}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {pendingFoods.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {pendingFoods.slice(0, 6).map((food) => (
+              <div
+                key={food.id}
+                className="p-2.5 rounded-xl border border-black/8 dark:border-white/10 bg-stone-50/70 dark:bg-[#090A0C] text-xs"
+              >
+                <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {food.name}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                  {food.sourceName} · Missing: {(food.missingFields || []).join(', ') || 'macro data'}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-slate-500 dark:text-slate-400 py-4 text-center border border-dashed border-black/10 dark:border-white/10 rounded-xl">
+            All indexed food records have complete usable macros.
           </div>
         )}
       </section>

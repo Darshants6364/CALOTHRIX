@@ -16,18 +16,21 @@ import {
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { CustomFoodModal } from '../components/CustomFoodModal';
+import { HorizontalScroller } from '../components/HorizontalScroller';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import {
   lookupBarcodeApi,
   searchGlobalFoodsApi,
   semanticFoodSearchApi,
 } from '../services/globalFoodApiService';
-import { FoodItem } from '../types';
+import { FoodItem, FoodResultGroup, RegionalSearchSuggestion } from '../types';
 import {
   formatNutrientValue,
   getNutrientCompleteness,
+  isFoodNutritionallyUsable,
   searchFoods,
 } from '../utils/nutritionUtils';
+import { getNonEmptyResultGroups } from '../utils/foodSearchEngine';
 import { getPortionsForFood } from '../utils/portionEngine';
 
 const DATABASE_PAGE_SIZE = 40;
@@ -56,12 +59,18 @@ function matchesDietaryFilter(food: FoodItem, filter: DietaryFilterOption): bool
 
   const tags = food.dietaryTags || [];
   const text = `${food.name} ${food.brand || ''} ${food.ingredientsText || ''}`.toLowerCase();
+  const isMushroomOrPlant =
+    /\bmushroom\b|\bmushrooms\b|\bfungus\b/.test(text) ||
+    food.category === 'Vegetables' ||
+    food.category === 'Fruits';
   const isMeatCategory =
     food.category === 'Meat and poultry' || food.category === 'Fish and seafood';
+  const hasMeatKeyword = !isMushroomOrPlant && NON_VEG_MEAT_FISH_REGEX.test(text);
+  const hasEggKeyword = !isMushroomOrPlant && EGG_REGEX.test(text);
 
   if (filter === 'vegetarian') {
     if (tags.length > 0) return tags.includes('vegetarian');
-    return !isMeatCategory && !NON_VEG_MEAT_FISH_REGEX.test(text) && !EGG_REGEX.test(text);
+    return !isMeatCategory && !hasMeatKeyword && !hasEggKeyword;
   }
 
   if (filter === 'vegan') {
@@ -69,49 +78,113 @@ function matchesDietaryFilter(food: FoodItem, filter: DietaryFilterOption): bool
     return (
       !isMeatCategory &&
       food.category !== 'Dairy' &&
-      !NON_VEG_MEAT_FISH_REGEX.test(text) &&
-      !EGG_REGEX.test(text) &&
+      !hasMeatKeyword &&
+      !hasEggKeyword &&
       !DAIRY_HONEY_REGEX.test(text)
     );
   }
 
   if (filter === 'eggetarian') {
     if (tags.length > 0) return tags.includes('eggetarian') || tags.includes('vegetarian');
-    return !isMeatCategory && !NON_VEG_MEAT_FISH_REGEX.test(text);
+    return !isMeatCategory && !hasMeatKeyword;
   }
 
   // 'non_veg'
   if (tags.length > 0) {
     return !tags.includes('vegetarian');
   }
-  return isMeatCategory || NON_VEG_MEAT_FISH_REGEX.test(text) || EGG_REGEX.test(text);
+  return isMeatCategory || hasMeatKeyword || hasEggKeyword;
 }
 
 function getSourceTypeDisplay(food: FoodItem): string {
-  if (food.isCustom && (food.sourceName || '').includes('Recipe Engine')) return 'Calculated Recipe';
-  if (food.isCustom || food.sourceType === 'personal_custom') return 'Personal Custom';
-  if (food.sourceType === 'branded') return 'Branded Product';
-  if (food.sourceType === 'community') return 'Community Food';
-  return 'Verified Reference';
+  if (food.isCustom && (food.sourceName || '').includes('Recipe Engine')) return 'Recipe';
+  if (food.isCustom || food.sourceType === 'personal_custom') return 'Custom';
+  if (food.sourceType === 'branded') return 'Branded';
+  if (food.sourceType === 'community') return 'Community';
+  return 'Verified Ref';
 }
 
-function getVerificationPill(status?: FoodItem['verificationStatus']): {
+function getShortSourceName(food: FoodItem): string {
+  const raw = food.sourceName || '';
+  if (!raw) return '';
+  if (/ifct/i.test(raw)) return 'IFCT 2017';
+  if (/indb/i.test(raw)) return 'INDB';
+  if (/uk.*fct|mccance/i.test(raw)) return 'UK FCT';
+  if (/us.*fct|usda/i.test(raw)) return 'US FCT';
+  if (/karnataka/i.test(raw)) return 'Karnataka Ref';
+  if (/calothrix.*cooked/i.test(raw)) return 'Indian Ref';
+  return raw.length > 24 ? `${raw.slice(0, 23)}…` : raw;
+}
+
+function getShortVariantLabel(name: string): string {
+  const stripped = name.replace(/\s*\([^)]*\)/g, '').trim();
+  return stripped.length > 24 ? `${stripped.slice(0, 23)}…` : stripped;
+}
+
+const BROAD_CATCHALL_FAMILIES = new Set([
+  'vegetables',
+  'fruits',
+  'beverages',
+  'nuts_seeds',
+  'bread_bakery',
+  'sweets_desserts',
+  'cheese_dairy',
+  'supplements',
+]);
+
+function getRelatedFamilyVariants(food: FoodItem, familyMap: Map<string, FoodItem[]>): FoodItem[] {
+  const famKey = food.foodFamilyId || food.canonicalFamily;
+  if (!famKey) return [];
+  const members = familyMap.get(famKey) || [];
+  if (!BROAD_CATCHALL_FAMILIES.has(famKey)) {
+    return members.filter((f) => f.id !== food.id).slice(0, 6);
+  }
+  const stopWords = new Set([
+    'raw', 'fresh', 'cooked', 'boiled', 'steamed', 'fried', 'roasted', 'grilled',
+    'plain', 'indian', 'homemade', 'whole', 'with', 'without', 'skin', 'dried',
+    'dry', 'ripe', 'tender', 'mature', 'green', 'red', 'white', 'black', 'yellow',
+    'small', 'big', 'large', 'medium', 'sp', 'spp', 'var', 'style', 'dish', 'curry',
+  ]);
+  const tokens = food.name
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter((t) => t.length >= 3 && !stopWords.has(t));
+  if (tokens.length === 0) return [];
+  return members
+    .filter((f) => {
+      if (f.id === food.id) return false;
+      const lower = f.name.toLowerCase();
+      return tokens.some((tok) => lower.includes(tok));
+    })
+    .slice(0, 6);
+}
+
+function getQualityOrVerificationPill(food: FoodItem): {
   label: string;
-  cls: string;
+  textCls: string;
 } {
-  switch (status) {
+  if (food.qualityStatus === 'verified') {
+    return { label: 'Verified', textCls: 'text-emerald-700 dark:text-emerald-400' };
+  }
+  if (food.qualityStatus === 'calculated') {
+    return { label: 'Calculated', textCls: 'text-sky-700 dark:text-sky-400' };
+  }
+  if (food.qualityStatus === 'estimated') {
+    return { label: 'Estimated', textCls: 'text-amber-700 dark:text-amber-400' };
+  }
+  switch (food.verificationStatus) {
     case 'verified':
-      return { label: 'Verified', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' };
+      return { label: 'Verified', textCls: 'text-emerald-700 dark:text-emerald-400' };
     case 'enriched':
-      return { label: 'Enriched', cls: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' };
+      return { label: 'Calculated', textCls: 'text-sky-700 dark:text-sky-400' };
     case 'estimated':
-      return { label: 'Estimated', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' };
+      return { label: 'Estimated', textCls: 'text-amber-700 dark:text-amber-400' };
     case 'user_provided':
-      return { label: 'User Provided', cls: 'bg-slate-500/15 text-slate-600 dark:text-slate-300' };
-    case 'needs_review':
-      return { label: 'Needs Review', cls: 'bg-rose-500/15 text-rose-700 dark:text-rose-300' };
+      return { label: 'Custom', textCls: 'text-slate-600 dark:text-slate-400' };
     default:
-      return { label: 'Verified', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' };
+      return { label: 'Verified', textCls: 'text-emerald-700 dark:text-emerald-400' };
   }
 }
 
@@ -142,7 +215,7 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
     onQuickAdd,
   }) => {
     const sourceLabel = getSourceTypeDisplay(food);
-    const badge = getVerificationPill(food.verificationStatus);
+    const badge = getQualityOrVerificationPill(food);
     const completeness = getNutrientCompleteness(food);
     const isExternalApiResult =
       !food.isCustom && (food.id.startsWith('off-') || food.id.startsWith('usda-'));
@@ -153,48 +226,42 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
       Boolean(food.micronutrients && Object.keys(food.micronutrients).length > 0) ||
       Boolean(food.license) ||
       Boolean(food.foodCode || food.sourceId) ||
+      Boolean(food.calculationMethod) ||
       food.solubleFibreG != null ||
       food.insolubleFibreG != null ||
       food.waterG != null ||
       familyVariants.length > 0 ||
       (food.aliases && food.aliases.length > 0);
 
+    const shortSource = getShortSourceName(food);
+
     return (
-      <div className="px-4 sm:px-5 py-4 hover:bg-stone-50/70 dark:hover:bg-slate-800/30 transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="min-w-0 flex items-start gap-3">
+      <div className="px-3.5 sm:px-5 py-3.5 hover:bg-stone-50/70 dark:hover:bg-slate-800/30 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3">
+          <div className="min-w-0 flex items-start gap-2.5 sm:gap-3">
             <button
               type="button"
               onClick={() => onToggleFavorite(food.id)}
               aria-label={isFav ? `Unfavorite ${food.name}` : `Favorite ${food.name}`}
-              className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-400 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0"
+              className="min-h-[44px] min-w-[44px] -ml-1.5 flex items-center justify-center rounded-xl text-slate-400 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0"
             >
               <Star className={`w-4 h-4 ${isFav ? 'text-amber-500 fill-amber-500' : ''}`} />
             </button>
 
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2 sm:block">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-snug">
                   {food.name}
+                  {food.brand ? (
+                    <span className="font-normal text-xs text-slate-500 dark:text-slate-400">
+                      {' '}· {food.brand}
+                    </span>
+                  ) : null}
                 </h3>
-                {food.foodState && (
-                  <span className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/10 text-[10px] font-medium capitalize text-slate-600 dark:text-slate-300">
-                    {food.foodState}
-                  </span>
-                )}
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}>
-                  {badge.label}
-                </span>
-                {food.brand && (
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                    {food.brand}
-                  </span>
-                )}
-                <span className="text-xs text-slate-500 dark:text-slate-400">{food.category}</span>
               </div>
 
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums">
-                <span>Serving: {food.servingName}</span>
+              <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 tabular-nums">
+                <span>{food.servingName}</span>
                 <span aria-hidden="true">·</span>
                 <span>P {formatNutrientValue(food, 'protein', 'g')}</span>
                 <span aria-hidden="true">·</span>
@@ -202,37 +269,25 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
                 <span aria-hidden="true">·</span>
                 <span>F {formatNutrientValue(food, 'fat', 'g')}</span>
                 <span aria-hidden="true">·</span>
-                <span>Fibre {formatNutrientValue(food, 'fibre', 'g')}</span>
+                <span>Fib {formatNutrientValue(food, 'fibre', 'g')}</span>
               </div>
 
-              <div className="mt-1 text-[11px] text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span
-                  className={
-                    food.isCustom
-                      ? 'text-amber-600 dark:text-amber-400 font-medium'
-                      : food.sourceType === 'verified_reference'
-                      ? 'text-lime-700 dark:text-lime-400 font-medium'
-                      : ''
-                  }
-                >
-                  {sourceLabel}
+              <div className="mt-1 text-[11px] text-slate-400 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <span className={`font-semibold ${badge.textCls}`}>
+                  {badge.label}
                 </span>
-                {food.sourceName && (
+                {food.foodState && (
                   <>
                     <span aria-hidden="true">·</span>
-                    <span>{food.sourceName}</span>
+                    <span className="capitalize">{food.foodState}</span>
                   </>
                 )}
+                <span aria-hidden="true">·</span>
+                <span>{shortSource || sourceLabel}</span>
                 {(food.foodCode || food.sourceId) && (
                   <>
                     <span aria-hidden="true">·</span>
                     <span className="font-mono-nums">{food.foodCode || food.sourceId}</span>
-                  </>
-                )}
-                {food.country && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span>{food.country}</span>
                   </>
                 )}
                 {hasDetails && (
@@ -243,7 +298,7 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
                       onClick={() => onToggleExpand(food.id)}
                       className="text-lime-700 dark:text-lime-400 hover:underline inline-flex items-center gap-0.5 font-medium"
                     >
-                      {isExpanded ? 'Hide details' : 'Provenance & nutrients'}
+                      {isExpanded ? 'Hide details' : 'Details'}
                       {isExpanded ? (
                         <ChevronUp className="w-3 h-3" />
                       ) : (
@@ -256,8 +311,8 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
             </div>
           </div>
 
-          <div className="flex items-center justify-between sm:justify-end gap-2 pl-11 sm:pl-0 shrink-0">
-            <div className="text-right mr-2">
+          <div className="flex items-center justify-between sm:justify-end gap-2 pl-10 sm:pl-0 shrink-0">
+            <div className="text-left sm:text-right sm:mr-2">
               <span className="text-sm font-bold font-mono-nums text-slate-900 dark:text-slate-100">
                 {formatNutrientValue(food, 'calories')}
               </span>{' '}
@@ -266,85 +321,102 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
               )}
             </div>
 
-            {isExternalApiResult && (
+            <div className="flex items-center gap-1.5">
+              {isExternalApiResult && (
+                <button
+                  type="button"
+                  onClick={() => onSaveExternal(food)}
+                  title="Save verified external food to My Foods"
+                  className="min-h-[40px] px-2.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-medium text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                >
+                  <BookmarkPlus className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+                  Save
+                </button>
+              )}
+
+              {food.isCustom && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onEditCustom(food)}
+                    aria-label={`Edit ${food.name}`}
+                    className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-800"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteCustom(food)}
+                    aria-label={`Delete ${food.name}`}
+                    className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+
               <button
                 type="button"
-                onClick={() => onSaveExternal(food)}
-                title="Save verified external food to My Foods"
-                className="min-h-[38px] px-2.5 rounded-xl border border-black/10 dark:border-white/15 text-xs font-medium text-slate-700 dark:text-slate-200 hover:border-lime-500 inline-flex items-center gap-1 whitespace-nowrap"
+                onClick={() => onQuickAdd(food)}
+                className="min-h-[40px] px-3.5 rounded-xl bg-lime-100 dark:bg-lime-950/70 text-lime-800 dark:text-lime-300 text-xs font-semibold hover:bg-lime-200/80 dark:hover:bg-lime-900/70 transition-colors inline-flex items-center gap-1 whitespace-nowrap"
               >
-                <BookmarkPlus className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
-                Save
+                <Plus className="w-3.5 h-3.5" />
+                Quick Add
               </button>
-            )}
-
-            {food.isCustom && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onEditCustom(food)}
-                  aria-label={`Edit ${food.name}`}
-                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-slate-800"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDeleteCustom(food)}
-                  aria-label={`Delete ${food.name}`}
-                  className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={() => onQuickAdd(food)}
-              className="min-h-[38px] px-3.5 rounded-xl bg-lime-100 dark:bg-lime-950/70 text-lime-800 dark:text-lime-300 text-xs font-semibold hover:bg-lime-200/80 dark:hover:bg-lime-900/70 transition-colors inline-flex items-center gap-1 whitespace-nowrap"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Quick Add
-            </button>
+            </div>
           </div>
         </div>
 
         {/* Expanded provenance, ingredients, IFCT proximate composition & micronutrients */}
         {isExpanded && (
-          <div className="mt-3 ml-0 sm:ml-12 p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C]/80 border border-black/10 dark:border-white/12 text-xs space-y-2">
+          <div className="mt-3 ml-0 sm:ml-11 p-3 sm:p-3.5 rounded-xl bg-stone-50 dark:bg-[#090A0C]/80 border border-black/10 dark:border-white/12 text-xs space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-black/8 dark:border-white/10">
               <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 font-mono-nums">
-                Nutrient Completeness: <strong>{completeness.macroPresent}/{completeness.macroTotal}</strong> macros ·{' '}
-                <strong>{completeness.microPresent}/{completeness.microTotal}</strong> micros
+                Core Macros: <strong>{completeness.macroPresent}/{completeness.macroTotal}</strong> verified
+                {completeness.microPresent > 0
+                  ? ` · ${completeness.microPresent}/${completeness.microTotal} micros`
+                  : ''}
               </span>
-              {completeness.missingMacroKeys.length > 0 && (
-                <span className="text-[11px] text-amber-700 dark:text-amber-300">
-                  Unavailable (NULL): {completeness.missingMacroKeys.join(', ')}
+              {food.confidenceScore != null && (
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums">
+                  Confidence {Math.round(food.confidenceScore * 100)}%
                 </span>
               )}
             </div>
 
-            {familyVariants.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 pb-1">
-                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                  Other forms / variants:
+            {food.calculationMethod && (
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  Provenance:{' '}
                 </span>
-                {familyVariants.map((variant) => (
-                  <button
-                    key={variant.id}
-                    type="button"
-                    onClick={() => onQuickAdd(variant)}
-                    title={`Quick add ${variant.name}`}
-                    className="px-2 py-0.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[11px] text-slate-700 dark:text-slate-200 hover:border-lime-500 transition-colors"
-                  >
-                    <span className="capitalize font-medium">{variant.foodState || 'variant'}</span>
-                    {' · '}
-                    <span className="font-mono-nums">
-                      {variant.missingFields?.includes('calories') ? 'Unavailable' : `${variant.calories} kcal`}
-                    </span>
-                  </button>
-                ))}
+                {food.calculationMethod}
+                {food.sourceReferenceFoods && food.sourceReferenceFoods.length > 0
+                  ? ` (${food.sourceReferenceFoods.join(', ')})`
+                  : ''}
+              </p>
+            )}
+
+            {familyVariants.length > 0 && (
+              <div className="space-y-1.5 pb-1">
+                <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                  Related forms &amp; dishes
+                </div>
+                <HorizontalScroller ariaLabel="Related forms and dishes" contentClassName="gap-1.5 pb-0.5">
+                  {familyVariants.map((variant) => (
+                    <button
+                      key={variant.id}
+                      type="button"
+                      onClick={() => onQuickAdd(variant)}
+                      title={`Quick add ${variant.name}`}
+                      className="min-h-[36px] px-2.5 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[11px] text-slate-700 dark:text-slate-200 hover:border-lime-500 transition-colors whitespace-nowrap shrink-0 inline-flex items-center gap-1.5"
+                    >
+                      <span className="font-medium">{getShortVariantLabel(variant.name)}</span>
+                      <span className="text-slate-400 font-mono-nums">
+                        {formatNutrientValue(variant, 'calories')} kcal
+                      </span>
+                    </button>
+                  ))}
+                </HorizontalScroller>
               </div>
             )}
 
@@ -496,6 +568,8 @@ export const FoodDatabasePage: React.FC = () => {
   const [remoteFoods, setRemoteFoods] = useState<FoodItem[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteNote, setRemoteNote] = useState<string>('');
+  const [regionalSuggestion, setRegionalSuggestion] = useState<RegionalSearchSuggestion | null>(null);
+  const [resultGroupFilter, setResultGroupFilter] = useState<'all' | FoodResultGroup>('all');
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [visibleCount, setVisibleCount] = useState(DATABASE_PAGE_SIZE);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -519,12 +593,14 @@ export const FoodDatabasePage: React.FC = () => {
     if (!trimmed) {
       setRemoteFoods([]);
       setRemoteNote('');
+      setRegionalSuggestion(null);
       setRemoteLoading(false);
       return;
     }
 
     if (selectedCategory === 'Favorites' || selectedCategory === 'Recent') {
       setRemoteFoods([]);
+      setRegionalSuggestion(null);
       setRemoteLoading(false);
       return;
     }
@@ -537,7 +613,8 @@ export const FoodDatabasePage: React.FC = () => {
         if (semanticMode) {
           const res = await semanticFoodSearchApi(trimmed);
           if (!cancelled) {
-            setRemoteFoods(res.items);
+            setRemoteFoods(res.items.filter(isFoodNutritionallyUsable));
+            setRegionalSuggestion(null);
             setRemoteNote('Smart AI matches');
           }
           return;
@@ -546,7 +623,8 @@ export const FoodDatabasePage: React.FC = () => {
         if (/^\d{8,14}$/.test(trimmed)) {
           const bc = await lookupBarcodeApi(trimmed);
           if (!cancelled) {
-            setRemoteFoods(bc.item ? [bc.item] : []);
+            setRemoteFoods(bc.item && isFoodNutritionallyUsable(bc.item) ? [bc.item] : []);
+            setRegionalSuggestion(null);
             setRemoteNote(bc.item ? `Barcode match (${trimmed})` : bc.error || '');
           }
           return;
@@ -555,6 +633,7 @@ export const FoodDatabasePage: React.FC = () => {
         if (trimmed.length < 2) {
           if (!cancelled) {
             setRemoteFoods([]);
+            setRegionalSuggestion(null);
             setRemoteNote('');
           }
           return;
@@ -562,21 +641,24 @@ export const FoodDatabasePage: React.FC = () => {
 
         const res = await searchGlobalFoodsApi({
           query: trimmed,
+          limit: 60,
         });
 
         if (!cancelled) {
-          setRemoteFoods(res.items);
+          setRemoteFoods(res.items.filter(isFoodNutritionallyUsable));
+          setRegionalSuggestion(res.regionalSuggestion || null);
           setRemoteNote('');
         }
       } catch {
         if (!cancelled) {
           setRemoteFoods([]);
+          setRegionalSuggestion(null);
           setRemoteNote('');
         }
       } finally {
         if (!cancelled) setRemoteLoading(false);
       }
-    }, 350);
+    }, 280);
 
     return () => {
       cancelled = true;
@@ -590,17 +672,18 @@ export const FoodDatabasePage: React.FC = () => {
   );
 
   const activeFoods = useMemo(
-    () => allFoods.filter((f) => !f.isDiscontinued),
+    () => allFoods.filter((f) => isFoodNutritionallyUsable(f)),
     [allFoods]
   );
 
   const familyMap = useMemo(() => {
     const map = new Map<string, FoodItem[]>();
     for (const f of activeFoods) {
-      if (!f.canonicalFamily) continue;
-      const arr = map.get(f.canonicalFamily) || [];
+      const famKey = f.foodFamilyId || f.canonicalFamily;
+      if (!famKey) continue;
+      const arr = map.get(famKey) || [];
       arr.push(f);
-      map.set(f.canonicalFamily, arr);
+      map.set(famKey, arr);
     }
     return map;
   }, [activeFoods]);
@@ -619,7 +702,7 @@ export const FoodDatabasePage: React.FC = () => {
 
   const displayedFoods = useMemo(() => {
     const trimmedDeferred = deferredQuery.trim();
-    const validRemote = remoteFoods.filter((r) => !r.isDiscontinued);
+    const validRemote = remoteFoods.filter((r) => isFoodNutritionallyUsable(r));
     let base: FoodItem[];
     if (semanticMode && trimmedDeferred) {
       const seen = new Set(validRemote.map((f) => f.id));
@@ -636,8 +719,11 @@ export const FoodDatabasePage: React.FC = () => {
       base = filteredLocalFoods;
     }
 
-    if (dietaryFilter === 'all') return base;
-    return base.filter((food) => matchesDietaryFilter(food, dietaryFilter));
+    if (dietaryFilter !== 'all') {
+      base = base.filter((food) => matchesDietaryFilter(food, dietaryFilter));
+    }
+
+    return base;
   }, [
     deferredQuery,
     dietaryFilter,
@@ -647,9 +733,24 @@ export const FoodDatabasePage: React.FC = () => {
     semanticMode,
   ]);
 
-  // Reset pagination when filter criteria change
+  const isActiveSearch = deferredQuery.trim().length > 0 && !semanticMode;
+
+  const nonEmptySearchGroups = useMemo(() => {
+    if (!isActiveSearch) return [];
+    const groups = getNonEmptyResultGroups(displayedFoods);
+    if (resultGroupFilter === 'all') return groups;
+    return groups.filter((g) => g.key === resultGroupFilter);
+  }, [displayedFoods, isActiveSearch, resultGroupFilter]);
+
+  const allNonEmptyGroupKeys = useMemo(() => {
+    if (!isActiveSearch) return [];
+    return getNonEmptyResultGroups(displayedFoods);
+  }, [displayedFoods, isActiveSearch]);
+
+  // Reset pagination & group filter when search criteria change
   useEffect(() => {
     setVisibleCount(DATABASE_PAGE_SIZE);
+    setResultGroupFilter('all');
   }, [deferredQuery, selectedCategory, dietaryFilter, semanticMode]);
 
   const visibleFoods = useMemo(
@@ -657,7 +758,7 @@ export const FoodDatabasePage: React.FC = () => {
     [displayedFoods, visibleCount]
   );
 
-  const hasMoreFoods = visibleCount < displayedFoods.length;
+  const hasMoreFoods = !isActiveSearch && visibleCount < displayedFoods.length;
 
   useEffect(() => {
     if (!hasMoreFoods) return;
@@ -701,31 +802,32 @@ export const FoodDatabasePage: React.FC = () => {
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {allFoods.length} curated items · {state.customFoods.length} private custom foods · Live global search
+            {activeFoods.filter((f) => !f.isCustom).length.toLocaleString()} verified items · {state.customFoods.length} private custom foods · Live global search
           </p>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             Global Food Database
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 shrink-0">
           <button
             type="button"
             onClick={() => openBarcodeScannerModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <Barcode className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Scan Barcode</span>
+            <span>Scan</span>
+            <span className="hidden sm:inline">Barcode</span>
           </button>
 
           <button
             type="button"
             onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
             title="Log with Photo, Voice, Description, or Label OCR"
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <Sparkles className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>AI Meal Logger</span>
+            <span>AI Logger</span>
           </button>
 
           <button
@@ -734,22 +836,22 @@ export const FoodDatabasePage: React.FC = () => {
               setEditingFood(undefined);
               setCustomModalOpen(true);
             }}
-            className="min-h-[44px] px-4 sm:px-5 py-2.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 sm:px-5 py-2 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4" />
-            Create Custom Food
+            <span>Custom Food</span>
           </button>
         </div>
       </section>
 
       {/* Search Bar + Smart Semantic Toggle + Filters */}
       <section className="space-y-3">
-        <div className="sticky top-[calc(52px+env(safe-area-inset-top))] lg:static z-20 bg-[#F4F3EF]/98 dark:bg-[#090A0C]/98 py-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:py-0 sm:bg-transparent flex flex-col sm:flex-row gap-2.5">
-          <div className="relative flex-1">
+        <div className="sticky top-[calc(52px+env(safe-area-inset-top))] lg:static z-20 bg-[#F4F3EF]/98 dark:bg-[#090A0C]/98 py-1.5 -mx-4 px-4 sm:mx-0 sm:px-0 sm:py-0 sm:bg-transparent flex flex-row items-center gap-2">
+          <div className="relative flex-1 min-w-0">
             {semanticMode ? (
-              <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             ) : (
-              <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             )}
             <input
               type="search"
@@ -758,24 +860,26 @@ export const FoodDatabasePage: React.FC = () => {
               onChange={(e) => setQuery(e.target.value)}
               placeholder={
                 semanticMode
-                  ? 'Describe what you want (e.g., High protein Indian breakfast, rich in fibre)...'
-                  : 'Search food name, brand, country, ingredient, or barcode...'
+                  ? 'Describe meal (e.g., High protein Indian breakfast)...'
+                  : 'Search food, regional dish, brand, or barcode...'
               }
-              className="w-full h-12 pl-11 pr-4 rounded-2xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-base sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 sm:h-12 pl-10 pr-3.5 rounded-2xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-base sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
             />
           </div>
 
           <button
             type="button"
             onClick={() => setSemanticMode((v) => !v)}
-            className={`min-h-[48px] px-4 rounded-2xl border text-xs font-semibold inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 transition-colors ${
+            aria-label="Toggle Smart AI Search"
+            className={`min-h-[44px] sm:min-h-[48px] px-3 sm:px-4 rounded-2xl border text-xs font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 transition-colors ${
               semanticMode
                 ? 'bg-lime-500 text-slate-950 border-lime-500'
                 : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800'
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            Smart AI Search
+            <span className="sm:hidden">AI</span>
+            <span className="hidden sm:inline">Smart AI Search</span>
           </button>
         </div>
 
@@ -834,27 +938,73 @@ export const FoodDatabasePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Category Tabs (All, Favorites, Recent) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-          {CATEGORY_FILTERS.map((cat) => {
-            const active = selectedCategory === cat;
-            return (
+        {/* Category Tabs (All, Favorites, Recent) + Non-Empty Search Group Filter */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            {CATEGORY_FILTERS.map((cat) => {
+              const active = selectedCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`min-h-[36px] px-3.5 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 border transition-colors ${
+                    active
+                      ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black border-[#111317] dark:border-[#C8FF00] font-semibold'
+                      : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+
+          {isActiveSearch && allNonEmptyGroupKeys.length > 1 && (
+            <HorizontalScroller ariaLabel="Search result groups" contentClassName="gap-1.5">
               <button
-                key={cat}
                 type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`min-h-[36px] px-3.5 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 border transition-colors ${
-                  active
-                    ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black border-[#111317] dark:border-[#C8FF00] font-semibold'
-                    : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
+                onClick={() => setResultGroupFilter('all')}
+                className={`min-h-[32px] px-3 rounded-lg text-[11px] font-semibold whitespace-nowrap shrink-0 border transition-colors ${
+                  resultGroupFilter === 'all'
+                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 border-slate-900 dark:border-white'
+                    : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300'
                 }`}
               >
-                {cat}
+                All Groups ({displayedFoods.length})
               </button>
-            );
-          })}
+              {allNonEmptyGroupKeys.map((grp) => (
+                <button
+                  key={grp.key}
+                  type="button"
+                  onClick={() => setResultGroupFilter(grp.key)}
+                  className={`min-h-[32px] px-3 rounded-lg text-[11px] font-semibold whitespace-nowrap shrink-0 border transition-colors ${
+                    resultGroupFilter === grp.key
+                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-950 border-slate-900 dark:border-white'
+                      : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  {grp.label} ({grp.items.length})
+                </button>
+              ))}
+            </HorizontalScroller>
+          )}
         </div>
       </section>
+
+      {/* Regional Fallback Mapping Banner (0-match Gemini helper strictly mapping to existing DB entries) */}
+      {regionalSuggestion && regionalSuggestion.matchedFoodIds.length > 0 && (
+        <section className="rounded-2xl border border-lime-500/30 bg-lime-50/70 dark:bg-lime-950/20 px-4 py-3 text-xs flex flex-wrap items-center justify-between gap-2">
+          <div className="text-slate-700 dark:text-slate-200">
+            <span className="font-semibold text-lime-800 dark:text-lime-300">
+              Regional Match:
+            </span>{' '}
+            &ldquo;{regionalSuggestion.detectedFood}&rdquo; →{' '}
+            <strong className="font-semibold">{regionalSuggestion.canonicalEnglishName}</strong>
+            {regionalSuggestion.reasoning ? ` · ${regionalSuggestion.reasoning}` : ''}
+          </div>
+        </section>
+      )}
 
       {/* Food List */}
       {displayedFoods.length === 0 && !remoteLoading ? (
@@ -877,14 +1027,53 @@ export const FoodDatabasePage: React.FC = () => {
             Add Custom Food
           </button>
         </section>
+      ) : isActiveSearch && nonEmptySearchGroups.length > 0 ? (
+        <div className="space-y-4">
+          {nonEmptySearchGroups.map((group) => (
+            <section
+              key={group.key}
+              className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden"
+            >
+              <div className="px-4 sm:px-5 py-2.5 bg-stone-50/90 dark:bg-[#090A0C]/80 border-b border-black/8 dark:border-white/10 flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                    {group.label}
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {group.description}
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono-nums font-semibold text-slate-500 dark:text-slate-400">
+                  {group.items.length} {group.items.length === 1 ? 'match' : 'matches'}
+                </span>
+              </div>
+              <div className="divide-y divide-stone-100 dark:divide-slate-800/80">
+                {group.items.slice(0, 25).map((food) => {
+                  const siblings = getRelatedFamilyVariants(food, familyMap);
+                  return (
+                    <FoodDatabaseRow
+                      key={food.id}
+                      food={food}
+                      familyVariants={siblings}
+                      isFav={favoriteSet.has(food.id)}
+                      isExpanded={Boolean(expandedIds[food.id])}
+                      onToggleFavorite={toggleFavoriteFood}
+                      onToggleExpand={toggleExpand}
+                      onSaveExternal={saveExternalFoodToMyFoods}
+                      onEditCustom={handleEditCustomFood}
+                      onDeleteCustom={handleDeleteCustomFood}
+                      onQuickAdd={handleQuickAddFood}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
       ) : (
         <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl divide-y divide-stone-100 dark:divide-slate-800/80 overflow-hidden">
           {visibleFoods.map((food) => {
-            const siblings = food.canonicalFamily
-              ? (familyMap.get(food.canonicalFamily) || [])
-                  .filter((f) => f.id !== food.id)
-                  .slice(0, 6)
-              : [];
+            const siblings = getRelatedFamilyVariants(food, familyMap);
             return (
               <FoodDatabaseRow
                 key={food.id}

@@ -120,6 +120,7 @@ function decodeLuminanceSource(
   const reader = getZxingReader();
 
   try {
+    reader.reset();
     const bitmap = new BinaryBitmap(new HybridBinarizer(source));
     const result = reader.decodeWithState(bitmap);
     const code = extractBarcodeDigits(result?.getText());
@@ -130,6 +131,7 @@ function decodeLuminanceSource(
 
   if (useGlobalHistogram) {
     try {
+      reader.reset();
       const bitmap = new BinaryBitmap(new GlobalHistogramBinarizer(source));
       const result = reader.decodeWithState(bitmap);
       const code = extractBarcodeDigits(result?.getText());
@@ -162,8 +164,8 @@ function getCenterCropCanvas(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement
   const h = sourceCanvas.height;
   if (w < 80 || h < 80) return null;
 
-  const cropW = Math.round(w * 0.72);
-  const cropH = Math.round(h * 0.52);
+  const cropW = Math.round(w * 0.78);
+  const cropH = Math.round(h * 0.56);
   const sx = Math.round((w - cropW) / 2);
   const sy = Math.round((h - cropH) / 2);
 
@@ -266,7 +268,7 @@ export async function decodeCanvasBarcode(
 
 export function drawVideoFrameToCanvas(
   videoEl: HTMLVideoElement,
-  maxDim = 1280
+  maxDim = 800
 ): HTMLCanvasElement | null {
   if (
     videoEl.readyState < 2 ||
@@ -301,7 +303,11 @@ export async function decodeBarcodeFromVideo(
   videoEl: HTMLVideoElement,
   thorough = false
 ): Promise<string | null> {
-  const canvas = drawVideoFrameToCanvas(videoEl, 1280);
+  // Fast native BarcodeDetector directly on the live video element first (zero canvas copy!)
+  const directNative = await detectWithNative(videoEl);
+  if (directNative) return directNative;
+
+  const canvas = drawVideoFrameToCanvas(videoEl, thorough ? 1280 : 800);
   if (!canvas) return null;
   return decodeCanvasBarcode(canvas, thorough);
 }

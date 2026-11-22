@@ -787,3 +787,186 @@ export async function coachChatWithGemini(req: {
     return buildDeterministicCoachAdvice(req);
   }
 }
+
+export function validateWeeklyAssessmentAiExplanation(
+  raw: unknown,
+  fallback: import('../src/types/index.ts').WeeklyAssessmentAiExplanation
+): { valid: boolean; explanation: import('../src/types/index.ts').WeeklyAssessmentAiExplanation } {
+  if (!raw || typeof raw !== 'object') {
+    return { valid: false, explanation: fallback };
+  }
+  const obj = raw as Record<string, unknown>;
+  const headline = typeof obj.headline === 'string' ? obj.headline.trim() : '';
+  const bodyChangeAnalysis =
+    typeof obj.bodyChangeAnalysis === 'string' ? obj.bodyChangeAnalysis.trim() : '';
+  const calorieAdjustmentReason =
+    typeof obj.calorieAdjustmentReason === 'string' ? obj.calorieAdjustmentReason.trim() : '';
+  const confidenceExplanation =
+    typeof obj.confidenceExplanation === 'string' ? obj.confidenceExplanation.trim() : '';
+  const rawTips = Array.isArray(obj.actionableTips) ? obj.actionableTips : [];
+  const actionableTips = rawTips
+    .filter((t): t is string => typeof t === 'string' && t.trim().length >= 8)
+    .map((t) => t.trim().slice(0, 260))
+    .slice(0, 3);
+
+  const valid =
+    headline.length >= 10 &&
+    headline.length <= 180 &&
+    bodyChangeAnalysis.length >= 25 &&
+    calorieAdjustmentReason.length >= 20 &&
+    confidenceExplanation.length >= 20 &&
+    actionableTips.length >= 2;
+
+  if (!valid) {
+    return { valid: false, explanation: fallback };
+  }
+
+  return {
+    valid: true,
+    explanation: {
+      headline: headline.slice(0, 180),
+      bodyChangeAnalysis: bodyChangeAnalysis.slice(0, 700),
+      calorieAdjustmentReason: calorieAdjustmentReason.slice(0, 700),
+      actionableTips,
+      confidenceExplanation: confidenceExplanation.slice(0, 450),
+      provider: 'gemini',
+    },
+  };
+}
+
+/**
+ * Uses Gemini strictly to EXPLAIN deterministic 7-day assessment outputs.
+ * Never invents, overrides, or modifies numerical nutrition targets.
+ * Automatically falls back to the deterministic explanation on timeout, error, or invalid schema.
+ */
+export async function generateWeeklyAssessmentExplanation(params: {
+  assessment: import('../src/utils/weeklyAssessmentEngine.ts').DeterministicWeeklyAssessmentOutput;
+  dietaryPreference?: string;
+  foodRestrictions?: string[];
+  goalLabel: string;
+}): Promise<import('../src/types/index.ts').WeeklyAssessmentAiExplanation> {
+  const { assessment, dietaryPreference = 'omnivore', foodRestrictions = [], goalLabel } = params;
+  const fallback = assessment.fallbackAiSummary;
+
+  const hasKey = Boolean((process.env.GEMINI_API_KEY || '').trim());
+  if (!hasKey) {
+    return fallback;
+  }
+
+  try {
+    const ai = getGeminiClient();
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        headline: {
+          type: Type.STRING,
+          description:
+            'Concise 1-line check-in headline reflecting the exact week number, weight, and action taken.',
+        },
+        bodyChangeAnalysis: {
+          type: Type.STRING,
+          description:
+            '2-3 sentences distinguishing measured weight from EWMA smoothed trend weight and noting water/glycogen variance without claiming exact muscle/fat gained.',
+        },
+        calorieAdjustmentReason: {
+          type: Type.STRING,
+          description:
+            '2-3 sentences clearly explaining why calories changed or stayed unchanged and how weight-dependent macros updated.',
+        },
+        actionableTips: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description:
+            '2 to 3 practical next-week tips including Indian food options alongside international choices matching user diet.',
+        },
+        confidenceExplanation: {
+          type: Type.STRING,
+          description:
+            '1-2 sentences explaining the data confidence rating based on food days, weigh-in count, and calorie adherence.',
+        },
+      },
+      required: [
+        'headline',
+        'bodyChangeAnalysis',
+        'calorieAdjustmentReason',
+        'actionableTips',
+        'confidenceExplanation',
+      ],
+    };
+
+    const facts = {
+      weekNumber: assessment.assessmentWeekNumber,
+      period: `${assessment.weekStartDate} to ${assessment.weekEndDate}`,
+      goal: goalLabel,
+      goalSpeed: assessment.goalSpeed,
+      dietaryPreference,
+      foodRestrictions,
+      latestMeasuredWeightKg: assessment.weightAnalysis.latestMeasuredWeightKg,
+      previousMeasuredWeightKg: assessment.weightAnalysis.previousMeasuredWeightKg,
+      current7dAvgWeightKg: assessment.weightAnalysis.current7dAvgWeightKg,
+      assessedTrendWeightKg: assessment.weightAnalysis.assessedTrendWeightKg,
+      previousTrendWeightKg: assessment.weightAnalysis.previousTrendWeightKg,
+      weeklyTrendChangeKg: assessment.weightAnalysis.weeklyWeightChangeKg,
+      foodLoggedDays: assessment.foodLoggedDays,
+      weightLoggedDays: assessment.weightLoggedDays,
+      loggingCompletenessPct: assessment.loggingCompletenessPct,
+      calorieAdherencePct: assessment.adherencePercentage,
+      avgDailyCalories: assessment.avgDailyCalories,
+      avgDailyProtein: assessment.avgDailyProtein,
+      confidenceLevel: assessment.confidenceLevel,
+      formulaTdeeKcal: assessment.estimatedTdeeKcal,
+      priorTdeeKcal: assessment.priorTdeeKcal,
+      calibratedTdeeKcal: assessment.calibratedTdeeKcal,
+      previousCalories: assessment.previousRecommendedCalories,
+      newCalories: assessment.recommendedCalories,
+      calorieDeltaKcal: assessment.calorieDeltaKcal,
+      newMacros: {
+        proteinG: assessment.recommendedProtein,
+        carbsG: assessment.recommendedCarbs,
+        fatG: assessment.recommendedFat,
+        fibreG: assessment.recommendedFibre,
+      },
+      goalCompleted: assessment.goalCompleted,
+      adjustmentType: assessment.adjustmentType,
+      deterministicReason: assessment.adjustmentReason,
+    };
+
+    const response = await withTimeout(
+      ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: {
+          parts: [
+            {
+              text: `Explain this deterministic 7-day nutrition check-in clearly for the user. STRICT RULES:
+1. NEVER change, override, or invent any numeric targets—quote ONLY the exact figures in the JSON facts below.
+2. Clearly distinguish measured scale weight from smoothed trend weight; never make unsupported claims about exact grams of muscle or fat gained/lost.
+3. Give 2-3 practical next-week tips incorporating realistic Indian food options (e.g., paneer, dal, curd, eggs, chicken, roti, oats, ragi, idli, sprouts) alongside international options, strictly respecting dietaryPreference (${dietaryPreference}) and restrictions (${foodRestrictions.join(', ') || 'none'}).
+4. When confidenceLevel is "low", explicitly explain what logging is needed and reassure the user that targets were kept unchanged.
+
+DETERMINISTIC ASSESSMENT FACTS:
+${JSON.stringify(facts)}`,
+            },
+          ],
+        },
+        config: {
+          systemInstruction:
+            'You are CALOTHRIX Evidence-Based Nutrition Explainer. You ONLY interpret and explain verified deterministic nutrition numbers. You never invent or alter targets.',
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+          responseMimeType: 'application/json',
+          responseSchema,
+        },
+      }),
+      10000,
+      'Weekly assessment AI explanation timed out.'
+    );
+
+    const text = (response.text || '').trim();
+    if (!text) return fallback;
+    const parsed = JSON.parse(text);
+    const validated = validateWeeklyAssessmentAiExplanation(parsed, fallback);
+    return validated.explanation;
+  } catch {
+    return fallback;
+  }
+}
+

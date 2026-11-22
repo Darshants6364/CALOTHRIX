@@ -9,11 +9,18 @@ import {
   fetchPublicFoodOverrides,
   getExternalFoodSourceStatus,
   getFoodVersionHistory,
+  getFullServerFoodCatalog,
+  getPendingValidationFoods,
   lookupBarcodeFromOpenFoodFacts,
   scoreSemanticMatch,
   searchGlobalFoods,
   seedMasterFoodsToSupabase,
 } from './server/foodService.ts';
+import {
+  completePendingFoodWithGemini,
+  discoverRegionalFoodsWithGemini,
+} from './server/foodAiQualityService.ts';
+import { FOOD_FAMILIES } from './src/data/foodFamilies.ts';
 import { GLOBAL_REFERENCE_FOODS } from './src/data/globalReferenceFoods.ts';
 import { isDatabaseAdmin } from './src/utils/adminAccess.ts';
 import {
@@ -22,12 +29,18 @@ import {
 } from './src/utils/foodValidationEngine.ts';
 
 import {
+  buildWhatIfGoalComparisons,
   calculateSmartFitnessTargets,
+  getGoalDisplayLabel,
   validateCalculatorInput,
 } from './src/utils/fitnessCalculator.ts';
 import {
+  runDeterministicWeeklyAssessment,
+} from './src/utils/weeklyAssessmentEngine.ts';
+import {
   analyzeMealWithGemini,
   coachChatWithGemini,
+  generateWeeklyAssessmentExplanation,
   parseNutritionLabelWithGemini,
   readBarcodeFromImageWithGemini,
   type AnalyzeMealInputMode,
@@ -40,7 +53,15 @@ import {
   updateLearnedPriorSharedStatus,
   verifyTrainingEventAndPromote,
 } from './server/aiTrainingService.ts';
-import type { AiTrainingInputMode, AiTrainingPayloadSnapshot } from './src/types/index.ts';
+import type {
+  AiTrainingInputMode,
+  AiTrainingPayloadSnapshot,
+  DailyNutritionSummary,
+  NutritionGoals,
+  UserProfile,
+  WeeklyAssessmentRecord,
+  WeightEntry,
+} from './src/types/index.ts';
 
 async function verifyAdminRequest(
   req: express.Request
@@ -107,7 +128,7 @@ async function startServer() {
     });
   });
 
-  // Backend Personalized Fitness Goal & Macro Calculator API
+  // Backend Personalized Smart Calorie Tracker Calculator API
   app.post('/api/goals/calculate', (req, res) => {
     try {
       const validation = validateCalculatorInput(req.body || {});
@@ -118,10 +139,437 @@ async function startServer() {
         });
       }
       const result = calculateSmartFitnessTargets(validation.sanitized);
+      if (req.body?.includeWhatIf) {
+        return res.json({
+          ...result,
+          whatIfComparisons: buildWhatIfGoalComparisons(validation.sanitized),
+        });
+      }
       return res.json(result);
     } catch (err) {
       return res.status(500).json({
         error: err instanceof Error ? err.message : 'Failed to calculate goals',
+      });
+    }
+  });
+
+  // 7-Day AI Adaptive Assessment Endpoint (Deterministic Engine + Gemini Explanation + Idempotent Supabase Persistence)
+  app.post('/api/assessments/weekly', async (req, res) => {
+    try {
+      const body = (req.body || {}) as {
+        profile?: Partial<UserProfile>;
+        goals?: Partial<NutritionGoals>;
+        weightEntries?: WeightEntry[];
+        dailyNutrition?: DailyNutritionSummary[];
+        previousAssessments?: WeeklyAssessmentRecord[];
+        referenceDateKey?: string;
+        assessmentWeekNumber?: number;
+        forceRecompute?: boolean;
+      };
+
+      // 1. Validate profile inputs server-side (never trust client-submitted targets or assessment outputs)
+      const rawProfile = body.profile || {};
+      const profileValidation = validateCalculatorInput({
+        age: rawProfile.age,
+        biologicalSex: rawProfile.biologicalSex,
+        heightCm: rawProfile.heightCm,
+        currentWeightKg: rawProfile.currentWeightKg,
+        targetWeightKg: rawProfile.targetWeightKg ?? rawProfile.currentWeightKg,
+        dailyAverageSteps: rawProfile.dailyAverageSteps,
+        activityLevel: rawProfile.activityLevel,
+        workoutFrequencyPerWeek: rawProfile.workoutFrequencyPerWeek,
+        workoutIntensity: rawProfile.workoutIntensity,
+        fitnessGoal: rawProfile.fitnessGoal,
+        goalSpeed: rawProfile.goalSpeed,
+        macroFocus: rawProfile.macroFocus,
+        bodyFatPct: rawProfile.bodyFatPct,
+        isPregnantOrBreastfeeding: rawProfile.isPregnantOrBreastfeeding,
+        adaptiveTdeeKcal: rawProfile.adaptiveTdeeKcal,
+      });
+
+      if (!profileValidation.valid || !profileValidation.sanitized) {
+        return res.status(400).json({
+          error: profileValidation.errors[0] || 'Invalid profile data for weekly assessment.',
+          errors: profileValidation.errors,
+        });
+      }
+
+      // 2. Verify optional Bearer JWT cleanly
+      const authHeader = String(req.headers.authorization || '');
+      const hasBearer = authHeader.startsWith('Bearer ');
+      const token = hasBearer ? authHeader.slice(7).trim() : '';
+
+      let authenticatedUserId: string | null = null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let userScopedSupabase: any = null;
+
+      if (hasBearer && token) {
+        const rawUrl = (
+          process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
+        ).trim();
+        let supabaseUrl = 'https://zzncijlmoskbilxjgiua.supabase.co';
+        try {
+          supabaseUrl = new URL(rawUrl).origin;
+        } catch {
+          supabaseUrl = 'https://zzncijlmoskbilxjgiua.supabase.co';
+        }
+        const anonKey = (
+          process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+          'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
+        ).trim();
+
+        const sb = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: `Bearer ${token}` } },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { data: userData, error: authErr } = await sb.auth.getUser(token);
+        if (authErr || !userData?.user) {
+          return res.status(401).json({ error: 'Invalid or expired authentication token.' });
+        }
+        authenticatedUserId = userData.user.id;
+        userScopedSupabase = sb;
+      }
+
+      const actorId = authenticatedUserId || String(rawProfile.id || 'guest-user');
+
+      // Sanitize weight entries and daily nutrition summaries
+      const sanitizedWeights: WeightEntry[] = Array.isArray(body.weightEntries)
+        ? body.weightEntries
+            .filter(
+              (w) =>
+                w &&
+                typeof w.date === 'string' &&
+                /^\d{4}-\d{2}-\d{2}$/.test(w.date) &&
+                Number.isFinite(Number(w.weightKg)) &&
+                Number(w.weightKg) >= 25 &&
+                Number(w.weightKg) <= 350
+            )
+            .slice(0, 90)
+            .map((w, idx) => ({
+              id: String(w.id || `w-${idx}`),
+              userId: actorId,
+              date: w.date,
+              weightKg: Number(w.weightKg),
+              notes: typeof w.notes === 'string' ? w.notes.slice(0, 180) : undefined,
+              createdAt: w.createdAt || new Date().toISOString(),
+              updatedAt: w.updatedAt || new Date().toISOString(),
+            }))
+        : [];
+
+      const sanitizedDailyNutrition: DailyNutritionSummary[] = Array.isArray(body.dailyNutrition)
+        ? body.dailyNutrition
+            .filter(
+              (d) =>
+                d &&
+                typeof d.date === 'string' &&
+                /^\d{4}-\d{2}-\d{2}$/.test(d.date) &&
+                Number.isFinite(Number(d.calories)) &&
+                Number(d.calories) >= 0 &&
+                Number(d.calories) <= 15000
+            )
+            .slice(0, 45)
+            .map((d) => ({
+              date: d.date,
+              calories: Math.round(Number(d.calories)),
+              protein: Math.round(Number(d.protein || 0) * 10) / 10,
+              carbs: Math.round(Number(d.carbs || 0) * 10) / 10,
+              fat: Math.round(Number(d.fat || 0) * 10) / 10,
+              fibre: Math.round(Number(d.fibre || 0) * 10) / 10,
+              entryCount: Math.max(0, Math.round(Number(d.entryCount || 1))),
+            }))
+        : [];
+
+      const referenceDateKey =
+        typeof body.referenceDateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.referenceDateKey)
+          ? body.referenceDateKey
+          : undefined;
+
+      const sanitizedProfile: UserProfile = {
+        id: actorId,
+        name: String(rawProfile.name || ''),
+        age: profileValidation.sanitized.age,
+        biologicalSex: profileValidation.sanitized.biologicalSex,
+        heightCm: profileValidation.sanitized.heightCm,
+        currentWeightKg: profileValidation.sanitized.currentWeightKg,
+        targetWeightKg: profileValidation.sanitized.targetWeightKg,
+        dailyAverageSteps: profileValidation.sanitized.dailyAverageSteps ?? 7500,
+        activityLevel: profileValidation.sanitized.activityLevel,
+        workoutFrequencyPerWeek: profileValidation.sanitized.workoutFrequencyPerWeek,
+        workoutIntensity: profileValidation.sanitized.workoutIntensity || 'moderate',
+        fitnessGoal: profileValidation.sanitized.fitnessGoal,
+        goalSpeed: profileValidation.sanitized.goalSpeed,
+        macroFocus: profileValidation.sanitized.macroFocus,
+        bodyFatPct: profileValidation.sanitized.bodyFatPct,
+        isPregnantOrBreastfeeding: profileValidation.sanitized.isPregnantOrBreastfeeding,
+        adaptiveTdeeKcal: profileValidation.sanitized.adaptiveTdeeKcal,
+        lastWeeklyAssessmentAt: rawProfile.lastWeeklyAssessmentAt ?? null,
+        dietaryPreference:
+          rawProfile.dietaryPreference === 'vegetarian' ||
+          rawProfile.dietaryPreference === 'vegan' ||
+          rawProfile.dietaryPreference === 'eggetarian'
+            ? rawProfile.dietaryPreference
+            : 'omnivore',
+        foodRestrictions: Array.isArray(rawProfile.foodRestrictions)
+          ? rawProfile.foodRestrictions.slice(0, 6)
+          : [],
+        accountRole: rawProfile.accountRole || 'individual',
+        isDemoProfile: Boolean(rawProfile.isDemoProfile),
+      };
+
+      const rawGoals = body.goals || {};
+      const sanitizedGoals: NutritionGoals = {
+        userId: actorId,
+        preset: rawGoals.preset || sanitizedProfile.fitnessGoal,
+        calories: Math.max(0, Math.min(10000, Math.round(Number(rawGoals.calories || 0)))),
+        protein: Math.max(0, Math.min(600, Math.round(Number(rawGoals.protein || 0)))),
+        carbs: Math.max(0, Math.min(1500, Math.round(Number(rawGoals.carbs || 0)))),
+        fat: Math.max(0, Math.min(400, Math.round(Number(rawGoals.fat || 0)))),
+        fibre: Math.max(0, Math.min(150, Math.round(Number(rawGoals.fibre || 0)))),
+        targetWeightKg: rawGoals.targetWeightKg ?? sanitizedProfile.targetWeightKg,
+        estimatedBmr: rawGoals.estimatedBmr,
+        estimatedTdee: rawGoals.estimatedTdee,
+        adaptiveTdeeKcal: rawGoals.adaptiveTdeeKcal ?? sanitizedProfile.adaptiveTdeeKcal,
+        macroFocus: rawGoals.macroFocus || sanitizedProfile.macroFocus,
+        assessmentWeekNumber: Number(rawGoals.assessmentWeekNumber || 0),
+        initialCalculatedAt: rawGoals.initialCalculatedAt,
+        calculationVersion: rawGoals.calculationVersion,
+        bmi: rawGoals.bmi,
+        goalSpeed: rawGoals.goalSpeed || sanitizedProfile.goalSpeed,
+        estimatedWeeks: rawGoals.estimatedWeeks,
+        updatedAt: rawGoals.updatedAt || new Date().toISOString(),
+      };
+
+      // 3. Recompute deterministic assessment authoritatively on the server
+      const deterministic = runDeterministicWeeklyAssessment({
+        userId: actorId,
+        profile: sanitizedProfile,
+        goals: sanitizedGoals,
+        weightEntries: sanitizedWeights,
+        dailyNutrition: sanitizedDailyNutrition,
+        previousAssessments: Array.isArray(body.previousAssessments)
+          ? body.previousAssessments.slice(0, 24)
+          : [],
+        referenceDateKey,
+        assessmentWeekNumber: body.assessmentWeekNumber,
+      });
+
+      // 4. Idempotency check in Supabase for authenticated users
+      if (authenticatedUserId && userScopedSupabase && !body.forceRecompute) {
+        try {
+          const { data: existingRow } = await userScopedSupabase
+            .from('weekly_assessments')
+            .select('*')
+            .eq('user_id', authenticatedUserId)
+            .eq('week_start_date', deterministic.weekStartDate)
+            .eq('week_end_date', deterministic.weekEndDate)
+            .maybeSingle();
+
+          if (existingRow) {
+            const row = existingRow as Record<string, unknown>;
+            const existingRecord: WeeklyAssessmentRecord = {
+              id: String(row.id),
+              userId: String(row.user_id),
+              weekStartDate: String(row.week_start_date),
+              weekEndDate: String(row.week_end_date),
+              assessmentWeekNumber: Number(row.assessment_week_number || deterministic.assessmentWeekNumber),
+              previousWeightKg: Number(row.previous_weight_kg),
+              assessedWeightKg: Number(row.assessed_weight_kg),
+              previousTrendWeightKg: Number(row.previous_trend_weight_kg),
+              assessedTrendWeightKg: Number(row.assessed_trend_weight_kg),
+              current7dAvgWeightKg: deterministic.weightAnalysis.current7dAvgWeightKg,
+              previous7dAvgWeightKg: deterministic.weightAnalysis.previous7dAvgWeightKg,
+              weeklyWeightChangeKg: deterministic.weightAnalysis.weeklyWeightChangeKg,
+              weeklyWeightChangePct: deterministic.weightAnalysis.weeklyWeightChangePct,
+              avgDailyCalories: Number(row.avg_daily_calories || 0),
+              avgDailyProtein: Number(row.avg_daily_protein || 0),
+              priorTdeeKcal: Number(row.prior_tdee_kcal || 0),
+              estimatedTdeeKcal: deterministic.estimatedTdeeKcal,
+              calibratedTdeeKcal: Number(row.calibrated_tdee_kcal || 0),
+              previousRecommendedCalories: Number(row.previous_recommended_calories || 0),
+              recommendedCalories: Number(row.recommended_calories || 0),
+              previousRecommendedProtein: deterministic.previousRecommendedProtein,
+              previousRecommendedCarbs: deterministic.previousRecommendedCarbs,
+              previousRecommendedFat: deterministic.previousRecommendedFat,
+              previousRecommendedFibre: deterministic.previousRecommendedFibre,
+              recommendedProtein: Number(row.recommended_protein || 0),
+              recommendedCarbs: Number(row.recommended_carbs || 0),
+              recommendedFat: Number(row.recommended_fat || 0),
+              recommendedFibre: Number(row.recommended_fibre || 0),
+              recommendedHydrationMl:
+                row.recommended_hydration_ml != null
+                  ? Number(row.recommended_hydration_ml)
+                  : deterministic.recommendedHydrationMl,
+              estimatedBmr: deterministic.estimatedBmr,
+              projectedWeeksToGoal: deterministic.projectedWeeksToGoal,
+              foodLoggedDays: Number(row.food_logged_days || 0),
+              weightLoggedDays: Number(row.weight_logged_days || 0),
+              loggingCompletenessPct: deterministic.loggingCompletenessPct,
+              adherencePercentage: Number(row.adherence_percentage || 0),
+              confidenceLevel: (row.confidence_level as WeeklyAssessmentRecord['confidenceLevel']) || 'low',
+              adjustmentType:
+                (row.adjustment_type as WeeklyAssessmentRecord['adjustmentType']) ||
+                deterministic.adjustmentType,
+              calorieDeltaKcal:
+                Number(row.recommended_calories || 0) - Number(row.previous_recommended_calories || 0),
+              adjustmentReason: String(row.adjustment_reason || ''),
+              goalCompleted: Boolean(row.goal_completed),
+              suggestedMaintenanceCalories:
+                row.suggested_maintenance_calories != null
+                  ? Number(row.suggested_maintenance_calories)
+                  : deterministic.suggestedMaintenanceCalories,
+              aiSummary:
+                row.ai_summary && typeof row.ai_summary === 'object'
+                  ? (row.ai_summary as WeeklyAssessmentRecord['aiSummary'])
+                  : deterministic.fallbackAiSummary,
+              rationaleBullets: Array.isArray(row.rationale_bullets)
+                ? (row.rationale_bullets as string[])
+                : deterministic.rationaleBullets,
+              calculationVersion: String(row.calculation_version || deterministic.calculationVersion),
+              status: (row.status as WeeklyAssessmentRecord['status']) || 'pending',
+              appliedAt: row.applied_at ? String(row.applied_at) : null,
+              createdAt: String(row.created_at || new Date().toISOString()),
+            };
+            return res.json({
+              assessment: existingRecord,
+              idempotentHit: true,
+              persistedToSupabase: true,
+            });
+          }
+        } catch {
+          // Table may not be migrated yet; proceed gracefully
+        }
+      }
+
+      // 5. Generate Gemini explanation (strictly read-only over deterministic numbers, with fallback)
+      const aiSummary = await generateWeeklyAssessmentExplanation({
+        assessment: deterministic,
+        dietaryPreference: sanitizedProfile.dietaryPreference,
+        foodRestrictions: sanitizedProfile.foodRestrictions,
+        goalLabel: getGoalDisplayLabel(deterministic.normalizedGoal),
+      });
+
+      const nowIso = new Date().toISOString();
+      const recordId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `wa-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const assessmentRecord: WeeklyAssessmentRecord = {
+        id: recordId,
+        userId: actorId,
+        weekStartDate: deterministic.weekStartDate,
+        weekEndDate: deterministic.weekEndDate,
+        assessmentWeekNumber: deterministic.assessmentWeekNumber,
+        previousWeightKg: deterministic.weightAnalysis.previousMeasuredWeightKg,
+        assessedWeightKg: deterministic.weightAnalysis.latestMeasuredWeightKg,
+        previousTrendWeightKg: deterministic.weightAnalysis.previousTrendWeightKg,
+        assessedTrendWeightKg: deterministic.weightAnalysis.assessedTrendWeightKg,
+        current7dAvgWeightKg: deterministic.weightAnalysis.current7dAvgWeightKg,
+        previous7dAvgWeightKg: deterministic.weightAnalysis.previous7dAvgWeightKg,
+        weeklyWeightChangeKg: deterministic.weightAnalysis.weeklyWeightChangeKg,
+        weeklyWeightChangePct: deterministic.weightAnalysis.weeklyWeightChangePct,
+        avgDailyCalories: deterministic.avgDailyCalories,
+        avgDailyProtein: deterministic.avgDailyProtein,
+        avgDailyCarbs: deterministic.avgDailyCarbs,
+        avgDailyFat: deterministic.avgDailyFat,
+        priorTdeeKcal: deterministic.priorTdeeKcal,
+        estimatedTdeeKcal: deterministic.estimatedTdeeKcal,
+        calibratedTdeeKcal: deterministic.calibratedTdeeKcal,
+        previousRecommendedCalories: deterministic.previousRecommendedCalories,
+        recommendedCalories: deterministic.recommendedCalories,
+        previousRecommendedProtein: deterministic.previousRecommendedProtein,
+        previousRecommendedCarbs: deterministic.previousRecommendedCarbs,
+        previousRecommendedFat: deterministic.previousRecommendedFat,
+        previousRecommendedFibre: deterministic.previousRecommendedFibre,
+        recommendedProtein: deterministic.recommendedProtein,
+        recommendedCarbs: deterministic.recommendedCarbs,
+        recommendedFat: deterministic.recommendedFat,
+        recommendedFibre: deterministic.recommendedFibre,
+        recommendedHydrationMl: deterministic.recommendedHydrationMl,
+        estimatedBmr: deterministic.estimatedBmr,
+        projectedWeeksToGoal: deterministic.projectedWeeksToGoal,
+        foodLoggedDays: deterministic.foodLoggedDays,
+        weightLoggedDays: deterministic.weightLoggedDays,
+        loggingCompletenessPct: deterministic.loggingCompletenessPct,
+        adherencePercentage: deterministic.adherencePercentage,
+        confidenceLevel: deterministic.confidenceLevel,
+        adjustmentType: deterministic.adjustmentType,
+        calorieDeltaKcal: deterministic.calorieDeltaKcal,
+        adjustmentReason: deterministic.adjustmentReason,
+        goalCompleted: deterministic.goalCompleted,
+        suggestedMaintenanceCalories: deterministic.suggestedMaintenanceCalories,
+        aiSummary,
+        rationaleBullets: deterministic.rationaleBullets,
+        calculationVersion: deterministic.calculationVersion,
+        status: 'pending',
+        appliedAt: null,
+        createdAt: nowIso,
+      };
+
+      let persistedToSupabase = false;
+      if (authenticatedUserId && userScopedSupabase) {
+        try {
+          const { data: upserted, error: upsertErr } = await userScopedSupabase
+            .from('weekly_assessments')
+            .upsert(
+              {
+                user_id: authenticatedUserId,
+                week_start_date: assessmentRecord.weekStartDate,
+                week_end_date: assessmentRecord.weekEndDate,
+                assessment_week_number: assessmentRecord.assessmentWeekNumber,
+                previous_weight_kg: assessmentRecord.previousWeightKg,
+                assessed_weight_kg: assessmentRecord.assessedWeightKg,
+                previous_trend_weight_kg: assessmentRecord.previousTrendWeightKg,
+                assessed_trend_weight_kg: assessmentRecord.assessedTrendWeightKg,
+                avg_daily_calories: assessmentRecord.avgDailyCalories,
+                avg_daily_protein: assessmentRecord.avgDailyProtein,
+                prior_tdee_kcal: assessmentRecord.priorTdeeKcal,
+                calibrated_tdee_kcal: assessmentRecord.calibratedTdeeKcal,
+                previous_recommended_calories: assessmentRecord.previousRecommendedCalories,
+                recommended_calories: assessmentRecord.recommendedCalories,
+                recommended_protein: assessmentRecord.recommendedProtein,
+                recommended_carbs: assessmentRecord.recommendedCarbs,
+                recommended_fat: assessmentRecord.recommendedFat,
+                recommended_fibre: assessmentRecord.recommendedFibre,
+                recommended_hydration_ml: assessmentRecord.recommendedHydrationMl ?? null,
+                food_logged_days: assessmentRecord.foodLoggedDays,
+                weight_logged_days: assessmentRecord.weightLoggedDays,
+                adherence_percentage: assessmentRecord.adherencePercentage,
+                confidence_level: assessmentRecord.confidenceLevel,
+                adjustment_type: assessmentRecord.adjustmentType,
+                adjustment_reason: assessmentRecord.adjustmentReason,
+                goal_completed: assessmentRecord.goalCompleted,
+                suggested_maintenance_calories: assessmentRecord.suggestedMaintenanceCalories ?? null,
+                ai_summary: assessmentRecord.aiSummary,
+                rationale_bullets: assessmentRecord.rationaleBullets,
+                calculation_version: assessmentRecord.calculationVersion,
+                status: 'pending',
+                updated_at: nowIso,
+              } as never,
+              { onConflict: 'user_id,week_start_date,week_end_date' }
+            )
+            .select('id, created_at')
+            .maybeSingle();
+
+          if (!upsertErr && upserted) {
+            const uRow = upserted as Record<string, unknown>;
+            if (uRow.id) assessmentRecord.id = String(uRow.id);
+            if (uRow.created_at) assessmentRecord.createdAt = String(uRow.created_at);
+            persistedToSupabase = true;
+          }
+        } catch {
+          persistedToSupabase = false;
+        }
+      }
+
+      return res.json({
+        assessment: assessmentRecord,
+        idempotentHit: false,
+        persistedToSupabase,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : 'Failed to run 7-day adaptive assessment.',
       });
     }
   });
@@ -218,7 +666,73 @@ async function startServer() {
     return res.json(result);
   });
 
-  // Unified Global Food Search (Postgres Master + IFCT 2017 + USDA FDC + Open Food Facts v2)
+  // Admin-Only: List pending_validation / incomplete records for controlled quality review
+  app.get('/api/admin/foods/pending-validation', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const pending = getPendingValidationFoods();
+    return res.json({
+      totalPending: pending.length,
+      items: pending.slice(0, 100),
+    });
+  });
+
+  // Admin-Only: Controlled Gemini Batch Nutritional Completion (never overwrites verified foods)
+  app.post('/api/admin/foods/ai-complete', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const rawIds = Array.isArray(req.body?.foodIds) ? req.body.foodIds : [];
+    const foodIds: string[] = rawIds
+      .map((id: unknown) => String(id || '').trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    const catalog = getFullServerFoodCatalog();
+    const byId = new Map(catalog.map((f) => [f.id, f]));
+    const targets =
+      foodIds.length > 0
+        ? foodIds.map((id) => byId.get(id)).filter((f): f is NonNullable<typeof f> => Boolean(f))
+        : getPendingValidationFoods().slice(0, 5);
+
+    const results = [];
+    for (const target of targets) {
+      const completion = await completePendingFoodWithGemini(target, catalog);
+      results.push(completion);
+    }
+
+    return res.json({
+      processed: results.length,
+      updated: results.filter((r) => r.status === 'updated').length,
+      skippedVerified: results.filter((r) => r.status === 'skipped_already_verified').length,
+      keptPending: results.filter((r) => r.status === 'kept_pending_insufficient_data').length,
+      results,
+    });
+  });
+
+  // Admin-Only: Controlled Gemini Regional Food & Alias Discovery (deduplicated against catalog)
+  app.post('/api/admin/foods/ai-discover', async (req, res) => {
+    const auth = await verifyAdminRequest(req);
+    if (!auth.ok) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const topic = String(req.body?.topic || '').trim();
+    if (topic.length < 2 || topic.length > 120) {
+      return res.status(400).json({ error: 'Provide a topic/region between 2 and 120 characters.' });
+    }
+    const proposals = await discoverRegionalFoodsWithGemini(topic, getFullServerFoodCatalog());
+    return res.json({ topic, proposals });
+  });
+
+  // Public Food Families Taxonomy
+  app.get('/api/foods/families', (_req, res) => {
+    res.json({ families: FOOD_FAMILIES });
+  });
+
+  // Unified Global Food Search (DB-First <200ms: Supabase Postgres + IFCT + INDB + Karnataka + UK/US FCT; External/Gemini fallback only)
   app.get('/api/foods/search', async (req, res) => {
     try {
       const q = String(req.query.q || '');
@@ -227,6 +741,15 @@ async function startServer() {
       const source = String(req.query.source || 'All');
       const barcode = req.query.barcode ? String(req.query.barcode) : undefined;
       const semantic = req.query.semantic === 'true';
+      const page = req.query.page ? Number(req.query.page) : 1;
+      const limit = req.query.limit ? Number(req.query.limit) : 40;
+      const groupParam = String(req.query.group || 'all');
+      const group =
+        groupParam === 'basic_ingredient' || groupParam === 'cooked_food' || groupParam === 'prepared_dish'
+          ? groupParam
+          : 'all';
+      const familyId = req.query.familyId ? String(req.query.familyId) : undefined;
+      const includeExternal = req.query.includeExternal === 'true';
       const authHeader = String(req.headers.authorization || '');
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : undefined;
 
@@ -238,6 +761,11 @@ async function startServer() {
           source,
           barcode,
           semantic,
+          page: Number.isFinite(page) ? page : 1,
+          limit: Number.isFinite(limit) ? limit : 40,
+          group,
+          familyId,
+          includeExternal,
         },
         token
       );
@@ -245,6 +773,12 @@ async function startServer() {
     } catch (err) {
       res.status(500).json({
         items: [],
+        grouped: { basic_ingredient: [], cooked_food: [], prepared_dish: [] },
+        totalCount: 0,
+        page: 1,
+        limit: 40,
+        hasMore: false,
+        elapsedMs: 0,
         error: err instanceof Error ? err.message : 'Food search failed',
       });
     }

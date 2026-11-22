@@ -11,12 +11,15 @@ import {
   FoodRestriction,
   FoodSourceType,
   FoodState,
+  MacroFocusType,
   MacroLogPersistedState,
   MeasurementBasis,
   Micronutrients,
   NutritionGoals,
   UserProfile,
   VerificationStatus,
+  WeeklyAssessmentRecord,
+  WeeklyAssessmentStatus,
   WeightEntry,
   WeightGoal,
   WorkoutIntensity,
@@ -266,6 +269,12 @@ export async function loadUserStateFromSupabase(
         workoutIntensity: (pRow.workout_intensity as WorkoutIntensity) || 'moderate',
         fitnessGoal: pRow.fitness_goal || 'maintenance',
         goalSpeed: pRow.goal_speed || 'moderate',
+        macroFocus: (pRow.macro_focus as MacroFocusType) || 'balanced',
+        bodyFatPct: pRow.body_fat_pct != null ? Number(pRow.body_fat_pct) : null,
+        isPregnantOrBreastfeeding: Boolean(pRow.is_pregnant_or_breastfeeding),
+        adaptiveTdeeKcal:
+          pRow.adaptive_tdee_kcal != null ? Number(pRow.adaptive_tdee_kcal) : null,
+        lastWeeklyAssessmentAt: pRow.last_weekly_assessment_at || null,
         dietaryPreference: (pRow.dietary_preference as DietaryPreference) || 'omnivore',
         foodRestrictions: Array.isArray(pRow.food_restrictions)
           ? (pRow.food_restrictions as FoodRestriction[])
@@ -304,6 +313,13 @@ export async function loadUserStateFromSupabase(
           gRow.estimated_bmr != null ? Number(gRow.estimated_bmr) : undefined,
         estimatedTdee:
           gRow.estimated_tdee != null ? Number(gRow.estimated_tdee) : undefined,
+        adaptiveTdeeKcal:
+          gRow.adaptive_tdee_kcal != null ? Number(gRow.adaptive_tdee_kcal) : null,
+        macroFocus: (gRow.macro_focus as MacroFocusType) || profile.macroFocus || 'balanced',
+        assessmentWeekNumber:
+          gRow.assessment_week_number != null ? Number(gRow.assessment_week_number) : 0,
+        initialCalculatedAt: gRow.initial_calculated_at || gRow.updated_at || undefined,
+        calculationVersion: gRow.calculation_version || undefined,
         bmi: gRow.bmi != null ? Number(gRow.bmi) : undefined,
         goalSpeed: gRow.goal_speed || undefined,
         estimatedWeeks:
@@ -442,10 +458,23 @@ export async function upsertProfileAndSettings(
     role_selected: Boolean(profile.roleSelected),
   };
 
-  const { error } = await supabase.from('profiles').upsert(extendedPayload);
+  const smartTrackerPayload = {
+    ...extendedPayload,
+    macro_focus: profile.macroFocus || 'balanced',
+    adaptive_tdee_kcal: profile.adaptiveTdeeKcal ?? null,
+    last_weekly_assessment_at: profile.lastWeeklyAssessmentAt ?? null,
+    body_fat_pct: profile.bodyFatPct ?? null,
+    is_pregnant_or_breastfeeding: Boolean(profile.isPregnantOrBreastfeeding),
+  };
+
+  const { error } = await supabase.from('profiles').upsert(smartTrackerPayload);
   if (error && isMissingColumnError(error)) {
-    const fallback = await supabase.from('profiles').upsert(corePayload);
-    return formatDbError(fallback.error);
+    const mid = await supabase.from('profiles').upsert(extendedPayload);
+    if (mid.error && isMissingColumnError(mid.error)) {
+      const fallback = await supabase.from('profiles').upsert(corePayload);
+      return formatDbError(fallback.error);
+    }
+    return formatDbError(mid.error);
   }
   return formatDbError(error);
 }
@@ -475,10 +504,23 @@ export async function upsertNutritionGoals(
     estimated_weeks: goals.estimatedWeeks ?? null,
   };
 
-  const { error } = await supabase.from('nutrition_goals').upsert(extendedPayload);
+  const smartTrackerPayload = {
+    ...extendedPayload,
+    macro_focus: goals.macroFocus || 'balanced',
+    adaptive_tdee_kcal: goals.adaptiveTdeeKcal ?? null,
+    assessment_week_number: goals.assessmentWeekNumber ?? 0,
+    initial_calculated_at: goals.initialCalculatedAt ?? null,
+    calculation_version: goals.calculationVersion || 'calothrix-smart-v2.0',
+  };
+
+  const { error } = await supabase.from('nutrition_goals').upsert(smartTrackerPayload);
   if (error && isMissingColumnError(error)) {
-    const fallback = await supabase.from('nutrition_goals').upsert(corePayload);
-    return formatDbError(fallback.error);
+    const mid = await supabase.from('nutrition_goals').upsert(extendedPayload);
+    if (mid.error && isMissingColumnError(mid.error)) {
+      const fallback = await supabase.from('nutrition_goals').upsert(corePayload);
+      return formatDbError(fallback.error);
+    }
+    return formatDbError(mid.error);
   }
   return formatDbError(error);
 }
@@ -859,4 +901,179 @@ export async function fetchUserRecipesFromSupabase(userId: string) {
   }
   return { ok: true, recipes: data || [] };
 }
+
+// ============================================================================
+// WEEKLY ADAPTIVE ASSESSMENTS (Supabase CRUD with graceful fallback)
+// ============================================================================
+
+function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmentRecord {
+  const prevCals = Number(row.previous_recommended_calories || 0);
+  const recCals = Number(row.recommended_calories || 0);
+  const prevTrend = Number(row.previous_trend_weight_kg || row.previous_weight_kg || 0);
+  const nextTrend = Number(row.assessed_trend_weight_kg || row.assessed_weight_kg || 0);
+  const deltaKg = Math.round((nextTrend - prevTrend) * 100) / 100;
+  const aiSummaryRaw =
+    row.ai_summary && typeof row.ai_summary === 'object'
+      ? (row.ai_summary as Record<string, unknown>)
+      : {};
+
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    weekStartDate: String(row.week_start_date),
+    weekEndDate: String(row.week_end_date),
+    assessmentWeekNumber: Number(row.assessment_week_number || 1),
+    previousWeightKg: Number(row.previous_weight_kg || 0),
+    assessedWeightKg: Number(row.assessed_weight_kg || 0),
+    previousTrendWeightKg: prevTrend,
+    assessedTrendWeightKg: nextTrend,
+    weeklyWeightChangeKg: deltaKg,
+    weeklyWeightChangePct: prevTrend > 0 ? Math.round((deltaKg / prevTrend) * 10000) / 100 : 0,
+    avgDailyCalories: Number(row.avg_daily_calories || 0),
+    avgDailyProtein: Number(row.avg_daily_protein || 0),
+    priorTdeeKcal: Number(row.prior_tdee_kcal || 0),
+    calibratedTdeeKcal: Number(row.calibrated_tdee_kcal || 0),
+    previousRecommendedCalories: prevCals,
+    recommendedCalories: recCals,
+    calorieDeltaKcal: recCals - prevCals,
+    recommendedProtein: Number(row.recommended_protein || 0),
+    recommendedCarbs: Number(row.recommended_carbs || 0),
+    recommendedFat: Number(row.recommended_fat || 0),
+    recommendedFibre: Number(row.recommended_fibre || 0),
+    recommendedHydrationMl:
+      row.recommended_hydration_ml != null ? Number(row.recommended_hydration_ml) : undefined,
+    foodLoggedDays: Number(row.food_logged_days || 0),
+    weightLoggedDays: Number(row.weight_logged_days || 0),
+    loggingCompletenessPct: Math.round((Number(row.food_logged_days || 0) / 7) * 100),
+    adherencePercentage: Number(row.adherence_percentage || 0),
+    confidenceLevel:
+      row.confidence_level === 'high' || row.confidence_level === 'moderate'
+        ? row.confidence_level
+        : 'low',
+    adjustmentType:
+      (row.adjustment_type as WeeklyAssessmentRecord['adjustmentType']) || 'maintained',
+    adjustmentReason: String(row.adjustment_reason || ''),
+    goalCompleted: Boolean(row.goal_completed),
+    suggestedMaintenanceCalories:
+      row.suggested_maintenance_calories != null
+        ? Number(row.suggested_maintenance_calories)
+        : null,
+    aiSummary: {
+      headline: String(aiSummaryRaw.headline || 'Weekly Progress Assessment'),
+      bodyChangeAnalysis: String(aiSummaryRaw.bodyChangeAnalysis || ''),
+      calorieAdjustmentReason: String(
+        aiSummaryRaw.calorieAdjustmentReason || row.adjustment_reason || ''
+      ),
+      actionableTips: Array.isArray(aiSummaryRaw.actionableTips)
+        ? (aiSummaryRaw.actionableTips as string[])
+        : [],
+      confidenceExplanation: String(aiSummaryRaw.confidenceExplanation || ''),
+      provider:
+        aiSummaryRaw.provider === 'gemini' || aiSummaryRaw.provider === 'deterministic'
+          ? aiSummaryRaw.provider
+          : 'deterministic',
+    },
+    rationaleBullets: Array.isArray(row.rationale_bullets)
+      ? (row.rationale_bullets as string[])
+      : [],
+    calculationVersion: String(row.calculation_version || 'calothrix-smart-v2.0'),
+    status:
+      row.status === 'applied' || row.status === 'dismissed' ? row.status : 'pending',
+    appliedAt: row.applied_at ? String(row.applied_at) : null,
+    createdAt: String(row.created_at || new Date().toISOString()),
+  };
+}
+
+export async function fetchWeeklyAssessmentsDb(
+  userId: string
+): Promise<{ ok: boolean; items: WeeklyAssessmentRecord[]; tableMissing?: boolean }> {
+  const { data, error } = await supabase
+    .from('weekly_assessments')
+    .select('*')
+    .eq('user_id', userId)
+    .order('week_end_date', { ascending: false })
+    .limit(36);
+
+  if (error) {
+    return {
+      ok: false,
+      items: [],
+      tableMissing: isSchemaOrPermissionError(error),
+    };
+  }
+  return {
+    ok: true,
+    items: (data || []).map((row) => mapRowToWeeklyAssessment(row as Record<string, unknown>)),
+  };
+}
+
+export async function upsertWeeklyAssessmentDb(
+  userId: string,
+  assessment: WeeklyAssessmentRecord
+): Promise<DbMutationResult & { id?: string }> {
+  const payload = {
+    user_id: userId,
+    week_start_date: assessment.weekStartDate,
+    week_end_date: assessment.weekEndDate,
+    assessment_week_number: assessment.assessmentWeekNumber,
+    previous_weight_kg: assessment.previousWeightKg,
+    assessed_weight_kg: assessment.assessedWeightKg,
+    previous_trend_weight_kg: assessment.previousTrendWeightKg,
+    assessed_trend_weight_kg: assessment.assessedTrendWeightKg,
+    avg_daily_calories: assessment.avgDailyCalories,
+    avg_daily_protein: assessment.avgDailyProtein,
+    prior_tdee_kcal: assessment.priorTdeeKcal,
+    calibrated_tdee_kcal: assessment.calibratedTdeeKcal,
+    previous_recommended_calories: assessment.previousRecommendedCalories,
+    recommended_calories: assessment.recommendedCalories,
+    recommended_protein: assessment.recommendedProtein,
+    recommended_carbs: assessment.recommendedCarbs,
+    recommended_fat: assessment.recommendedFat,
+    recommended_fibre: assessment.recommendedFibre,
+    recommended_hydration_ml: assessment.recommendedHydrationMl ?? null,
+    food_logged_days: assessment.foodLoggedDays,
+    weight_logged_days: assessment.weightLoggedDays,
+    adherence_percentage: assessment.adherencePercentage,
+    confidence_level: assessment.confidenceLevel,
+    adjustment_type: assessment.adjustmentType,
+    adjustment_reason: assessment.adjustmentReason,
+    goal_completed: assessment.goalCompleted,
+    suggested_maintenance_calories: assessment.suggestedMaintenanceCalories ?? null,
+    ai_summary: assessment.aiSummary,
+    rationale_bullets: assessment.rationaleBullets,
+    calculation_version: assessment.calculationVersion,
+    status: assessment.status,
+    applied_at: assessment.appliedAt ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('weekly_assessments')
+    .upsert(payload, { onConflict: 'user_id,week_start_date,week_end_date' })
+    .select('id')
+    .maybeSingle();
+
+  if (error) return formatDbError(error);
+  return { ok: true, id: data?.id ? String(data.id) : assessment.id };
+}
+
+export async function updateWeeklyAssessmentStatusDb(
+  userId: string,
+  assessmentId: string,
+  status: WeeklyAssessmentStatus,
+  appliedAt?: string | null
+): Promise<DbMutationResult> {
+  const { error } = await supabase
+    .from('weekly_assessments')
+    .update({
+      status,
+      applied_at: status === 'applied' ? appliedAt || new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('id', assessmentId);
+
+  return formatDbError(error);
+}
+
 

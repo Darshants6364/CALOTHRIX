@@ -78,13 +78,21 @@
   text-wrap: balance;
 }
 
-/* Smooth scrollbar hiding for horizontal date scrollers */
+/* Smooth scrollbar hiding for horizontal scrollers */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+.horizontal-scroll-strip {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+.horizontal-scroll-strip button {
+  touch-action: pan-x;
 }
 
 @keyframes calothrix-marquee {

@@ -157,7 +157,7 @@ export function validateFoodRecord(
       sourceName,
       code: 'missing_nutrient',
       severity: 'info',
-      message: `Unavailable nutrients preserved as NULL: ${missingKeys.join(', ')}`,
+      message: `Pending validation for missing nutrients: ${missingKeys.join(', ')}`,
       details: { missingFields: missingKeys.join(',') },
     });
   }
@@ -346,10 +346,39 @@ export function validateFoodCatalog(foods: FoodItem[]): {
     const atwaterCalories = calculateAtwaterCaloriesPer100g(per100, inferredBasis);
     const verificationStatus = deriveVerificationStatus(food, issues);
 
+    const hasMissingCore =
+      per100.calories === null ||
+      per100.protein === null ||
+      per100.carbs === null ||
+      per100.fat === null ||
+      per100.fibre === null;
+
+    const hasBlockingError = issues.some(
+      (i) => i.code === 'negative_value' || i.code === 'unit_range_error' || i.code === 'serving_consistency_error'
+    );
+
+    const derivedQualityStatus =
+      food.qualityStatus ||
+      (hasMissingCore || hasBlockingError
+        ? 'pending_validation'
+        : food.calculationMethod && /recipe|yield|weighted/i.test(food.calculationMethod)
+        ? 'calculated'
+        : verificationStatus === 'estimated'
+        ? 'estimated'
+        : 'verified');
+
+    const derivedSearchable =
+      food.isSearchable === false
+        ? false
+        : !food.isDiscontinued &&
+          (food.isCustom || (!hasMissingCore && !hasBlockingError && derivedQualityStatus !== 'pending_validation'));
+
     return {
       ...food,
       atwaterCalories: food.atwaterCalories ?? atwaterCalories,
       verificationStatus,
+      qualityStatus: derivedQualityStatus,
+      isSearchable: derivedSearchable,
       validationIssues: issues,
     };
   });

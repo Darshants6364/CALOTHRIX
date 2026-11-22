@@ -1,0 +1,250 @@
+{
+  "generatedAt": "2026-11-21T18:06:37.427Z",
+  "filesProcessed": [
+    {
+      "file": "Food Database/IFCT2017_proximate_master_filled.csv",
+      "actualFormat": "CSV (UTF-8)",
+      "sheets": [
+        "N/A (CSV)"
+      ],
+      "stats": {
+        "totalRows": 528,
+        "imported": 528,
+        "verified": 312,
+        "estimated": 216,
+        "pendingValidation": 0,
+        "genuineZeroFibreResolved": 6,
+        "usdaFibreResolved": 2
+      }
+    },
+    {
+      "file": "Food Database/INDB.csv",
+      "actualFormat": "Excel OpenXML (.xlsx saved with .csv extension)",
+      "sheets": [
+        "Nutrient Data"
+      ],
+      "stats": {
+        "sheetName": "Nutrient Data",
+        "totalRows": 1014,
+        "imported": 992,
+        "duplicatesSkipped": 22,
+        "pendingValidation": 0
+      }
+    },
+    {
+      "file": "Food Database/UK_fct.csv",
+      "actualFormat": "Excel OpenXML (.xlsx saved with .csv extension)",
+      "sheets": [
+        "Sheet1",
+        "notes"
+      ],
+      "stats": {
+        "sheetName": "Sheet1",
+        "totalSheetRows": 144,
+        "nonEmptyRows": 144,
+        "importedSearchable": 91,
+        "quarantinedPendingValidation": 49,
+        "duplicatesSkipped": 4
+      }
+    },
+    {
+      "file": "Food Database/US_fct.csv",
+      "actualFormat": "Excel OpenXML (.xlsx saved with .csv extension)",
+      "sheets": [
+        "Sheet1",
+        "notes"
+      ],
+      "stats": {
+        "sheetName": "Sheet1",
+        "totalSheetRows": 999,
+        "nonEmptyRows": 54,
+        "importedSearchable": 44,
+        "quarantinedPendingValidation": 8,
+        "duplicatesSkipped": 2
+      }
+    }
+  ],
+  "karnatakaAndFamilyExpansions": 26,
+  "totals": {
+    "ifctImported": 528,
+    "indbImported": 992,
+    "karnatakaAndFamilyImported": 26,
+    "ukFctProcessed": 140,
+    "ukFctSearchable": 91,
+    "ukFctPendingValidation": 49,
+    "usFctProcessed": 52,
+    "usFctSearchable": 44,
+    "usFctPendingValidation": 8,
+    "totalDuplicatesDetected": 38
+  },
+  "duplicatesSample": [
+    {
+      "dataset": "INDB",
+      "code": "ASC007",
+      "name": "Fruit Punch (with squashes)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC040",
+      "name": "Cheese and tomato sandwich (toasted) (Cheese aur tamatar ke sandwich (toasted))",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC043",
+      "name": "Chicken sandwich (toasted)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC052",
+      "name": "Rice flakes (Chiwda/Aval)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC056",
+      "name": "Boiled egg (Ubla anda)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC057",
+      "name": "Fried Egg",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC096",
+      "name": "Chapati/Roti",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC124",
+      "name": "Lemon rice (Pulihora, Elumichai sadam, Chitranna)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC126",
+      "name": "Curd rice (Dahi bhaat/Dahi chawal/ Perugu annam/Daddojanam/Thayir saadam)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC127",
+      "name": "Tamarind rice (Chintapandu pulihora/Puliyodharai/Puli sadam/Huli anna)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC144",
+      "name": "Idli",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC146",
+      "name": "Masala dosa",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC167",
+      "name": "Sambar",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC239",
+      "name": "Shepherd's pie (with minced meat)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC242",
+      "name": "Butter chicken",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "BFP148",
+      "name": "Plain dosa",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "BFP262",
+      "name": "Cabbage rolls (curry) ((Pattagobhi rolls)(curry))",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "BFP345",
+      "name": "Caramel custard (baked)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "BFP604",
+      "name": "Stuffed bittergourd (dry) (Bharwa karela)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "OSR139",
+      "name": "Dal makhani",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC072",
+      "name": "White sauce (medium)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "INDB",
+      "code": "ASC073",
+      "name": "White sauce (thick)",
+      "reason": "Matches existing curated/IFCT/INDB canonical record"
+    },
+    {
+      "dataset": "UKFCT",
+      "code": "UK-13-829",
+      "name": "Garam masala",
+      "reason": "Matches higher-priority IFCT/INDB/curated record"
+    },
+    {
+      "dataset": "UKFCT",
+      "code": "UK-17-078",
+      "name": "Marmalade",
+      "reason": "Matches higher-priority IFCT/INDB/curated record"
+    },
+    {
+      "dataset": "UKFCT",
+      "code": "UK-17-709",
+      "name": "Tomato ketchup",
+      "reason": "Matches higher-priority IFCT/INDB/curated record"
+    },
+    {
+      "dataset": "UKFCT",
+      "code": "UK-13-531",
+      "name": "Tomato puree",
+      "reason": "Matches higher-priority IFCT/INDB/curated record"
+    },
+    {
+      "dataset": "USFCT",
+      "code": "US-1100612",
+      "name": "Chia seeds",
+      "reason": "Matches higher-priority IFCT/INDB/curated record"
+    },
+    {
+      "dataset": "USFCT",
+      "code": "US-461985",
+      "name": "Mustard Sauce",
+      "reason": "Matches higher-priority IFCT/INDB/curated record"
+    }
+  ]
+}

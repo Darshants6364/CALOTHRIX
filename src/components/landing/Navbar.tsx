@@ -7,16 +7,18 @@ import { AccountRole } from '../../types';
 
 interface NavbarProps {
   onOpenAuth: (role: AccountRole) => void;
+  onOpenCalculator?: () => void;
 }
 
 const NAV_LINKS = [
-  { num: '01', label: 'Our Philosophy', href: '#philosophy' },
-  { num: '02', label: 'Experience', href: '#experience' },
-  { num: '03', label: 'Individuals', href: '#individuals' },
-  { num: '04', label: 'Trainers', href: '#trainers' },
+  { num: '01', label: 'Smart Calorie Calculator', href: '#smart-calculator', action: 'calculator' as const },
+  { num: '02', label: 'Our Philosophy', href: '#philosophy' },
+  { num: '03', label: 'Experience', href: '#experience' },
+  { num: '04', label: 'Individuals', href: '#individuals' },
+  { num: '05', label: 'Trainers', href: '#trainers' },
 ];
 
-export function Navbar({ onOpenAuth }: NavbarProps) {
+export function Navbar({ onOpenAuth, onOpenCalculator }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loginMenuOpen, setLoginMenuOpen] = useState(false);
@@ -44,8 +46,12 @@ export function Navbar({ onOpenAuth }: NavbarProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [loginMenuOpen]);
 
-  const scrollToTarget = (href: string) => {
+  const scrollToTarget = (href: string, action?: 'calculator') => {
     setMobileMenuOpen(false);
+    if (action === 'calculator' && onOpenCalculator) {
+      onOpenCalculator();
+      return;
+    }
     const el = document.querySelector(href);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
@@ -81,7 +87,7 @@ export function Navbar({ onOpenAuth }: NavbarProps) {
                 href={link.href}
                 onClick={(e) => {
                   e.preventDefault();
-                  scrollToTarget(link.href);
+                  scrollToTarget(link.href, link.action);
                 }}
                 className="group relative overflow-hidden py-1 text-sm font-medium text-white/80 hover:text-white transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8FF00] rounded"
               >
@@ -223,7 +229,7 @@ export function Navbar({ onOpenAuth }: NavbarProps) {
                   transition={{ delay: 0.08 + idx * 0.07, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                   onClick={(e) => {
                     e.preventDefault();
-                    scrollToTarget(link.href);
+                    scrollToTarget(link.href, link.action);
                   }}
                   className="flex min-h-[56px] items-baseline gap-4 border-b border-white/[0.08] py-3 group"
                 >

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, MotionConfig, type Variants } from 'motion/react';
 import { PageLoader } from '../components/landing/PageLoader';
 import { Navbar } from '../components/landing/Navbar';
 import { HeroSection } from '../components/landing/HeroSection';
+import { LandingSmartCalculatorModal } from '../components/landing/LandingSmartCalculatorModal';
 import { PhilosophySection } from '../components/landing/PhilosophySection';
 import { ExperienceSection } from '../components/landing/ExperienceSection';
 import { DualExperienceSection } from '../components/landing/DualExperienceSection';
@@ -32,6 +33,8 @@ const sectionRevealVariants: Variants = {
 };
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onSelectAuth, onTryGuest }) => {
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+
   const scrollToPhilosophy = () => {
     const target = document.querySelector('#philosophy');
     if (target) target.scrollIntoView({ behavior: 'smooth' });
@@ -42,13 +45,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectAuth, onTryGue
       <div className="dark min-h-screen overflow-x-clip bg-[#090A0C] text-[#F4F3EF]">
         <PageLoader />
 
-        <Navbar onOpenAuth={onSelectAuth} />
+        <Navbar
+          onOpenAuth={onSelectAuth}
+          onOpenCalculator={() => setCalculatorOpen(true)}
+        />
 
         <main>
           <HeroSection
             onExplore={scrollToPhilosophy}
             onGetStarted={() => onSelectAuth('individual')}
             onTryGuest={onTryGuest}
+            onOpenCalculator={() => setCalculatorOpen(true)}
           />
 
           <motion.div
@@ -99,6 +106,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectAuth, onTryGue
         </main>
 
         <Footer onOpenAuth={onSelectAuth} />
+
+        <LandingSmartCalculatorModal
+          isOpen={calculatorOpen}
+          onClose={() => setCalculatorOpen(false)}
+          onGetStarted={() => onSelectAuth('individual')}
+          onTryGuest={onTryGuest}
+        />
       </div>
     </MotionConfig>
   );

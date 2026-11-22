@@ -181,6 +181,27 @@ export type DietaryTag =
   | 'high_protein'
   | 'high_fibre';
 
+export type FoodResultGroup = 'basic_ingredient' | 'cooked_food' | 'prepared_dish';
+
+export type FoodQualityStatus =
+  | 'verified'
+  | 'calculated'
+  | 'estimated'
+  | 'pending_validation';
+
+export interface GroupedFoodResults {
+  basic_ingredient: FoodItem[];
+  cooked_food: FoodItem[];
+  prepared_dish: FoodItem[];
+}
+
+export interface RegionalSearchSuggestion {
+  detectedFood: string;
+  canonicalEnglishName: string;
+  matchedFoodIds: string[];
+  reasoning?: string;
+}
+
 export interface FoodItem extends MacroNutrients {
   id: string;
   userId?: string;
@@ -231,6 +252,18 @@ export interface FoodItem extends MacroNutrients {
   approvedBy?: string;
   approvedAt?: string;
   changeNotes?: string;
+  // Additive food-family, grouping, quality & provenance metadata
+  foodFamilyId?: string;
+  parentFoodId?: string;
+  resultGroup?: FoodResultGroup;
+  preparationStyle?: string;
+  qualityStatus?: FoodQualityStatus;
+  isSearchable?: boolean;
+  canonicalFoodId?: string;
+  calculationMethod?: string;
+  sourceReferenceFoods?: string[];
+  confidenceScore?: number;
+  originalSourceValues?: Record<string, string | number | null>;
 }
 
 export interface FoodVersionRecord {
@@ -326,7 +359,30 @@ export interface DatabaseQualitySummary {
   issues: FoodValidationIssue[];
 }
 
-export type GoalPreset = 'fat_loss' | 'maintenance' | 'muscle_gain' | 'recomposition' | 'custom';
+export type SmartFitnessGoalType =
+  | 'build_muscle'
+  | 'fat_gain'
+  | 'lose_weight'
+  | 'recomposition'
+  | 'maintain_weight';
+
+export type MacroFocusType =
+  | 'high_protein'
+  | 'balanced'
+  | 'lower_carb'
+  | 'athletic';
+
+export type GoalPreset =
+  | 'fat_loss'
+  | 'maintenance'
+  | 'muscle_gain'
+  | 'recomposition'
+  | 'build_muscle'
+  | 'fat_gain'
+  | 'lose_weight'
+  | 'maintain_weight'
+  | 'custom';
+
 export type GoalSpeed = 'slow' | 'moderate' | 'aggressive';
 
 export interface NutritionGoals {
@@ -340,6 +396,11 @@ export interface NutritionGoals {
   targetWeightKg?: number;
   estimatedBmr?: number;
   estimatedTdee?: number;
+  adaptiveTdeeKcal?: number | null;
+  macroFocus?: MacroFocusType;
+  assessmentWeekNumber?: number;
+  initialCalculatedAt?: string;
+  calculationVersion?: string;
   bmi?: number;
   goalSpeed?: GoalSpeed;
   estimatedWeeks?: number | null;
@@ -373,7 +434,15 @@ export type ActivityLevel =
 
 export type BiologicalSex = 'male' | 'female';
 export type WorkoutIntensity = 'light' | 'moderate' | 'vigorous';
-export type FitnessGoalType = 'fat_loss' | 'maintenance' | 'muscle_gain' | 'recomposition';
+export type FitnessGoalType =
+  | 'fat_loss'
+  | 'maintenance'
+  | 'muscle_gain'
+  | 'recomposition'
+  | 'build_muscle'
+  | 'fat_gain'
+  | 'lose_weight'
+  | 'maintain_weight';
 export type AccountRole = 'individual' | 'trainer' | 'admin';
 
 export type DietaryPreference =
@@ -403,6 +472,11 @@ export interface UserProfile {
   workoutIntensity: WorkoutIntensity;
   fitnessGoal: FitnessGoalType;
   goalSpeed?: GoalSpeed;
+  macroFocus?: MacroFocusType;
+  bodyFatPct?: number | null;
+  isPregnantOrBreastfeeding?: boolean;
+  adaptiveTdeeKcal?: number | null;
+  lastWeeklyAssessmentAt?: string | null;
   dietaryPreference: DietaryPreference;
   foodRestrictions: FoodRestriction[];
   accountRole: AccountRole;
@@ -434,6 +508,7 @@ export interface MacroLogPersistedState {
   recentFoodIds: string[];
   foodEntries: FoodLogEntry[];
   weightEntries: WeightEntry[];
+  weeklyAssessments?: WeeklyAssessmentRecord[];
 }
 
 export type NavTab =
@@ -902,5 +977,111 @@ export interface AiPerformanceInsightsResponse {
   priors: AiLearnedPrior[];
   runs: AiTrainingRun[];
 }
+
+// ============================================================================
+// SMART CALORIE TRACKER & 7-DAY AI ADAPTIVE ASSESSMENT TYPES
+// ============================================================================
+
+export type AssessmentConfidenceLevel = 'high' | 'moderate' | 'low';
+export type WeeklyAssessmentStatus = 'pending' | 'applied' | 'dismissed';
+export type WeeklyAdjustmentType =
+  | 'maintained'
+  | 'increased'
+  | 'decreased'
+  | 'insufficient_data'
+  | 'goal_completed_maintenance'
+  | 'safety_guarded';
+
+export interface WeeklyAssessmentAiExplanation {
+  headline: string;
+  bodyChangeAnalysis: string;
+  calorieAdjustmentReason: string;
+  actionableTips: string[];
+  confidenceExplanation: string;
+  provider?: 'gemini' | 'deterministic';
+}
+
+export interface DailyNutritionSummary {
+  date: string; // YYYY-MM-DD
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fibre: number;
+  entryCount: number;
+}
+
+export interface WeeklyAssessmentRecord {
+  id: string;
+  userId: string;
+  weekStartDate: string; // YYYY-MM-DD
+  weekEndDate: string; // YYYY-MM-DD
+  assessmentWeekNumber: number;
+  previousWeightKg: number;
+  assessedWeightKg: number;
+  previousTrendWeightKg: number;
+  assessedTrendWeightKg: number;
+  current7dAvgWeightKg?: number;
+  previous7dAvgWeightKg?: number;
+  weeklyWeightChangeKg?: number;
+  weeklyWeightChangePct?: number;
+  avgDailyCalories: number;
+  avgDailyProtein: number;
+  avgDailyCarbs?: number;
+  avgDailyFat?: number;
+  priorTdeeKcal: number;
+  estimatedTdeeKcal?: number;
+  calibratedTdeeKcal: number;
+  previousRecommendedCalories: number;
+  recommendedCalories: number;
+  previousRecommendedProtein?: number;
+  previousRecommendedCarbs?: number;
+  previousRecommendedFat?: number;
+  previousRecommendedFibre?: number;
+  recommendedProtein: number;
+  recommendedCarbs: number;
+  recommendedFat: number;
+  recommendedFibre: number;
+  recommendedHydrationMl?: number;
+  estimatedBmr?: number;
+  projectedWeeksToGoal?: number | null;
+  foodLoggedDays: number;
+  weightLoggedDays: number;
+  loggingCompletenessPct?: number;
+  adherencePercentage: number;
+  confidenceLevel: AssessmentConfidenceLevel;
+  adjustmentType: WeeklyAdjustmentType;
+  calorieDeltaKcal?: number;
+  adjustmentReason: string;
+  goalCompleted: boolean;
+  suggestedMaintenanceCalories?: number | null;
+  aiSummary: WeeklyAssessmentAiExplanation;
+  rationaleBullets: string[];
+  calculationVersion: string;
+  status: WeeklyAssessmentStatus;
+  appliedAt?: string | null;
+  createdAt: string;
+}
+
+export interface WeeklyAssessmentDueStatus {
+  isDue: boolean;
+  statusLabel: 'Assessment in progress' | 'Assessment ready' | 'Low data confidence' | 'Assessment completed';
+  currentWeekNumber: number;
+  weekStartDate: string;
+  weekEndDate: string;
+  nextAssessmentDate: string;
+  daysSinceLastAnchor: number;
+  daysRemaining: number;
+  foodLoggedDays: number;
+  weightLoggedDays: number;
+  confidenceLevel: AssessmentConfidenceLevel;
+  hasExistingForPeriod: boolean;
+  existingAssessment?: WeeklyAssessmentRecord | null;
+  latestWeightKg: number | null;
+  weeklyDeltaKg: number | null;
+  goalCompleted: boolean;
+  readinessMessage: string;
+}
+
 
 
