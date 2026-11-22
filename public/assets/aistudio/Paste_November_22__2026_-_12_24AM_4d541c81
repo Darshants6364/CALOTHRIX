@@ -1,0 +1,1775 @@
+CALOTHRIX — COMPLETE MASTER IMPLEMENTATION PROMPT
+
+Smart Calorie Tracker + Scientific Nutrition Engine + 7-Day AI Adaptive Assessment
+
+Act as a senior full-stack TypeScript engineer, sports nutrition scientist, AI integration engineer, database architect and mobile-first product developer.
+
+I am building CALOTHRIX, an existing calorie and nutrition tracking platform. The application is already developed, and I want to upgrade it by introducing a scientifically informed Smart Calorie Tracker and a 7-Day AI Adaptive Assessment Engine.
+
+Your responsibility is to inspect my existing codebase, understand its architecture and implement the complete feature directly into the existing application.
+
+IMPORTANT: This is an upgrade to an existing application, NOT a new application.
+
+Do not rebuild the application, replace existing architecture unnecessarily, duplicate existing functionality, remove existing features or break existing user flows.
+
+Preserve all existing:
+
+Food tracking and daily calorie logging.
+
+Food database and food search.
+
+Custom food functionality.
+
+Barcode scanner.
+
+AI meal scanner and image-based food recognition.
+
+Voice-based food logging.
+
+Label OCR.
+
+Trainer portal and trainer-client functionality.
+
+User profiles and existing nutrition goals.
+
+Authentication and guest functionality.
+
+Supabase integration.
+
+Existing navigation and application routes.
+
+Existing design system and theme.
+
+Existing progress and analytics functionality.
+
+Implement the following requirements by extending the existing modules and architecture.
+
+1. FIRST: INSPECT THE EXISTING CODEBASE
+
+Before making changes, inspect the existing project and understand its current architecture.
+
+Review these existing files and modules:
+
+Type definitions
+
+src/types/index.ts
+
+UserProfile
+
+NutritionGoals
+
+FitnessGoalType
+
+GoalPreset
+
+GoalSpeed
+
+ActivityLevel
+
+WorkoutIntensity
+
+WeightEntry
+
+FoodLogEntry
+
+NavTab
+
+Calculation utilities
+
+src/utils/fitnessCalculator.ts
+
+calculateMifflinStJeorBmr
+
+calculateBmi
+
+calculateSmartFitnessTargets
+
+validateCalculatorInput
+
+ACTIVITY_MULTIPLIERS
+
+GOAL_SPEED_CONFIG
+
+Other utilities
+
+src/utils/analyticsUtils.ts
+
+src/utils/nutritionUtils.ts
+
+sortWeightEntriesChronological
+
+sumMacros
+
+getEntriesForDate
+
+State management
+
+src/hooks/useMacroLogStore.tsx
+
+state
+
+updateProfile
+
+updateGoals
+
+updateWeightGoal
+
+addWeightEntry
+
+notify
+
+Existing pages and components
+
+src/pages/HomePage.tsx
+
+src/pages/GoalsPage.tsx
+
+src/components/Layout.tsx
+
+Backend
+
+server.ts
+
+Existing POST /api/goals/calculate endpoint.
+
+server/mealAiService.ts
+
+Existing @google/genai integration.
+
+Existing deterministic fallback pattern.
+
+Database
+
+Existing Supabase migrations.
+
+Existing user profile and nutrition goal tables.
+
+Existing RLS policies.
+
+Existing trainer-client relationship policies.
+
+Existing storage and localStorage fallback mechanisms.
+
+After inspection, create an implementation plan and then proceed with the implementation.
+
+Reuse existing functions wherever possible. Do not introduce duplicate calculation engines or competing state-management systems.
+
+Preserve backward compatibility with existing users and previously stored profile data.
+
+2. FEATURE NAME: SMART CALORIE TRACKER
+
+Rename the existing smart macro/goal calculator workflow to:
+
+Smart Calorie Tracker
+
+Use this name consistently in the existing Goals Page and the new Home Page tab.
+
+The feature must calculate a user's initial nutritional requirements using scientific prediction equations, their body measurements, activity levels, exercise habits and fitness goals.
+
+It must also continuously adapt nutritional targets based on the user's actual weight progression.
+
+The system must support:
+
+Initial calorie and macro calculation.
+
+Live recalculation when calculator inputs change.
+
+Different fitness goals and preferred paces.
+
+Weight-dependent nutritional recalculation.
+
+Weekly progress assessments.
+
+Adaptive TDEE estimation.
+
+AI-powered explanations and recommendations.
+
+Assessment history.
+
+Goal completion and maintenance transitions.
+
+The calculator must clearly distinguish estimated values from measured values.
+
+Never claim that calculated maintenance calories are perfectly accurate.
+
+3. USER INPUTS AND PROFILE DATA
+
+Ensure the existing FitnessCalculatorInput, UserProfile and NutritionGoals support the following fields.
+
+A. Personal information
+
+Age.
+
+Biological sex: male | female.
+
+Height in centimetres.
+
+Current weight in kilograms.
+
+Target weight in kilograms.
+
+Age restrictions:
+
+Adults aged 18 and above can use the adult prediction pathway with appropriate safety checks.
+
+Ages 14–17 must use a separate adolescent pathway with appropriate professional guidance. Do not apply ordinary adult calorie-deficit recommendations.
+
+Do not apply ordinary automatic calorie-deficit recommendations during pregnancy or breastfeeding.
+
+The Mifflin-St Jeor equation must be used only within its appropriate adult application context.
+
+Preserve existing unit settings:
+
+kg | lbs
+
+Existing height units, if supported.
+
+Store weights internally in kilograms and convert them for display.
+
+B. Physical activity
+
+Capture:
+
+Workout frequency: 0–14 sessions per week.
+
+Workout intensity: light | moderate | vigorous.
+
+Daily activity level:
+
+sedentary
+
+light
+
+moderate
+
+active
+
+very_active
+
+Daily average steps.
+
+C. Fitness goals
+
+Support:
+
+build_muscle
+
+fat_gain
+
+lose_weight
+
+recomposition
+
+maintain_weight
+
+Display these as:
+
+Build Muscle.
+
+Healthy Weight Gain.
+
+Lose Fat / Lose Weight.
+
+Body Recomposition.
+
+Maintain Weight.
+
+Keep Build Muscle and Healthy Weight Gain as separate strategies.
+
+D. Preferred pace
+
+Support:
+
+slow
+
+moderate
+
+aggressive
+
+Allow the selected pace to influence the recommended calorie surplus or deficit within appropriate safety limits.
+
+E. Macro preferences
+
+Keep macro preferences independent from fitness goals.
+
+Support:
+
+high_protein
+
+balanced
+
+lower_carb
+
+athletic
+
+The user's fitness goal determines the overall nutrition strategy. Their macro preference influences the distribution of protein, fats and carbohydrates within that strategy.
+
+F. Optional information
+
+Where supported by the existing application, allow:
+
+Body-fat percentage.
+
+Preferred dietary style.
+
+Dietary restrictions.
+
+Additional relevant measurements.
+
+Body-fat percentage must remain optional. Never invent a body-fat percentage when the user does not provide one.
+
+4. SCIENTIFIC CALCULATION ENGINE
+
+Upgrade:
+
+src/utils/fitnessCalculator.ts
+
+The existing calculateSmartFitnessTargets function should be improved rather than replaced with a completely separate system.
+
+All calculations must be deterministic, reproducible, unit-tested and explainable.
+
+A. BMR calculation
+
+Use Mifflin-St Jeor as the default resting energy expenditure prediction equation.
+
+Male:
+
+BMR = (10 × weightKg) + (6.25 × heightCm) - (5 × age) + 5
+
+Female:
+
+BMR = (10 × weightKg) + (6.25 × heightCm) - (5 × age) - 161
+
+If reliable body-fat percentage is available, optionally support Katch-McArdle:
+
+LBM = WeightKg × (1 - BodyFatPercentage / 100)
+
+BMR = 370 + (21.6 × LBM)
+
+Use the appropriate equation consistently. Do not invent missing measurements.
+
+Label the result as estimated BMR or resting energy expenditure.
+
+B. TDEE calculation — IMPORTANT CORRECTION
+
+The existing implementation must not double-count physical activity.
+
+Do not:
+
+Multiply BMR by an activity multiplier and then add the same exercise calories again.
+
+Count steps separately when already represented in the selected activity factor.
+
+Add TEF independently when already included in the chosen TDEE estimation method.
+
+Implement one consistent energy expenditure model.
+
+The model should consider:
+
+BMR.
+
+Non-exercise daily activity.
+
+Daily average steps.
+
+Structured exercise frequency.
+
+Workout intensity.
+
+Thermic effect of food where appropriate.
+
+Use an appropriately selected activity factor or a carefully designed component-based model.
+
+If using activity multipliers, calibrate the multiplier using the user's activity and exercise information rather than independently adding overlapping energy expenditure estimates.
+
+Keep the calculation architecture extensible so that a more sophisticated model can be introduced later.
+
+Store the following separately:
+
+estimatedTdeeKcal: Formula-based maintenance estimate.
+
+adaptiveTdeeKcal: Maintenance estimate calibrated using reliable real-world progress data.
+
+Never confuse the two values.
+
+C. Body status classification
+
+Classify adult BMI as:
+
+Underweight: BMI below 18.5.
+
+Healthy BMI range: 18.5–24.9.
+
+Overweight: 25–29.9.
+
+Obesity: 30 or above.
+
+BMI must be treated as a screening indicator, not a direct measure of muscle mass or body-fat percentage.
+
+Do not let BMI alone determine the user's fitness goal or calorie strategy.
+
+Separate:
+
+Body status.
+
+Fitness goal.
+
+Nutrition strategy.
+
+For example:
+
+A normal-weight person wanting to increase from 65 kg to 70 kg should not automatically be classified as needing fat gain.
+
+A person weighing 75 kg who wants to reach 70 kg should not automatically be classified as overweight.
+
+The user's actual goal, body status and other information must be evaluated together.
+
+5. FITNESS-GOAL CALORIE STRATEGIES
+
+Implement distinct nutrition strategies.
+
+All percentages and calorie ranges below are starting configuration ranges, not universal prescriptions.
+
+A. Healthy Weight Gain — fat_gain
+
+For appropriate users whose goal is to gain overall body mass:
+
+Begin with a modest surplus.
+
+Suggested initial surplus: approximately 8–15% above maintenance.
+
+Alternatively, use an initial configurable surplus of approximately 250–400 kcal/day where appropriate.
+
+Preferred pace determines the selected surplus.
+
+Avoid automatically selecting the highest surplus.
+
+Prioritize sufficient protein, dietary fat, carbohydrates and adequate overall nutrition.
+
+B. Build Muscle — build_muscle
+
+For users prioritizing lean muscle development:
+
+Start with a conservative surplus, approximately 5–10% above maintenance.
+
+Prefer gradual weight gain.
+
+Consider workout frequency and training intensity.
+
+Avoid unnecessary aggressive calorie surpluses.
+
+C. Fat Loss — lose_weight
+
+For appropriate adults:
+
+Start with a moderate deficit, approximately 10–20% below maintenance.
+
+Allow preferred pace to influence the deficit.
+
+Do not automatically prescribe aggressive deficits.
+
+Keep calorie adjustments within configurable safety limits.
+
+Calculate weight-loss rate relative to current body weight.
+
+D. Body Recomposition — recomposition
+
+Generally start near maintenance.
+
+Support a modest deficit when appropriate.
+
+Prioritize sufficient protein and resistance training.
+
+Avoid automatically applying a large surplus or deficit.
+
+E. Maintain Weight — maintain_weight
+
+Start near estimated maintenance.
+
+Use real-world weight trends to calibrate maintenance.
+
+Recalculate targets when weight or activity changes.
+
+F. Safety constraints
+
+The engine must:
+
+Prevent excessive calorie deficits.
+
+Avoid aggressive weight-gain recommendations.
+
+Respect appropriate nutritional safety constraints.
+
+Avoid using BMR as a universal minimum calorie intake threshold.
+
+Handle unusual or inconsistent inputs safely.
+
+Return validation errors rather than producing invalid targets.
+
+Do not assume a fixed minimum calorie value is appropriate for every person.
+
+6. MACRO CALCULATION ENGINE
+
+Implement a consistent macro calculation sequence.
+
+A. Protein
+
+Use configurable, evidence-informed starting ranges for healthy exercising adults:
+
+Fitness goal
+
+Protein range
+
+Build Muscle
+
+1.6–2.0 g/kg
+
+Healthy Weight Gain
+
+1.6–2.0 g/kg
+
+Fat Loss
+
+1.8–2.2 g/kg
+
+Recomposition
+
+1.8–2.2 g/kg
+
+For obesity, use an appropriate reference or adjusted weight where necessary rather than automatically multiplying by total current weight.
+
+Do not treat these ranges as universal requirements for all users.
+
+B. Dietary fat
+
+Use approximately 20–35% of daily calories as an initial configurable range.
+
+Avoid unnecessarily low fat intake.
+
+C. Carbohydrates
+
+Calculate carbohydrates using the remaining calorie allocation after protein and fat.
+
+Consider exercise requirements and the selected macro preference.
+
+D. Calorie validation
+
+Use:
+
+Calories = (Protein × 4) + (Carbohydrates × 4) + (Fat × 9)
+
+Allow for small rounding differences.
+
+E. Fibre
+
+Use approximately 14 g per 1,000 kcal as a general adult starting guideline.
+
+Apply reasonable minimum and maximum safeguards.
+
+Fibre must not be added as an independent macro on top of the calorie equation.
+
+F. Hydration
+
+Use approximately 35 ml/kg/day as an initial estimate where appropriate.
+
+Allow activity-related adjustments.
+
+Do not present this as a universal medical hydration prescription.
+
+G. Weight-proportional recalculation
+
+All weight-dependent calculations must use the latest reliable weight.
+
+Example:
+
+Initial:
+
+Weight: 60 kg.
+
+Target weight: 70 kg.
+
+After seven days:
+
+Latest reliable weight: 61 kg.
+
+The system must recalculate:
+
+BMR.
+
+Estimated TDEE.
+
+Protein.
+
+Fat.
+
+Carbohydrates.
+
+Fibre.
+
+Hydration estimate.
+
+Remaining target-weight difference.
+
+Projected timeline.
+
+However, calorie targets must only change if the user's progress and energy requirements justify an adjustment.
+
+Recalculating macros does not automatically mean increasing or decreasing calories.
+
+7. SMART CALCULATOR UI ON THE HOME PAGE
+
+Update:
+
+src/pages/HomePage.tsx
+
+Add a mobile-friendly segmented tab switcher below the existing greeting header.
+
+Two tabs:
+
+Daily Tracker.
+
+Smart Calculator.
+
+A. Daily Tracker
+
+Preserve the complete existing Home Page experience:
+
+Calorie ring.
+
+Macro cards.
+
+Today's meals.
+
+Water tracking.
+
+Quests.
+
+Existing functionality.
+
+Do not remove or redesign existing functionality unnecessarily.
+
+B. Smart Calculator
+
+Embed the complete Smart Calorie Tracker calculator.
+
+Pre-fill available values from:
+
+User profile.
+
+Latest weight entry.
+
+Existing nutrition goals.
+
+Existing activity information.
+
+Allow users to edit their inputs and see live recalculations.
+
+Include a what-if comparison for:
+
+Build Muscle.
+
+Healthy Weight Gain.
+
+Lose Weight.
+
+Recomposition.
+
+Maintain Weight.
+
+Allow pace selection.
+
+C. Calculation results
+
+Display:
+
+Resting Burn (BMR).
+
+Daily Maintenance Calories (TDEE).
+
+Recommended Target Calories.
+
+Calorie Surplus or Deficit.
+
+BMI.
+
+Body Status.
+
+Fitness Goal.
+
+Protein grams and percentage.
+
+Carbohydrate grams and percentage.
+
+Fat grams and percentage.
+
+Fibre target.
+
+Hydration estimate.
+
+Projected Timeline to Target Weight.
+
+Clearly label predicted results as estimates.
+
+D. Apply to My Daily Goals
+
+Add a clear button:
+
+Apply to My Daily Goals
+
+On click:
+
+Update the user profile.
+
+Update nutrition goals.
+
+Update weight goal.
+
+Update water goal where appropriate.
+
+Persist using the existing useMacroLogStore.
+
+Persist to Supabase for authenticated users.
+
+Preserve localStorage fallback for guests and offline sessions.
+
+Do not silently modify active goals while the user is merely experimenting with calculator inputs.
+
+Only apply changes after explicit confirmation.
+
+E. Weekly AI Check-In card
+
+Show:
+
+Current assessment week.
+
+Days with food logs.
+
+Weight check-ins.
+
+Next assessment date.
+
+Assessment readiness.
+
+Data confidence.
+
+Display appropriate messages such as:
+
+Assessment in progress.
+
+Assessment ready.
+
+Low data confidence.
+
+Assessment completed.
+
+8. BUILD THE 7-DAY ADAPTIVE ASSESSMENT ENGINE
+
+Create:
+
+src/utils/weeklyAssessmentEngine.ts
+
+This should be a pure, testable TypeScript module used by the client and server where appropriate.
+
+It must calculate weekly progress without depending on Gemini.
+
+A. Assessment window
+
+Use:
+
+Current seven-day window.
+
+Previous seven-day window.
+
+Historical assessment data where available.
+
+For the first assessment, use the initial weight and available progress data.
+
+Prefer 14–28 days of data for stronger trend estimation whenever available.
+
+Do not require 14 days before allowing a first weekly check-in, but mark confidence appropriately.
+
+B. Separate actual and trend weight
+
+Maintain:
+
+Latest measured weight.
+
+Seven-day average weight.
+
+Previous seven-day average weight.
+
+Smoothed trend weight.
+
+Weekly weight-change rate.
+
+Use a suitable EWMA, rolling average or linear trend method.
+
+Document the selected algorithm.
+
+Avoid treating temporary water-weight fluctuations as genuine tissue changes.
+
+C. Data quality gate
+
+Evaluate:
+
+Food logging days.
+
+Weight logging days.
+
+Food logging completeness.
+
+Calorie adherence.
+
+Average calorie intake.
+
+Average protein intake.
+
+Weight trend confidence.
+
+Recommended starting thresholds:
+
+At least 5 food logging days out of 7.
+
+Preferably at least 4 distributed weight measurements.
+
+Approximately 80% calorie adherence before automatic calorie tuning.
+
+If data is insufficient:
+
+Do not adjust calories automatically.
+
+Preserve existing nutrition targets.
+
+Display Low Data Confidence.
+
+Explain what additional information is required.
+
+Do not mistake food logging completeness for dietary adherence.
+
+D. Adaptive TDEE
+
+Use the approximate energy-balance relationship:
+
+Approximate Daily Energy Change = (Weight Change Kg × 7700) / Number Of Days
+
+Inferred Maintenance TDEE = Average Daily Calorie Intake - Approximate Daily Energy Change
+
+This is only a rough estimate.
+
+Blend inferred maintenance with formula-based TDEE using a bounded confidence-based approach.
+
+Important:
+
+Do not rely on a single week's weight change.
+
+Use longer-term trends when available.
+
+Account for noisy measurements.
+
+Do not treat 7,700 kcal/kg as an exact physiological constant.
+
+Limit weekly TDEE changes using conservative configurable bounds.
+
+Prevent temporary water-weight fluctuations from creating large maintenance changes.
+
+For the first week, use formula-based TDEE as the primary starting estimate.
+
+9. WEEKLY ADAPTIVE CALORIE ADJUSTMENT RULES
+
+Every seven days, assess progress.
+
+Do not automatically change calories every week.
+
+Only change calorie targets when the evidence supports doing so.
+
+A. Build Muscle / Healthy Weight Gain
+
+First:
+
+Update the latest reliable weight.
+
+Recalculate BMR.
+
+Recalculate estimated TDEE.
+
+Recalculate weight-dependent macros.
+
+Then compare actual weight progression against the user's selected goal pace.
+
+Suggested initial tuning:
+
+If weight gain is consistently slower than the intended pace and adherence is sufficient: consider +100 to +150 kcal/day.
+
+If weight gain is consistently too fast, especially for Build Muscle: consider a modest calorie reduction.
+
+If progress is on target: maintain the existing calorie strategy.
+
+Do not interpret one sudden weight increase as actual muscle or fat gain.
+
+B. Lose Weight
+
+First:
+
+Update weight.
+
+Recalculate BMR and TDEE.
+
+Recalculate protein and other macros.
+
+Then:
+
+Calculate weight loss as a percentage of body weight per week.
+
+If a genuine longer-term plateau occurs despite adequate adherence, consider reducing calories by approximately 100–150 kcal/day.
+
+If weight loss is excessively fast, consider increasing calories by approximately 100–150 kcal/day.
+
+Never violate safety constraints.
+
+A plateau should be determined using a meaningful trend, not one isolated seven-day fluctuation.
+
+C. Recomposition
+
+Keep calories near calibrated maintenance where appropriate.
+
+Update weight-dependent macros.
+
+Consider strength progression and available body measurements.
+
+Avoid unnecessary calorie changes.
+
+D. Maintenance
+
+Recalculate maintenance using actual weight trends.
+
+Keep calories close to calibrated maintenance.
+
+Avoid unnecessary adjustments.
+
+E. Universal rule
+
+If the user is progressing at the intended rate:
+
+Recalculate weight-dependent targets.
+
+Update maintenance estimates where justified.
+
+Keep calorie targets unchanged if the existing strategy remains appropriate.
+
+The engine must distinguish between:
+
+Weight-based recalculation.
+
+Maintenance calibration.
+
+Calorie target adjustment.
+
+These are three separate operations.
+
+10. WEEKLY AI ASSESSMENT USING GEMINI
+
+Extend:
+
+server/mealAiService.ts
+
+server.ts
+
+Reuse the existing @google/genai integration.
+
+Add:
+
+POST /api/assessments/weekly
+
+The endpoint should receive:
+
+Authenticated user profile.
+
+Current nutrition goals.
+
+Last 14 days of weight entries where available.
+
+Daily calorie summaries.
+
+Daily macro summaries.
+
+Food logging completeness.
+
+Deterministic weekly assessment output.
+
+Validate all input data server-side.
+
+Do not trust client-submitted calorie targets or arbitrary assessment results.
+
+A. Strict division of responsibilities
+
+Deterministic TypeScript engine
+
+Must calculate:
+
+BMR.
+
+Estimated TDEE.
+
+Adaptive TDEE.
+
+Weight trends.
+
+Data confidence.
+
+Calorie targets.
+
+Protein.
+
+Carbohydrates.
+
+Fat.
+
+Fibre.
+
+Hydration estimate.
+
+Calorie adjustments.
+
+Safety checks.
+
+Projected timeline.
+
+Gemini AI
+
+Must explain:
+
+Weekly progress.
+
+Weight progression.
+
+Whether the user is on track.
+
+Why calories changed or remained unchanged.
+
+Macro changes.
+
+Adherence.
+
+Practical next-week recommendations.
+
+Gemini must never independently invent, override or modify numerical nutrition targets.
+
+Use structured JSON output with schema validation.
+
+If Gemini is unavailable, times out or produces invalid output, return a deterministic fallback explanation.
+
+B. Required AI response fields
+
+Generate:
+
+headline
+
+bodyChangeAnalysis
+
+calorieAdjustmentReason
+
+actionableTips
+
+confidenceExplanation
+
+Example headline:
+
+"Week 2 Check-In: Your Weight Increased to 51 kg — Nutrition Targets Recalibrated"
+
+The explanation should distinguish measured weight changes from estimated tissue changes.
+
+Provide 2–3 practical recommendations.
+
+Where useful, include Indian food options alongside international nutrition suggestions.
+
+Never make unsupported claims about how much muscle or fat the user gained.
+
+11. WEEKLY ASSESSMENT PERSISTENCE AND SUPABASE
+
+Create an additive migration:
+
+supabase/migrations/<timestamp>_smart_calorie_tracker_and_weekly_assessments.sql
+
+Do not delete or destructively replace existing columns.
+
+A. User profile fields
+
+Where not already present, add:
+
+macro_focus
+
+adaptive_tdee_kcal
+
+last_weekly_assessment_at
+
+B. Nutrition goals fields
+
+Where not already present, add:
+
+macro_focus
+
+adaptive_tdee_kcal
+
+assessment_week_number
+
+Add other necessary fields only after inspecting the existing schema.
+
+Use appropriate defaults and backward-compatible migrations.
+
+C. Weekly assessments table
+
+Create:
+
+public.weekly_assessments
+
+Include:
+
+id
+
+user_id
+
+week_start_date
+
+week_end_date
+
+previous_weight_kg
+
+assessed_weight_kg
+
+previous_trend_weight_kg
+
+assessed_trend_weight_kg
+
+avg_daily_calories
+
+avg_daily_protein
+
+prior_tdee_kcal
+
+calibrated_tdee_kcal
+
+previous_recommended_calories
+
+recommended_calories
+
+recommended_protein
+
+recommended_carbs
+
+recommended_fat
+
+recommended_fibre
+
+food_logged_days
+
+weight_logged_days
+
+adherence_percentage
+
+confidence_level
+
+adjustment_reason
+
+ai_summary
+
+rationale_bullets
+
+calculation_version
+
+status
+
+created_at
+
+Status values:
+
+pending
+
+applied
+
+dismissed
+
+Use appropriate types, constraints, indexes and timestamps.
+
+Prevent duplicate assessments for the same user and assessment period through appropriate database constraints or idempotent server logic.
+
+D. Row Level Security
+
+Implement strict RLS.
+
+Users must only access their own assessments using:
+
+auth.uid() = user_id
+
+Preserve trainer read access through the existing active trainer_client_relationships policies where applicable.
+
+Do not expose other users' private nutrition data.
+
+Use server-side authorization for sensitive operations.
+
+E. Storage compatibility
+
+Preserve:
+
+Supabase persistence for authenticated users.
+
+Existing localStorage/storageService fallback for guests and offline sessions.
+
+Do not create two competing sources of truth.
+
+Handle synchronization and conflicts consistently.
+
+12. WEEKLY ASSESSMENT UI
+
+Add a weekly assessment notification/banner to:
+
+HomePage.
+
+ProgressPage.
+
+GoalsPage.
+
+Only add it where appropriate without cluttering existing interfaces.
+
+A. Assessment readiness
+
+Whenever seven or more days have elapsed since the appropriate goal start date or last successful assessment:
+
+Check whether an assessment is due.
+
+Check whether the period has already been assessed.
+
+Check data quality.
+
+Display the assessment banner when appropriate.
+
+Do not use the goal start date repeatedly in a way that creates duplicate weekly assessments.
+
+The assessment period must advance consistently.
+
+B. Banner
+
+Display:
+
+"7-Day AI Assessment Ready"
+
+Include:
+
+Current weight.
+
+Weekly weight change.
+
+Days logged.
+
+Assessment confidence.
+
+Assessment action.
+
+C. Assessment modal
+
+Show a Before vs After comparison.
+
+Example:
+
+Weight:
+50 kg → 51 kg
+
+Maintenance:
+Previous TDEE → Calibrated TDEE
+
+Calories:
+Previous target → New target
+
+Macros:
+Previous protein/carbs/fat → New protein/carbs/fat
+
+Also display:
+
+Weight trend analysis.
+
+Food adherence.
+
+AI explanation.
+
+Reason for target adjustments.
+
+Actionable next-week recommendations.
+
+Do not show false precision when data confidence is low.
+
+D. Apply Week Targets
+
+Add:
+
+Apply Week Targets
+
+On click:
+
+Update profile weight using the latest valid measurement.
+
+Update nutrition goals.
+
+Update weight goal.
+
+Update water goal where appropriate.
+
+Save adaptive TDEE.
+
+Update assessment week number.
+
+Mark assessment as applied.
+
+Persist to Supabase or guest storage as appropriate.
+
+Provide a clear Before vs After confirmation.
+
+Do not automatically apply new targets without the user's consent.
+
+Allow users to dismiss an assessment.
+
+A dismissed assessment must not repeatedly reappear as a new assessment for the same period.
+
+13. ASSESSMENT SCHEDULING AND RELIABILITY
+
+A weekly assessment must not depend exclusively on a button or the user remembering to open the app.
+
+Implement a reliable due-check mechanism.
+
+Requirements:
+
+Check assessment eligibility when the user opens the application.
+
+Support an on-demand "Run 7-Day AI Assessment" action.
+
+Prevent duplicate assessments.
+
+Track assessment periods.
+
+Handle missed weeks.
+
+Use a reliable scheduled backend process if true background assessment is required.
+
+Do not run assessments for users who have insufficient data.
+
+Do not claim an assessment was executed when it was not.
+
+Use authenticated endpoints and server-side validation.
+
+The assessment engine must be idempotent.
+
+14. GOAL COMPLETION AND MAINTENANCE TRANSITION
+
+Implement a proper goal progression lifecycle.
+
+For example:
+
+A user starts at 50 kg with a target of 70 kg.
+
+As they progress:
+
+50 kg → 51 kg → 52 kg → 53 kg.
+
+Every assessment should:
+
+Recalculate weight-dependent requirements.
+
+Update maintenance estimates when justified.
+
+Update macros.
+
+Evaluate the selected pace.
+
+Adjust calories only when required.
+
+When the target weight is reached:
+
+Detect goal completion.
+
+Stop automatically continuing the previous surplus or deficit.
+
+Calculate an appropriate estimated maintenance target.
+
+Offer the user a maintenance transition.
+
+Allow them to choose another fitness goal.
+
+Apply the same logic to weight loss.
+
+The system should not permanently use the initial weight as the calculation reference.
+
+15. MOBILE-FIRST DESIGN AND EXISTING DESIGN SYSTEM
+
+Preserve existing CALOTHRIX design tokens:
+
+Light background: #F4F3EF
+
+Dark background: #090A0C
+
+Dark cards: #111317
+
+Accent: #C8FF00
+
+Existing font-mono-nums and tabular-nums.
+
+Minimum touch targets: 44px.
+
+Ensure responsive design for:
+
+360px.
+
+375px.
+
+390px.
+
+414px.
+
+430px.
+
+Requirements:
+
+Zero horizontal overflow.
+
+Use responsive grid layouts.
+
+Use compact segmented controls.
+
+Ensure calculator fields are mobile-friendly.
+
+Ensure sticky actions do not overlap mobile bottom navigation.
+
+Preserve light and dark themes.
+
+Maintain accessibility and readable typography.
+
+Do not redesign unrelated existing screens.
+
+16. CALCULATION TRANSPARENCY AND HISTORY
+
+Users must understand how their nutrition targets are determined.
+
+Display:
+
+Initial calculation date.
+
+Latest recalculation date.
+
+Current measured weight.
+
+Smoothed trend weight.
+
+Estimated BMR.
+
+Estimated TDEE.
+
+Adaptive TDEE when available.
+
+Calorie target.
+
+Macro targets.
+
+Selected goal and pace.
+
+Assessment confidence.
+
+Provide an assessment history view.
+
+Users should be able to review previous weekly changes.
+
+For every calorie adjustment, explain:
+
+Previous calorie target.
+
+New calorie target.
+
+Why it changed.
+
+What progress data supported the decision.
+
+Whether the change was automatic or manually applied.
+
+Never silently change nutritional targets.
+
+Store calculation version information so results can be reproduced and audited.
+
+17. TESTING REQUIREMENTS
+
+Write meaningful unit and integration tests.
+
+Use the existing testing infrastructure. Use npx tsx for executable TypeScript tests where appropriate.
+
+Do not merely check whether functions execute. Verify the numerical outputs and safety conditions.
+
+Scenario A: Healthy Weight Gain
+
+Initial:
+
+Current weight: 50 kg.
+
+Target weight: 70 kg.
+
+Goal: fat_gain.
+
+Test:
+
+Initial BMR.
+
+Initial TDEE.
+
+Initial calorie target.
+
+Protein calculation.
+
+Macro calculations.
+
+Seven-day weight progression to 51 kg.
+
+Updated weight-dependent macros.
+
+Adaptive TDEE behavior.
+
+Appropriate calorie adjustment based on actual progress.
+
+Verify that a 1 kg increase is not automatically interpreted as 1 kg of tissue gain.
+
+Scenario B: Weight Loss
+
+Initial:
+
+Current weight: 80 kg.
+
+Target weight: 70 kg.
+
+Goal: lose_weight.
+
+Test:
+
+Appropriate calorie deficit.
+
+Adjusted protein reference weight where necessary.
+
+Safety restrictions.
+
+Weight progression to 79 kg.
+
+Updated TDEE and macros.
+
+Plateau handling.
+
+Excessively fast weight-loss handling.
+
+Scenario C: Build Muscle
+
+Test:
+
+Lean surplus.
+
+Protein.
+
+Carbohydrates.
+
+Workout frequency.
+
+Weekly check-in.
+
+No unnecessary calorie increase when progress is on target.
+
+Scenario D: Body Recomposition
+
+Test:
+
+Near-maintenance calorie strategy.
+
+Appropriate protein.
+
+Macro recalculation.
+
+No unnecessary aggressive deficit.
+
+Scenario E: Weight Fluctuation
+
+Test:
+
+Daily weight variation.
+
+Seven-day average.
+
+EWMA or selected trend calculation.
+
+Water-weight noise.
+
+No excessive calorie adjustment from a single measurement.
+
+Scenario F: Insufficient Data
+
+Test:
+
+Fewer than five food logging days.
+
+Fewer than four weight measurements.
+
+Missing calorie information.
+
+Low data confidence.
+
+No automatic calorie adjustment.
+
+Scenario G: Macro Consistency
+
+Verify:
+
+Calories = Protein × 4 + Carbs × 4 + Fat × 9
+
+Check all macro calculations and rounding behavior.
+
+Scenario H: Goal Completion
+
+Verify:
+
+Target weight detection.
+
+Maintenance transition.
+
+No continued unnecessary surplus or deficit.
+
+New goal selection.
+
+Scenario I: Safety
+
+Verify:
+
+Adolescent pathway.
+
+Pregnancy/breastfeeding restrictions.
+
+Invalid profile data.
+
+Safe calorie adjustments.
+
+AI response validation.
+
+No unsafe calorie targets.
+
+Scenario J: Persistence
+
+Verify:
+
+Authenticated Supabase flow.
+
+Guest localStorage flow.
+
+Assessment application.
+
+Assessment dismissal.
+
+Duplicate prevention.
+
+Historical assessment retrieval.
+
+18. FINAL VERIFICATION AND DELIVERY
+
+After implementation:
+
+Inspect the complete modified code.
+
+Run TypeScript compilation using the existing project configuration.
+
+Run lint checks.
+
+Run unit tests.
+
+Run integration tests.
+
+Run the existing app compilation/build process.
+
+Test POST /api/goals/calculate.
+
+Test POST /api/assessments/weekly.
+
+Verify authenticated and guest flows.
+
+Verify mobile responsiveness.
+
+Verify existing food tracking and AI meal scanning.
+
+Verify the trainer portal.
+
+Verify database migration compatibility.
+
+Verify there are no duplicate calculation engines.
+
+Verify no existing routes or functionality have been broken.
+
+Use the existing project scripts and tools. If compile_applet or lint_applet are available in the environment, execute them; otherwise use the project's actual build and lint commands.
+
+Do not claim tests passed unless they were actually executed.
+
+At the end, provide a clear implementation report containing:
+
+Files inspected.
+
+Files created.
+
+Files modified.
+
+Database changes.
+
+New functions and endpoints.
+
+Scientific calculation changes.
+
+Weekly assessment behavior.
+
+Tests executed.
+
+Actual test results.
+
+Any remaining issues or limitations.
+
+If a required feature cannot be implemented because of missing infrastructure, clearly explain the limitation rather than pretending it is complete.
+
+19. NON-NEGOTIABLE PRODUCT PRINCIPLES
+
+The entire CALOTHRIX Smart Calorie Tracker must follow these principles:
+
+1. Scientific calculations first.
+
+All calorie and macro targets must come from deterministic, explainable calculations.
+
+2. AI explains; it does not invent numbers.
+
+Gemini interprets progress and provides guidance. The deterministic engine controls numerical targets.
+
+3. Recalculate every week.
+
+Assess weight, maintenance and nutritional requirements using the latest reliable data.
+
+4. Adjust calories only when justified.
+
+Do not force calorie changes every seven days.
+
+5. Separate measured weight from trend weight.
+
+Avoid overreacting to temporary weight fluctuations.
+
+6. Recalculate macros when weight changes.
+
+Even when calories remain unchanged, weight-dependent nutritional targets must be updated.
+
+7. Protect user safety.
+
+Use appropriate age pathways, safety restrictions and conservative adjustment limits.
+
+8. Maintain transparency.
+
+Explain why nutritional targets change and allow the user to review and apply weekly recommendations.
+
+9. Preserve the existing application.
+
+Extend the current CALOTHRIX codebase without breaking existing features.
+
+10. Build for long-term adaptation.
+
+A user's calorie and macro requirements change as their body weight, activity, fitness goals and progress change.
+
+The final result should be a scientifically informed, adaptive nutrition tracking system rather than a basic static calorie calculator.
+
+Start by inspecting the existing codebase, then implement the complete feature, run the tests and provide the actual implementation report.

@@ -1,87 +1,153 @@
-import type { FoodItem } from '../types/index.ts';
+import { FOOD_FAMILIES } from '../data/foodFamilies.ts';
+import type { FoodItem, FoodResultGroup, GroupedFoodResults } from '../types/index.ts';
+import { isFoodNutritionallyUsable } from './nutritionUtils.ts';
 
 /**
- * Regional, Indian & Spelling-Variant Alias Map
- * Maps common queries/regional names/spelling variants -> canonical search terms and dish signatures.
- * Strictly respects dish variants: plain dosa !== masala dosa !== thuppa dosa; plain roti !== ghee roti.
+ * Regional, Indian, Transliteration & Spelling-Variant Alias Map
+ * Maps common queries, Kannada/Hindi/South Indian names, and common typos -> canonical search terms.
+ * Respects dish specificity: plain dosa !== masala dosa; cooked rice !== raw rice.
  */
 const ALIAS_EXPANSIONS: Record<string, string[]> = {
-  'akki rotti': ['akki roti', 'rice roti', 'rice flatbread', 'akki rotti'],
+  // Common spelling variations & typos
+  panner: ['paneer', 'cottage cheese'],
+  paner: ['paneer', 'cottage cheese'],
+  panir: ['paneer', 'cottage cheese'],
+  paneer: ['paneer', 'cottage cheese', 'fresh paneer'],
+  chiken: ['chicken', 'chicken breast'],
+  chikken: ['chicken', 'chicken breast'],
+  chkn: ['chicken'],
+  chapatti: ['chapati', 'roti', 'phulka', 'whole wheat roti'],
+  chappati: ['chapati', 'roti', 'phulka'],
+  chapati: ['chapati', 'roti', 'phulka', 'whole wheat roti'],
+  roti: ['roti', 'chapati', 'phulka', 'whole wheat roti'],
+  phulka: ['roti', 'chapati', 'whole wheat roti'],
+  idly: ['idli', 'steamed idli'],
+  idli: ['idli', 'idly', 'steamed idli'],
+  sambhar: ['sambar', 'huli'],
+  sambar: ['sambar', 'sambhar', 'huli'],
+  biriyani: ['biryani'],
+  briyani: ['biryani'],
+  biryani: ['biryani', 'biriyani'],
+  parantha: ['paratha'],
+  paratha: ['paratha', 'parantha'],
+  omlet: ['omelette'],
+  omelette: ['omelette', 'omlet'],
+  daal: ['dal', 'lentil'],
+  dhal: ['dal', 'lentil'],
+
+  // Karnataka regional dishes & Kannada names
+  'akki rotti': ['akki rotti', 'akki roti', 'rice roti'],
   'akki roti': ['akki rotti', 'rice roti'],
   'rice roti': ['akki rotti', 'akki roti'],
-  'ragi mudde': ['ragi ball', 'finger millet ball', 'ragi sankati', 'ragi mudde'],
-  'ragi ball': ['ragi mudde', 'finger millet ball', 'ragi sankati'],
-  chapati: ['roti', 'phulka', 'whole wheat roti', 'chapatti'],
-  chapatti: ['roti', 'chapati', 'phulka'],
-  roti: ['chapati', 'phulka', 'whole wheat roti'],
-  phulka: ['roti', 'chapati', 'whole wheat roti'],
-  'ghee roti': ['thuppa roti', 'butter chapati', 'ghee chapati', 'ghee roti'],
-  'thuppa roti': ['ghee roti', 'ghee chapati'],
-  'thuppa dosa': ['ghee dosa', 'ghee roast dosa', 'tuppa dosa', 'thuppa dosa'],
-  'ghee dosa': ['thuppa dosa', 'ghee roast dosa', 'tuppa dosa'],
-  'masala dosa': ['masala dosa', 'potato palya dosa', 'mysore masala dosa'],
-  'plain dosa': ['plain dosa', 'sada dosa'],
-  idli: ['idly', 'steamed rice cake', 'idli'],
-  idly: ['idli'],
-  sambar: ['sambhar', 'toor dal tamarind', 'sambar'],
-  sambhar: ['sambar'],
-  rasam: ['saaru', 'charu', 'tomato pepper rasam', 'rasam'],
-  saaru: ['rasam'],
-  'curd rice': ['thayir sadam', 'dahi chawal', 'mosaranna', 'perugu annam', 'curd rice'],
+  'ragi mudde': ['ragi mudde', 'ragi ball', 'finger millet ball', 'ragi sankati'],
+  'ragi ball': ['ragi mudde', 'finger millet ball'],
+  'ragi rotti': ['ragi rotti', 'ragi roti', 'finger millet flatbread'],
+  'ragi roti': ['ragi rotti'],
+  'jolada rotti': ['jolada rotti', 'jowar roti', 'jowar bhakri', 'sorghum'],
+  'jowar roti': ['jolada rotti', 'jowar bhakri'],
+  'neer dosa': ['neer dosa', 'neer dose', 'water dosa'],
+  'set dosa': ['set dosa', 'set dose', 'sponge dosa'],
+  'mysore masala dosa': ['mysore masala dosa', 'mysuru masala dose', 'mysore dosa'],
+  'maddur vada': ['maddur vada', 'maddur vade'],
+  'bisi bele bath': ['bisibele bath', 'bisi bele bath', 'bisibelebath'],
+  'bisibele bath': ['bisibele bath', 'bisi bele bath'],
+  puliyogare: ['puliyogare', 'tamarind rice', 'pulihora'],
+  'tamarind rice': ['puliyogare', 'pulihora'],
+  'vangi bath': ['vangi bath', 'vangibath', 'brinjal rice'],
+  'brinjal rice': ['vangi bath', 'vangibath'],
+  chitranna: ['lemon rice', 'chitranna'],
+  'lemon rice': ['lemon rice', 'chitranna', 'elumichai sadam'],
+  mosaranna: ['curd rice', 'mosaranna', 'dahi chawal', 'thayir sadam'],
+  'curd rice': ['curd rice', 'mosaranna', 'dahi chawal', 'thayir sadam', 'dahi bhaat'],
   'thayir sadam': ['curd rice', 'mosaranna'],
   'dahi chawal': ['curd rice', 'mosaranna'],
-  mosaranna: ['curd rice', 'thayir sadam', 'dahi chawal'],
   'perugu annam': ['curd rice', 'mosaranna'],
-  chawal: ['white rice cooked', 'steamed rice', 'cooked rice', 'rice'],
-  'lemon rice': ['chitranna', 'elumichai sadam', 'nimmakaya pulihora', 'lemon rice'],
-  chitranna: ['lemon rice'],
-  'bisibele bath': ['bisi bele bath', 'bisibelebath', 'bisi bele bhath', 'sambar rice'],
-  'bisi bele bath': ['bisibele bath'],
-  'chicken curry': ['kodi kura', 'murgh curry', 'homestyle chicken curry', 'chicken curry'],
-  'grilled chicken': ['chicken tikka', 'grilled chicken breast', 'roasted chicken'],
-  'chicken tikka': ['grilled chicken', 'tandoori chicken'],
-  'egg bhurji': ['anda bhurji', 'scrambled egg masala', 'egg bhurji'],
-  'anda bhurji': ['egg bhurji'],
-  'paneer bhurji': ['scrambled cottage cheese', 'paneer bhurji'],
-  'boiled egg': ['whole eggs boiled', 'hard boiled egg'],
-  'fried egg': ['egg fry', 'sunny side up', 'omelette', 'omlet'],
-  omelette: ['omlet', 'fried egg'],
-  omlet: ['omelette'],
-  quail: ['quial'],
-  toor: ['red gram', 'arhar', 'tur dal', 'toor dal'],
-  arhar: ['red gram', 'toor dal'],
-  moong: ['green gram', 'mung'],
-  mung: ['green gram', 'moong'],
-  urad: ['black gram', 'uddina'],
-  chana: ['bengal gram', 'chickpea', 'kabuli', 'garbanzo'],
-  garbanzo: ['chickpeas', 'kabuli chana', 'chana', 'bengal gram'],
-  'garbanzo beans': ['garbanzo', 'chickpeas cooked', 'boiled chickpeas'],
-  skyr: ['icelandic skyr', 'icelandic yogurt', 'greek yoghurt', 'high protein yogurt'],
-  'icelandic skyr': ['skyr', 'icelandic yogurt'],
-  besan: ['bengal gram flour', 'chickpea flour'],
-  palak: ['spinach'],
-  dahi: ['curd', 'yogurt', 'yoghurt'],
-  curd: ['dahi', 'yogurt', 'yoghurt'],
-  paneer: ['cottage cheese'],
-  bhindi: ['ladies finger', 'okra'],
-  baingan: ['brinjal', 'eggplant'],
-  alu: ['potato', 'aloo'],
-  aloo: ['potato'],
-  atta: ['whole wheat', 'wheat flour'],
-  maida: ['refined wheat flour'],
-  poha: ['kanda poha', 'rice flakes', 'flattened rice', 'avalakki'],
-  'kanda poha': ['poha', 'avalakki', 'flattened rice cooked'],
+  kosambari: ['kosambari', 'moong dal salad'],
+  saaru: ['saaru', 'rasam', 'tili saaru', 'tomato rasam'],
+  rasam: ['rasam', 'saaru', 'tomato rasam'],
+  huli: ['huli', 'karnataka sambar', 'sambar'],
+  avarekalu: ['avarekalu', 'hyacinth bean', 'field bean'],
+  'ragi ganji': ['ragi ganji', 'ragi malt', 'ragi porridge'],
+  'ragi malt': ['ragi ganji', 'ragi malt'],
+  holige: ['holige', 'obbattu', 'puran poli'],
+  obbattu: ['obbattu', 'holige', 'puran poli'],
+  'puran poli': ['holige', 'obbattu', 'puranpoli'],
+  'mysore pak': ['mysore pak', 'mysuru pak'],
+  uppittu: ['upma', 'suji upma', 'rava upma'],
+  upma: ['upma', 'uppittu', 'suji upma', 'rava upma'],
   avalakki: ['poha', 'kanda poha', 'rice flakes'],
-  upma: ['uppittu', 'rava upma', 'suji upma'],
-  uppittu: ['upma'],
-  khichdi: ['khichuri', 'pongal'],
-  ragi: ['finger millet', 'nachni'],
+  poha: ['poha', 'kanda poha', 'avalakki', 'flattened rice'],
+  'kanda poha': ['kanda poha', 'poha', 'avalakki'],
+  majjige: ['buttermilk', 'chaas', 'majjige'],
+  chaas: ['buttermilk', 'chaas', 'majjige'],
+
+  // Everyday Indian food translations & regional terms
+  'ghee roti': ['ghee roti', 'thuppa roti', 'butter chapati'],
+  'thuppa roti': ['ghee roti', 'ghee chapati'],
+  'thuppa dosa': ['thuppa dosa', 'ghee dosa', 'ghee roast dosa', 'tuppa dosa'],
+  'ghee dosa': ['thuppa dosa', 'ghee roast dosa'],
+  'masala dosa': ['masala dosa', 'mysore masala dosa'],
+  'plain dosa': ['plain dosa', 'sada dosa'],
+  dose: ['dosa'],
+  dosai: ['dosa'],
+  chawal: ['cooked rice', 'white rice', 'rice'],
+  anna: ['cooked rice', 'sona masoori rice', 'white rice'],
+  sadam: ['cooked rice', 'white rice'],
+  basmati: ['basmati rice', 'cooked basmati rice', 'basmati'],
+  'cooked rice': ['cooked rice', 'white rice cooked', 'steamed rice', 'boiled rice', 'basmati rice cooked'],
+  'chicken breast': ['chicken breast', 'boiled chicken breast', 'grilled chicken breast'],
+  'boiled chicken': ['boiled chicken', 'boiled chicken breast', 'poached chicken'],
+  'grilled chicken': ['grilled chicken', 'grilled chicken breast', 'chicken tikka'],
+  'chicken curry': ['chicken curry', 'murgh curry', 'homestyle chicken curry'],
+  'boiled egg': ['boiled egg', 'whole eggs boiled', 'hard boiled egg'],
+  'egg bhurji': ['egg bhurji', 'anda bhurji', 'scrambled egg'],
+  'anda bhurji': ['egg bhurji'],
+  'fried egg': ['fried egg', 'egg fry', 'sunny side up'],
+  'paneer tikka': ['paneer tikka'],
+  'paneer bhurji': ['paneer bhurji'],
+  'paneer butter masala': ['paneer butter masala', 'paneer makhani'],
+  'low fat paneer': ['low fat paneer', 'low-fat paneer', 'high protein paneer'],
+  'toor dal': ['toor dal', 'red gram dal', 'arhar dal', 'togari bele'],
+  'togari bele': ['toor dal', 'red gram dal'],
+  toor: ['toor dal', 'red gram', 'arhar'],
+  arhar: ['toor dal', 'red gram'],
+  moong: ['moong dal', 'green gram', 'mung'],
+  mung: ['moong dal', 'green gram'],
+  urad: ['urad dal', 'black gram', 'uddina'],
+  chana: ['chana', 'bengal gram', 'chickpea', 'kabuli chana'],
+  garbanzo: ['chickpeas', 'kabuli chana', 'chana'],
+  besan: ['besan', 'bengal gram flour', 'chickpea flour'],
+  palak: ['palak', 'spinach'],
+  dahi: ['curd', 'dahi', 'yogurt'],
+  curd: ['curd', 'dahi', 'mosaru', 'yogurt'],
+  mosaru: ['curd', 'dahi'],
+  bhindi: ['bhindi', 'ladies finger', 'okra'],
+  baingan: ['brinjal', 'eggplant'],
+  aloo: ['potato', 'aloo'],
+  alu: ['potato', 'aloo'],
+  atta: ['whole wheat', 'wheat flour', 'atta'],
+  maida: ['refined wheat flour', 'maida'],
+  ragi: ['ragi', 'finger millet', 'nachni'],
   nachni: ['ragi', 'finger millet'],
-  bajra: ['pearl millet', 'kambu', 'sajje'],
-  jowar: ['sorghum', 'jola'],
+  bajra: ['bajra', 'pearl millet', 'sajje'],
+  jowar: ['jowar', 'sorghum', 'jolada'],
+  quail: ['quail', 'quial'],
+  skyr: ['skyr', 'icelandic yogurt', 'greek yoghurt'],
 };
 
-// Variants where modifiers MUST NOT collapse into plain counterparts
+// Map normalized family root tokens to family IDs for single-concept family expansion
+const FAMILY_QUERY_MAP = new Map<string, string>();
+for (const fam of FOOD_FAMILIES) {
+  FAMILY_QUERY_MAP.set(fam.id.toLowerCase(), fam.id);
+  FAMILY_QUERY_MAP.set(fam.slug.toLowerCase(), fam.id);
+  for (const al of fam.aliases) {
+    const clean = al.toLowerCase().trim();
+    if (!clean.includes(' ') && !FAMILY_QUERY_MAP.has(clean)) {
+      FAMILY_QUERY_MAP.set(clean, fam.id);
+    }
+  }
+}
+
 const STRICT_MODIFIER_TOKENS = [
   'ghee',
   'thuppa',
@@ -89,7 +155,18 @@ const STRICT_MODIFIER_TOKENS = [
   'masala',
   'butter',
   'cheese',
-  'paneer',
+  'tikka',
+  'bhurji',
+  'biryani',
+  'pulao',
+  'curry',
+  'paratha',
+  'sandwich',
+  'roll',
+  'lemon',
+  'curd',
+  'basmati',
+  'brown',
   'fried',
   'boiled',
   'raw',
@@ -100,34 +177,70 @@ const STRICT_MODIFIER_TOKENS = [
   'steamed',
   'dry',
   'dried',
-  'egg',
-  'chicken',
-  'mutton',
-  'fish',
+  'breast',
+  'white',
+  'whites',
+  'low',
+  'toor',
+  'moong',
+  'masoor',
+  'chana',
+  'urad',
+  'neer',
+  'set',
+  'mysore',
+  'maddur',
+  'akki',
+  'ragi',
+  'jolada',
 ];
 
-/**
- * Canonical 5-tier source priority:
- * 1: IFCT 2017 / Verified Cooked Reference
- * 2: USDA FDC / NCCDB Clinical Reference
- * 3: Verified Manufacturer / Branded Labels
- * 4: Community Open Food Facts (ODbL)
- * 5: Personal Custom Foods
- */
+const STOP_WORDS = new Set(['of', 'the', 'and', 'with', 'in', 'a', 'an', 'for', 'style', 'dish']);
+
+export const RESULT_GROUP_META: Array<{
+  key: FoodResultGroup;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: 'basic_ingredient',
+    label: 'Basic Ingredients',
+    description: 'Raw, fresh, or single-ingredient staples (per 100g)',
+  },
+  {
+    key: 'cooked_food',
+    label: 'Cooked Foods',
+    description: 'Plain boiled, steamed, grilled, or cooked staples',
+  },
+  {
+    key: 'prepared_dish',
+    label: 'Prepared Dishes',
+    description: 'Indian recipes, regional dishes, curries & meals',
+  },
+];
+
 export function getCanonicalSourcePriority(food: FoodItem): number {
   if (food.isCustom || food.sourceType === 'personal_custom') return 5;
   const src = (food.sourceName || '').toLowerCase();
   if (
     src.includes('ifct') ||
+    src.includes('indb') ||
     src.includes('calothrix verified') ||
-    food.id.startsWith('ifct-')
+    src.includes('calorex validated') ||
+    food.id.startsWith('ifct-') ||
+    food.id.startsWith('indb-')
   ) {
     return 1;
   }
-  if (src.includes('usda') || src.includes('nccdb')) {
+  if (src.includes('usda') || src.includes('nccdb') || src.includes('uk cofid') || src.includes('us fct')) {
     return food.sourceType === 'branded' ? 3 : 2;
   }
-  if (food.sourceType === 'branded' || src.includes('manufacturer') || src.includes('restaurant') || src.includes('supplement')) {
+  if (
+    food.sourceType === 'branded' ||
+    src.includes('manufacturer') ||
+    src.includes('restaurant') ||
+    src.includes('supplement')
+  ) {
     return 3;
   }
   if (src.includes('open food facts') || food.sourceType === 'community') {
@@ -139,6 +252,51 @@ export function getCanonicalSourcePriority(food: FoodItem): number {
   return food.sourceType === 'verified_reference' ? 2 : 4;
 }
 
+export function inferFoodResultGroup(food: FoodItem): FoodResultGroup {
+  if (food.resultGroup) return food.resultGroup;
+  const n = food.name.toLowerCase();
+  const st = (food.foodState || '').toLowerCase();
+  if (['raw', 'dry', 'dried', 'fresh', 'ripe', 'tender', 'mature'].includes(st)) {
+    return 'basic_ingredient';
+  }
+  if (
+    ['boiled', 'steamed', 'grilled', 'poached'].includes(st) &&
+    !/\b(curry|masala|biryani|sambar|dosa|idli|paratha|roti|vada|tikka|bhurji)\b/.test(n)
+  ) {
+    return 'cooked_food';
+  }
+  if (/^(white rice|brown rice|basmati rice|sona masoori|boiled|steamed|grilled|cooked\s+\w+\s*)$/i.test(n)) {
+    return 'cooked_food';
+  }
+  return 'prepared_dish';
+}
+
+export function groupSearchResultsByType(items: FoodItem[]): GroupedFoodResults {
+  const grouped: GroupedFoodResults = {
+    basic_ingredient: [],
+    cooked_food: [],
+    prepared_dish: [],
+  };
+  for (const item of items) {
+    const g = inferFoodResultGroup(item);
+    grouped[g].push(item);
+  }
+  return grouped;
+}
+
+export function getNonEmptyResultGroups(items: FoodItem[]): Array<{
+  key: FoodResultGroup;
+  label: string;
+  description: string;
+  items: FoodItem[];
+}> {
+  const grouped = groupSearchResultsByType(items);
+  return RESULT_GROUP_META.map((meta) => ({
+    ...meta,
+    items: grouped[meta.key],
+  })).filter((g) => g.items.length > 0);
+}
+
 function normalizeText(s: string): string {
   return s
     .toLowerCase()
@@ -147,7 +305,6 @@ function normalizeText(s: string): string {
     .trim();
 }
 
-// Reusable flat DP rows to avoid allocating nested arrays on every keystroke
 const MAX_DP_LEN = 64;
 let dpPrev2 = new Int32Array(MAX_DP_LEN + 1);
 let dpPrev1 = new Int32Array(MAX_DP_LEN + 1);
@@ -158,31 +315,8 @@ function damerauLevenshtein(a: string, b: string): number {
   const n = b.length;
   if (m === 0) return n;
   if (n === 0) return m;
-  if (Math.abs(m - n) > 3) return 99;
-  if (n > MAX_DP_LEN || m > MAX_DP_LEN) {
-    // Rare very long token fallback
-    const p2 = new Int32Array(n + 1);
-    const p1 = new Int32Array(n + 1);
-    const cur = new Int32Array(n + 1);
-    for (let j = 0; j <= n; j++) p1[j] = j;
-    for (let i = 1; i <= m; i++) {
-      cur[0] = i;
-      const ai = a.charCodeAt(i - 1);
-      for (let j = 1; j <= n; j++) {
-        const bj = b.charCodeAt(j - 1);
-        const cost = ai === bj ? 0 : 1;
-        let best = Math.min(p1[j] + 1, cur[j - 1] + 1, p1[j - 1] + cost);
-        if (i > 1 && j > 1 && ai === b.charCodeAt(j - 2) && a.charCodeAt(i - 2) === bj) {
-          const trans = p2[j - 2] + 1;
-          if (trans < best) best = trans;
-        }
-        cur[j] = best;
-      }
-      p2.set(p1);
-      p1.set(cur);
-    }
-    return p1[n];
-  }
+  if (Math.abs(m - n) > 2) return 99;
+  if (n > MAX_DP_LEN || m > MAX_DP_LEN) return 99;
 
   for (let j = 0; j <= n; j++) dpPrev1[j] = j;
 
@@ -228,14 +362,14 @@ function getQueryVariants(normalizedQuery: string): string[] {
 
   const variants = new Set<string>([normalizedQuery]);
   if (direct) {
-    for (let i = 0; i < direct.length; i++) variants.add(direct[i]);
+    for (let i = 0; i < direct.length; i++) variants.add(normalizeText(direct[i]));
   }
   if (hasTokenExp) {
     for (const t of tokens) {
       const exp = ALIAS_EXPANSIONS[t];
       if (exp) {
         for (let i = 0; i < exp.length; i++) {
-          variants.add(normalizedQuery.replace(t, exp[i]));
+          variants.add(normalizeText(normalizedQuery.replace(t, exp[i])));
         }
       }
     }
@@ -243,14 +377,39 @@ function getQueryVariants(normalizedQuery: string): string[] {
   return [...variants];
 }
 
+function resolveTargetFamilyId(normalizedQuery: string): string | null {
+  const tokens = normalizedQuery.split(' ').filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
+  if (tokens.length !== 1) return null;
+  const tok = tokens[0];
+  if (FAMILY_QUERY_MAP.has(tok)) return FAMILY_QUERY_MAP.get(tok)!;
+  const direct = ALIAS_EXPANSIONS[tok];
+  if (direct) {
+    for (const d of direct) {
+      const dClean = normalizeText(d).split(' ')[0];
+      if (FAMILY_QUERY_MAP.has(dClean)) return FAMILY_QUERY_MAP.get(dClean)!;
+    }
+  }
+  // Typo fallback for single-token family queries (e.g., panner, chiken, chapatti)
+  if (tok.length >= 4) {
+    for (const [aliasKey, famId] of FAMILY_QUERY_MAP.entries()) {
+      if (Math.abs(aliasKey.length - tok.length) <= 1 && damerauLevenshtein(tok, aliasKey) === 1) {
+        return famId;
+      }
+    }
+  }
+  return null;
+}
+
 interface SearchableCorpus {
   nameNorm: string;
+  nameMainNorm: string;
+  nameWords: string[];
   aliasesNorm: string[];
-  ingredientsNorm: string;
   brandNorm: string;
   codeLower: string;
   sourceIdLower: string;
   stateNorm: string;
+  familyId: string;
   tokens: string[];
 }
 
@@ -261,30 +420,42 @@ function getSearchableCorpus(food: FoodItem): SearchableCorpus {
   if (cached) return cached;
 
   const nameNorm = normalizeText(food.name);
+  const nameMainNorm = normalizeText(food.name.replace(/\([^)]*\)/g, ' '));
+  const nameWords = nameNorm.split(' ').filter((w) => w.length >= 2);
   const aliasesNorm = [
     ...(food.aliases || []),
     ...(food.regionalNames || []),
-  ].map(normalizeText);
-  const ingredientsNorm = normalizeText(food.ingredientsText || '');
+  ]
+    .map(normalizeText)
+    .filter(Boolean);
   const brandNorm = normalizeText(food.brand || '');
   const codeLower = (food.foodCode || '').toLowerCase();
   const sourceIdLower = (food.sourceId || '').toLowerCase();
   const stateNorm = normalizeText(food.foodState || '');
-  const allText = `${nameNorm} ${aliasesNorm.join(' ')} ${brandNorm} ${ingredientsNorm} ${stateNorm}`;
+  const familyId = (food.foodFamilyId || food.canonicalFamily || '').toLowerCase();
+  const allText = `${nameNorm} ${aliasesNorm.join(' ')} ${brandNorm} ${stateNorm}`;
   const tokens = [...new Set(allText.split(' ').filter((w) => w.length >= 2))];
 
   const corpus: SearchableCorpus = {
     nameNorm,
+    nameMainNorm,
+    nameWords,
     aliasesNorm,
-    ingredientsNorm,
     brandNorm,
     codeLower,
     sourceIdLower,
     stateNorm,
+    familyId,
     tokens,
   };
   CORPUS_CACHE.set(food, corpus);
   return corpus;
+}
+
+function hasWordBoundaryMatch(text: string, token: string): boolean {
+  if (!text.includes(token)) return false;
+  const words = text.split(' ');
+  return words.some((w) => w === token || w.startsWith(token));
 }
 
 export interface ScoredFoodMatch {
@@ -302,82 +473,81 @@ export function scoreFoodMatch(food: FoodItem, rawQuery: string): ScoredFoodMatc
   // Barcode / exact source code match
   const cleanDigits = rawQuery.replace(/\D/g, '');
   if (cleanDigits.length >= 6 && food.barcode === cleanDigits) {
-    return { food, score: 1000, matchReason: 'barcode_exact' };
+    return { food, score: 1200, matchReason: 'barcode_exact' };
   }
   if (corpus.codeLower === qNorm || corpus.sourceIdLower === qNorm) {
-    return { food, score: 950, matchReason: 'code_exact' };
+    return { food, score: 1100, matchReason: 'code_exact' };
   }
+
+  const variants = getQueryVariants(qNorm);
+  const queryTokens = qNorm.split(' ').filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
+  const isMultiToken = queryTokens.length >= 2;
+  const targetFamilyId = resolveTargetFamilyId(qNorm);
 
   let bestScore = 0;
   let matchReason = '';
 
-  const variants = getQueryVariants(qNorm);
-
+  // 1. Direct exact, alias, prefix, and phrase matching across query + expanded variants
   for (const v of variants) {
-    // 1. Exact food name match
-    if (corpus.nameNorm === v) {
-      bestScore = Math.max(bestScore, v === qNorm ? 500 : 420);
-      matchReason = v === qNorm ? 'exact_name' : 'alias_exact';
-    }
-    // 2. Exact alias / regional name match
-    else if (corpus.aliasesNorm.some((a) => a === v)) {
-      bestScore = Math.max(bestScore, 440);
+    const isOrig = v === qNorm;
+    if (corpus.nameNorm === v || corpus.nameMainNorm === v) {
+      bestScore = Math.max(bestScore, isOrig ? 640 : 540);
+      matchReason = isOrig ? 'exact_name' : 'alias_exact';
+    } else if (corpus.aliasesNorm.some((a) => a === v)) {
+      bestScore = Math.max(bestScore, isOrig ? 560 : 500);
       matchReason = 'alias_regional';
-    }
-    // 3. Name starts with query or contains full phrase
-    else if (corpus.nameNorm.startsWith(v)) {
-      bestScore = Math.max(bestScore, 340);
+    } else if (corpus.nameNorm.startsWith(v + ' ') || corpus.nameMainNorm.startsWith(v + ' ')) {
+      bestScore = Math.max(bestScore, isOrig ? 420 : 370);
       matchReason = 'name_prefix';
-    } else if (corpus.nameNorm.includes(v)) {
-      bestScore = Math.max(bestScore, 280);
+    } else if (corpus.nameNorm.startsWith(v)) {
+      bestScore = Math.max(bestScore, isOrig ? 360 : 320);
+      matchReason = 'name_prefix';
+    } else if (hasWordBoundaryMatch(corpus.nameNorm, v) || corpus.nameNorm.includes(' ' + v + ' ') || corpus.nameNorm.endsWith(' ' + v)) {
+      bestScore = Math.max(bestScore, isOrig ? 310 : 280);
       matchReason = 'name_phrase';
-    } else if (corpus.aliasesNorm.some((a) => a.includes(v))) {
-      bestScore = Math.max(bestScore, 260);
+    } else if (corpus.aliasesNorm.some((a) => a.startsWith(v) || a.includes(' ' + v))) {
+      bestScore = Math.max(bestScore, isOrig ? 285 : 255);
       matchReason = 'alias_phrase';
-    } else if (corpus.brandNorm.includes(v)) {
-      bestScore = Math.max(bestScore, 210);
+    } else if (corpus.brandNorm && (corpus.brandNorm === v || corpus.brandNorm.startsWith(v))) {
+      bestScore = Math.max(bestScore, 220);
       matchReason = 'brand_match';
     }
   }
 
-  // 4. Token-level & typo-tolerant matching
-  const queryTokens = qNorm.split(' ').filter((w) => w.length >= 2);
-  if (queryTokens.length > 0) {
-    let matchedTokenCount = 0;
-    let tokenScore = 0;
+  // 2. Token-level & typo-tolerant matching
+  let matchedTokenCount = 0;
+  let tokenScore = 0;
 
+  if (queryTokens.length > 0) {
     for (const qt of queryTokens) {
       const qtExp = ALIAS_EXPANSIONS[qt];
       let tokenBest = 0;
 
-      // First check exact token & alias token substrings (zero DP cost)
-      if (corpus.nameNorm.includes(qt)) {
-        tokenBest = 95;
-      } else if (corpus.aliasesNorm.some((a) => a.includes(qt))) {
-        tokenBest = 74;
-      } else if (corpus.ingredientsNorm.includes(qt)) {
-        tokenBest = 38;
-      } else if (corpus.stateNorm.includes(qt)) {
-        tokenBest = 45;
+      if (hasWordBoundaryMatch(corpus.nameNorm, qt)) {
+        tokenBest = 110;
+      } else if (corpus.aliasesNorm.some((a) => hasWordBoundaryMatch(a, qt))) {
+        tokenBest = 92;
+      } else if (corpus.stateNorm === qt || corpus.stateNorm.startsWith(qt)) {
+        tokenBest = 70;
+      } else if (corpus.brandNorm.includes(qt)) {
+        tokenBest = 55;
       }
 
-      if (tokenBest < 74 && qtExp) {
+      if (tokenBest < 90 && qtExp) {
         for (let i = 0; i < qtExp.length; i++) {
           const qtv = normalizeText(qtExp[i]);
           const subTokens = qtv.split(' ').filter(Boolean);
-          if (subTokens.every((st) => corpus.nameNorm.includes(st))) {
-            tokenBest = Math.max(tokenBest, 68);
-          } else if (subTokens.every((st) => corpus.aliasesNorm.some((a) => a.includes(st)))) {
-            tokenBest = Math.max(tokenBest, 74);
-          } else if (subTokens.every((st) => corpus.ingredientsNorm.includes(st))) {
-            tokenBest = Math.max(tokenBest, 38);
+          if (subTokens.every((st) => hasWordBoundaryMatch(corpus.nameNorm, st))) {
+            tokenBest = Math.max(tokenBest, 96);
+          } else if (subTokens.every((st) => corpus.aliasesNorm.some((a) => hasWordBoundaryMatch(a, st)))) {
+            tokenBest = Math.max(tokenBest, 86);
           } else if (subTokens.every((st) => corpus.stateNorm.includes(st))) {
-            tokenBest = Math.max(tokenBest, 45);
+            tokenBest = Math.max(tokenBest, 65);
           }
         }
       }
 
-      // Only run Damerau-Levenshtein typo tolerance once per unmatched token >= 4 chars
+      // Fast typo tolerance (Damerau-Levenshtein) for unmatched tokens >= 4 chars
       if (tokenBest === 0 && qt.length >= 4) {
         const qtLen = qt.length;
         const maxAllowedDist = qtLen >= 6 ? 2 : 1;
@@ -385,14 +555,17 @@ export function scoreFoodMatch(food: FoodItem, rawQuery: string): ScoredFoodMatc
         const qt1 = qt.charCodeAt(1);
         for (let i = 0; i < corpus.tokens.length; i++) {
           const ft = corpus.tokens[i];
-          if (Math.abs(ft.length - qtLen) <= maxAllowedDist && !(qt === 'butter' && ft === 'batter')) {
-            // Fast 2-char prefix/overlap pre-filter for edit distance <= 2
+          if (
+            Math.abs(ft.length - qtLen) <= maxAllowedDist &&
+            !(qt === 'butter' && ft === 'batter') &&
+            !(qt === 'rice' && ft === 'rich')
+          ) {
             if (ft.charCodeAt(0) !== qt0 && ft.charCodeAt(0) !== qt1 && ft.charCodeAt(1) !== qt0) {
               continue;
             }
             const dist = damerauLevenshtein(qt, ft);
             if (dist <= maxAllowedDist) {
-              tokenBest = dist === 1 ? 30 : 20;
+              tokenBest = dist === 1 ? 62 : 38;
               if (!matchReason) matchReason = 'fuzzy_typo';
               break;
             }
@@ -407,70 +580,101 @@ export function scoreFoodMatch(food: FoodItem, rawQuery: string): ScoredFoodMatc
     }
 
     if (matchedTokenCount === queryTokens.length) {
-      bestScore = Math.max(bestScore, 160 + tokenScore);
+      bestScore = Math.max(bestScore, 220 + tokenScore);
       if (!matchReason) matchReason = 'all_tokens';
-    } else if (queryTokens.length > 1 && matchedTokenCount >= Math.ceil(queryTokens.length * 0.6)) {
-      bestScore = Math.max(bestScore, 75 + tokenScore);
-      if (!matchReason) matchReason = 'partial_tokens';
+    } else if (isMultiToken) {
+      // Strict multi-token relevance guard:
+      // Searching "Paneer Tikka" or "Cooked Rice" or "Chicken Breast" should NOT flood with items missing the qualifying token!
+      if (bestScore < 250) {
+        return null;
+      }
+    }
+  }
+
+  // 3. Controlled Food-Family expansion ONLY for single-concept family queries (e.g., "Paneer", "Rice", "Chicken", "Egg", "Dal")
+  if (targetFamilyId && !isMultiToken && corpus.familyId === targetFamilyId) {
+    if (bestScore === 0) {
+      bestScore = 135;
+      matchReason = 'family_member';
+    } else {
+      bestScore += 45;
+    }
+    // Boost canonical parent foods within the family
+    if (!food.parentFoodId) {
+      bestScore += 28;
     }
   }
 
   if (bestScore <= 0) return null;
 
-  // 5. Modifier preservation: never confuse Plain Dosa with Masala Dosa / Ghee Dosa, Raw Rice with Cooked Rice, Boiled Egg with Fried Egg
+  // 4. Modifier & Specificity Preservation
   for (const mod of STRICT_MODIFIER_TOKENS) {
-    const queryHasMod = qNorm.includes(mod);
-    const foodHasMod = corpus.nameNorm.includes(mod) || corpus.stateNorm.includes(mod);
+    const queryHasMod = queryTokens.includes(mod) || qNorm.includes(' ' + mod) || qNorm.startsWith(mod + ' ');
+    const foodHasMod =
+      hasWordBoundaryMatch(corpus.nameNorm, mod) ||
+      corpus.aliasesNorm.some((a) => hasWordBoundaryMatch(a, mod)) ||
+      corpus.stateNorm === mod;
+
     if (queryHasMod && foodHasMod) {
-      bestScore += 55;
+      bestScore += 65;
     } else if (queryHasMod && !foodHasMod) {
-      bestScore -= 25;
-    } else if (!queryHasMod && foodHasMod && ['ghee', 'masala', 'fried', 'thuppa'].includes(mod)) {
-      // Gently prefer plain variants when user didn't ask for ghee/masala/fried, while still returning both
-      bestScore -= 12;
+      // Strongly demote items lacking an explicitly requested dish modifier (e.g. "tikka", "breast", "lemon", "curd", "basmati")
+      bestScore -= 140;
+    } else if (!queryHasMod && foodHasMod && ['ghee', 'masala', 'fried', 'thuppa', 'butter', 'sandwich', 'roll', 'soup'].includes(mod)) {
+      // Gently prefer simpler base foods ahead of heavily modified dishes when user queried the root food
+      bestScore -= 18;
     }
   }
 
-  // 6. Raw vs cooked collision guard:
-  // If user didn't explicitly ask for raw/dry/uncooked/flour, prioritize cooked/prepared foods over raw agricultural ingredients
-  const queryAsksRawOrDry = /\b(raw|dry|uncooked|flour|atta|grain|powder|whole|seed)\b/i.test(qNorm);
-  const queryAsksPrepared = /\b(cooked|boiled|steamed|grilled|roasted|fried|prepared|curry|tikka|biryani|masala|porridge|oatmeal|bhurji|dosa|roti|idli|sambar)\b/i.test(
+  // 5. Raw vs Cooked Collision Guard
+  const queryAsksRaw = /\b(raw|dry|uncooked|flour|atta|grain|powder|seed)\b/i.test(qNorm);
+  const queryAsksCooked = /\b(cooked|boiled|steamed|grilled|roasted|fried|prepared|curry|tikka|biryani|masala|bhurji|dosa|roti|rotti|chapati|idli|sambar|mudde|upma|poha|chitranna|puliyogare)\b/i.test(
     qNorm
   );
-  const foodIsRawOrDry = corpus.stateNorm === 'raw' || corpus.stateNorm === 'dry' || corpus.stateNorm === 'dried';
-  const foodIsPrepared = [
-    'cooked',
-    'boiled',
-    'steamed',
-    'grilled',
-    'roasted',
-    'fried',
-    'prepared',
-    'fermented',
-  ].includes(corpus.stateNorm);
+  const foodIsRaw = corpus.stateNorm === 'raw' || corpus.stateNorm === 'dry' || corpus.stateNorm === 'dried';
+  const foodIsCooked = ['cooked', 'boiled', 'steamed', 'grilled', 'roasted', 'fried', 'prepared', 'fermented'].includes(
+    corpus.stateNorm
+  );
 
-  if (queryAsksRawOrDry) {
-    if (foodIsRawOrDry) bestScore += 80;
-    else if (foodIsPrepared) bestScore -= 55;
-  } else if (queryAsksPrepared) {
-    if (foodIsPrepared) bestScore += 75;
-    else if (foodIsRawOrDry) bestScore -= 65;
+  if (queryAsksRaw) {
+    if (foodIsRaw) bestScore += 110;
+    else if (foodIsCooked) bestScore -= 110;
+  } else if (queryAsksCooked) {
+    if (foodIsCooked) bestScore += 115;
+    else if (foodIsRaw) bestScore -= 160;
   } else {
-    // Ambiguous everyday queries (e.g. "rice", "chicken", "oats", "dal", "chana"):
-    // Rank prepared/cooked staples ahead of raw IFCT agricultural commodities while keeping raw available below
-    if (foodIsPrepared) bestScore += 60;
-    else if (foodIsRawOrDry) bestScore -= 55;
+    // Ambiguous everyday query (e.g., "Rice", "Chicken", "Egg", "Dal"):
+    // Prefer ready-to-eat / cooked / fresh items over raw agricultural commodities while still showing raw in Basic Ingredients!
+    if (foodIsCooked || corpus.stateNorm === 'fresh') bestScore += 50;
+    else if (foodIsRaw) bestScore -= 30;
   }
 
-  // 7. Strict 5-Tier Source Priority Bonus (IFCT/Cooked Ref > USDA/NCCDB > Branded > OFF > Custom)
-  const priority = getCanonicalSourcePriority(food);
-  bestScore += Math.max(0, 6 - priority) * 5;
+  // 6. Conciseness & Exact Core Item Boost (ignore descriptive parentheticals like "(Tandoori Grilled Cottage Cheese)")
+  const coreTitleWords = normalizeText(food.name.split('(')[0]).split(' ').filter(Boolean);
+  const extraWords = Math.max(0, coreTitleWords.length - queryTokens.length);
+  bestScore -= Math.min(36, extraWords * 4);
 
-  // Penalize needs_review slightly relative to verified when identical match
-  if (food.verificationStatus === 'needs_review') bestScore -= 6;
-  if (food.isDiscontinued) bestScore -= 250;
+  // 7. Source Priority & Indian-First Tie-Breaker
+  const priority = getCanonicalSourcePriority(food);
+  bestScore += Math.max(0, 6 - priority) * 6;
+  if (food.country === 'India') bestScore += 8;
+  if (food.qualityStatus === 'verified') bestScore += 6;
+  else if (food.qualityStatus === 'calculated') bestScore += 4;
+  if (food.isDiscontinued) bestScore -= 400;
+
+  // Strict final relevance floor so unrelated results never pad the list
+  const minThreshold = isMultiToken ? 160 : 100;
+  if (bestScore < minThreshold) return null;
 
   return { food, score: bestScore, matchReason };
+}
+
+// Fast in-memory LRU cache for repeated queries (<1ms)
+const SEARCH_CACHE = new Map<string, FoodItem[]>();
+const MAX_CACHE_ENTRIES = 120;
+
+export function clearFoodSearchCache(): void {
+  SEARCH_CACHE.clear();
 }
 
 export function searchFoodsIntelligent(
@@ -481,16 +685,39 @@ export function searchFoodsIntelligent(
     favoriteIds?: string[];
     recentIds?: string[];
     limit?: number;
+    offset?: number;
+    group?: FoodResultGroup | 'all';
+    familyId?: string;
     includeDiscontinued?: boolean;
+    includePendingValidation?: boolean;
   }
 ): FoodItem[] {
   const category = options?.category || 'All';
   const includeDiscontinued = Boolean(options?.includeDiscontinued);
+  const includePending = Boolean(options?.includePendingValidation);
+  const groupFilter = options?.group && options.group !== 'all' ? options.group : null;
+  const familyFilter = options?.familyId || null;
   const favoriteSet = options?.favoriteIds?.length ? new Set(options.favoriteIds) : null;
   const recentSet = options?.recentIds?.length ? new Set(options.recentIds) : null;
 
-  const categoryFiltered = foods.filter((food) => {
+  const q = query.trim();
+  const canUseCache =
+    !favoriteSet && !recentSet && !includeDiscontinued && !includePending && !options?.offset;
+  const cacheKey = canUseCache
+    ? `${foods.length}|${category}|${groupFilter || ''}|${familyFilter || ''}|${q.toLowerCase()}`
+    : '';
+
+  if (canUseCache && SEARCH_CACHE.has(cacheKey)) {
+    const cached = SEARCH_CACHE.get(cacheKey)!;
+    return options?.limit ? cached.slice(0, options.limit) : cached;
+  }
+
+  const eligible = foods.filter((food) => {
     if (!includeDiscontinued && food.isDiscontinued) return false;
+    if (!includePending && !isFoodNutritionallyUsable(food)) return false;
+    if (groupFilter && inferFoodResultGroup(food) !== groupFilter) return false;
+    if (familyFilter && (food.foodFamilyId || food.canonicalFamily) !== familyFilter) return false;
+
     if (category === 'All') return true;
     if (category === 'Favorites') return favoriteSet ? favoriteSet.has(food.id) : false;
     if (category === 'Recent') return recentSet ? recentSet.has(food.id) : false;
@@ -498,15 +725,15 @@ export function searchFoodsIntelligent(
     return food.category === category;
   });
 
-  const q = query.trim();
   if (!q) {
-    return options?.limit ? categoryFiltered.slice(0, options.limit) : categoryFiltered;
+    const start = options?.offset || 0;
+    return options?.limit ? eligible.slice(start, start + options.limit) : eligible.slice(start);
   }
 
   const scored: ScoredFoodMatch[] = [];
-  for (const food of categoryFiltered) {
-    const res = scoreFoodMatch(food, q);
-    if (res && res.score > 20) {
+  for (let i = 0; i < eligible.length; i++) {
+    const res = scoreFoodMatch(eligible[i], q);
+    if (res) {
       scored.push(res);
     }
   }
@@ -516,9 +743,67 @@ export function searchFoodsIntelligent(
     const pa = getCanonicalSourcePriority(a.food);
     const pb = getCanonicalSourcePriority(b.food);
     if (pa !== pb) return pa - pb;
-    return a.food.name.localeCompare(b.food.name);
+    return a.food.name.length - b.food.name.length;
   });
 
-  const results = scored.map((s) => s.food);
-  return options?.limit ? results.slice(0, options.limit) : results;
+  const allMatches = scored.map((s) => s.food);
+
+  if (canUseCache) {
+    if (SEARCH_CACHE.size >= MAX_CACHE_ENTRIES) {
+      const firstKey = SEARCH_CACHE.keys().next().value;
+      if (firstKey) SEARCH_CACHE.delete(firstKey);
+    }
+    SEARCH_CACHE.set(cacheKey, allMatches);
+  }
+
+  const start = options?.offset || 0;
+  return options?.limit ? allMatches.slice(start, start + options.limit) : allMatches.slice(start);
+}
+
+export function searchFoodsPaginated(
+  foods: FoodItem[],
+  query: string,
+  options?: {
+    category?: string;
+    favoriteIds?: string[];
+    recentIds?: string[];
+    page?: number;
+    pageSize?: number;
+    group?: FoodResultGroup | 'all';
+    familyId?: string;
+  }
+): {
+  items: FoodItem[];
+  grouped: GroupedFoodResults;
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  elapsedMs: number;
+} {
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const page = Math.max(1, options?.page || 1);
+  const pageSize = Math.min(100, Math.max(1, options?.pageSize || 30));
+  const allMatches = searchFoodsIntelligent(foods, query, {
+    category: options?.category,
+    favoriteIds: options?.favoriteIds,
+    recentIds: options?.recentIds,
+    group: options?.group,
+    familyId: options?.familyId,
+  });
+
+  const offset = (page - 1) * pageSize;
+  const pageItems = allMatches.slice(offset, offset + pageSize);
+  const grouped = groupSearchResultsByType(pageItems);
+  const t1 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+  return {
+    items: pageItems,
+    grouped,
+    totalCount: allMatches.length,
+    page,
+    pageSize,
+    hasMore: offset + pageSize < allMatches.length,
+    elapsedMs: Math.round((t1 - t0) * 100) / 100,
+  };
 }

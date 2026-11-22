@@ -5,6 +5,7 @@ import {
   NutritionGoals,
 } from '../types';
 import { addDaysToDateKey, getTodayDateKey } from './dateUtils';
+import { normalizeFitnessGoal } from './fitnessCalculator';
 import { isCalorieGoalAchieved, sumMacros } from './nutritionUtils';
 
 export interface DailyQuest {
@@ -789,8 +790,9 @@ export function computeTransformationJourneyStats({
 
   let direction: 'loss' | 'gain' | 'maintain' = weightGoal.goalDirection || 'maintain';
   if (!weightGoal.goalDirection) {
-    if (profile.fitnessGoal === 'fat_loss') direction = 'loss';
-    else if (profile.fitnessGoal === 'muscle_gain') direction = 'gain';
+    const normalizedGoal = normalizeFitnessGoal(profile.fitnessGoal);
+    if (normalizedGoal === 'lose_weight') direction = 'loss';
+    else if (normalizedGoal === 'build_muscle' || normalizedGoal === 'fat_gain') direction = 'gain';
     else if (targetWeightKg > 0 && startingWeightKg > 0) {
       if (targetWeightKg < startingWeightKg - 0.3) direction = 'loss';
       else if (targetWeightKg > startingWeightKg + 0.3) direction = 'gain';

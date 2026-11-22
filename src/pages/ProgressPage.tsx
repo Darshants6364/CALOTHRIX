@@ -26,8 +26,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { WeeklyAssessmentBanner } from '../components/WeeklyAssessmentBanner';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { MEAL_CATEGORIES } from '../types';
+import { normalizeFitnessGoal } from '../utils/fitnessCalculator';
 import {
   evaluateAdaptiveCalorieAdjustment,
   getMultiWeekProgressSeries,
@@ -116,7 +118,15 @@ function StatusPill({ status, label }: { status: GraphStatus; label: string }) {
 }
 
 export const ProgressPage: React.FC = () => {
-  const { state, resolvedTheme, selectedDate, updateGoals, notify } = useMacroLogStore();
+  const {
+    state,
+    resolvedTheme,
+    selectedDate,
+    updateGoals,
+    notify,
+    weeklyAssessments,
+    openWeeklyAssessmentModal,
+  } = useMacroLogStore();
   const isDark = resolvedTheme === 'dark';
   const gridStroke = isDark ? 'rgba(255,255,255,0.08)' : '#e7e5e4';
   const tickColor = isDark ? '#9A9CA3' : '#52555E';
@@ -468,11 +478,11 @@ export const ProgressPage: React.FC = () => {
       const firstWt = weighInWeeks[0].avgWeightKg!;
       const lastWt = weighInWeeks[weighInWeeks.length - 1].avgWeightKg!;
       const deltaKg = round2(lastWt - firstWt);
-      const goalType = profile.fitnessGoal || 'maintenance';
+      const goalType = normalizeFitnessGoal(profile.fitnessGoal);
       const aligned =
-        (goalType === 'fat_loss' && deltaKg <= -0.1) ||
-        (goalType === 'muscle_gain' && deltaKg >= 0.1) ||
-        ((goalType === 'maintenance' || goalType === 'recomposition') && Math.abs(deltaKg) <= 0.6);
+        (goalType === 'lose_weight' && deltaKg <= -0.1) ||
+        ((goalType === 'build_muscle' || goalType === 'fat_gain') && deltaKg >= 0.1) ||
+        ((goalType === 'maintain_weight' || goalType === 'recomposition') && Math.abs(deltaKg) <= 0.6);
 
       if (aligned) {
         wtStatus = 'good';
@@ -673,6 +683,8 @@ export const ProgressPage: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      <WeeklyAssessmentBanner compact />
+
       {/* Header + Segmented Tabs */}
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -1747,6 +1759,73 @@ export const ProgressPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {weeklyAssessments.length > 0 && (
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-[#111317] dark:text-[#F3F4F6]">
+                7-Day AI Assessment History
+              </h2>
+              <p className="text-xs text-[#52555E] dark:text-[#9A9CA3]">
+                Saved weekly adaptive TDEE &amp; target check-ins
+              </p>
+            </div>
+            <span className="text-[11px] font-mono-nums text-[#52555E] dark:text-[#9A9CA3]">
+              {weeklyAssessments.length} {weeklyAssessments.length === 1 ? 'check-in' : 'check-ins'}
+            </span>
+          </div>
+
+          <div className="divide-y divide-black/6 dark:divide-white/8">
+            {weeklyAssessments.slice(0, 6).map((item) => {
+              const deltaKcal =
+                item.calorieDeltaKcal ??
+                item.recommendedCalories - item.previousRecommendedCalories;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => openWeeklyAssessmentModal(item)}
+                  className="w-full py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-left hover:opacity-90 transition-opacity"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-bold text-[#111317] dark:text-[#F3F4F6] font-mono-nums">
+                        Week {item.assessmentWeekNumber}
+                      </span>
+                      <span className="text-[11px] text-[#52555E] dark:text-[#9A9CA3] font-mono-nums">
+                        {item.weekStartDate} → {item.weekEndDate}
+                      </span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/8 text-[#52555E] dark:text-[#9A9CA3]">
+                        {item.status}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-[#52555E] dark:text-[#9A9CA3] truncate">
+                      {item.aiSummary?.headline || item.adjustmentReason}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0 font-mono-nums text-xs">
+                    <span className="font-semibold text-[#111317] dark:text-[#F3F4F6]">
+                      {item.recommendedCalories.toLocaleString()} kcal
+                    </span>
+                    <span
+                      className={`text-[11px] font-semibold ${
+                        deltaKcal > 0
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : deltaKcal < 0
+                          ? 'text-amber-700 dark:text-amber-400'
+                          : 'text-[#52555E] dark:text-[#9A9CA3]'
+                      }`}
+                    >
+                      {deltaKcal > 0 ? `+${deltaKcal}` : deltaKcal} kcal
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
     </div>
   );

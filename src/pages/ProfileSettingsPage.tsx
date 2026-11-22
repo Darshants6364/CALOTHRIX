@@ -26,6 +26,7 @@ import {
   WorkoutIntensity,
 } from '../types';
 import { convertDisplayWeightToKg, convertWeightToDisplay } from '../utils/nutritionUtils';
+import { normalizeFitnessGoal } from '../utils/fitnessCalculator';
 import { isDatabaseAdmin } from '../utils/adminAccess';
 
 const RESTRICTION_OPTIONS: { id: FoodRestriction; label: string }[] = [
@@ -70,7 +71,7 @@ export const ProfileSettingsPage: React.FC = () => {
     profile.workoutIntensity || 'moderate'
   );
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>(profile.activityLevel);
-  const [fitnessGoal, setFitnessGoal] = useState<FitnessGoalType>(profile.fitnessGoal);
+  const [fitnessGoal, setFitnessGoal] = useState<FitnessGoalType>(normalizeFitnessGoal(profile.fitnessGoal));
   const [goalSpeed, setGoalSpeed] = useState<GoalSpeed>(profile.goalSpeed || 'moderate');
   const [dietaryPreference, setDietaryPreference] = useState<DietaryPreference>(
     profile.dietaryPreference || 'omnivore'
@@ -96,7 +97,7 @@ export const ProfileSettingsPage: React.FC = () => {
     setWorkoutFrequency(String(profile.workoutFrequencyPerWeek ?? 3));
     setWorkoutIntensity(profile.workoutIntensity || 'moderate');
     setActivityLevel(profile.activityLevel);
-    setFitnessGoal(profile.fitnessGoal);
+    setFitnessGoal(normalizeFitnessGoal(profile.fitnessGoal));
     setGoalSpeed(profile.goalSpeed || 'moderate');
     setDietaryPreference(profile.dietaryPreference || 'omnivore');
     setFoodRestrictions(profile.foodRestrictions || []);
@@ -443,10 +444,11 @@ export const ProfileSettingsPage: React.FC = () => {
               onChange={(e) => setFitnessGoal(e.target.value as FitnessGoalType)}
               className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm text-slate-900 dark:text-slate-100"
             >
-              <option value="fat_loss">Fat Loss</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="muscle_gain">Muscle Gain</option>
+              <option value="lose_weight">Lose Weight (Fat Loss)</option>
+              <option value="build_muscle">Build Muscle (Lean Gain)</option>
+              <option value="fat_gain">Healthy Weight Gain</option>
               <option value="recomposition">Body Recomposition</option>
+              <option value="maintain_weight">Maintain Weight</option>
             </select>
           </div>
 

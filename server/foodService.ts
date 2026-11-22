@@ -1,29 +1,81 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
   FoodCategory,
   FoodItem,
   FoodPortion,
+  FoodResultGroup,
   FoodSourceType,
   FoodState,
   FoodValidationIssue,
   FoodVersionRecord,
+  GroupedFoodResults,
   Micronutrients,
   NutrientFieldKey,
   RawNutrientValues,
+  RegionalSearchSuggestion,
   VerificationStatus,
 } from '../src/types/index.ts';
+import { FOOD_FAMILIES } from '../src/data/foodFamilies.ts';
 import { GLOBAL_REFERENCE_FOODS } from '../src/data/globalReferenceFoods.ts';
 import {
   getCanonicalSourcePriority,
+  groupSearchResultsByType,
+  inferFoodResultGroup,
   scoreFoodMatch,
   searchFoodsIntelligent,
 } from '../src/utils/foodSearchEngine.ts';
+import { isFoodNutritionallyUsable } from '../src/utils/nutritionUtils.ts';
 import {
   calculateAtwaterCaloriesPer100g,
   deriveVerificationStatus,
   getNutrientsPer100g,
   validateFoodRecord,
 } from '../src/utils/foodValidationEngine.ts';
+import { resolveRegionalFoodQueryWithGemini } from './foodAiQualityService.ts';
+
+let cachedSupplementaryFct: FoodItem[] | null = null;
+export function getSupplementaryFctFoods(): FoodItem[] {
+  if (cachedSupplementaryFct) return cachedSupplementaryFct;
+  try {
+    const filePath = path.join(process.cwd(), 'server', 'data', 'supplementaryFctCatalog.json');
+    if (fs.existsSync(filePath)) {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      cachedSupplementaryFct = Array.isArray(parsed) ? (parsed as FoodItem[]) : [];
+      return cachedSupplementaryFct;
+    }
+  } catch (err) {
+    console.warn('[FoodService] Could not load supplementaryFctCatalog.json:', err);
+  }
+  cachedSupplementaryFct = [];
+  return cachedSupplementaryFct;
+}
+
+let cachedFullServerCatalog: FoodItem[] | null = null;
+export function getFullServerFoodCatalog(): FoodItem[] {
+  if (!cachedFullServerCatalog) {
+    const byId = new Map<string, FoodItem>();
+    for (const f of GLOBAL_REFERENCE_FOODS) {
+      byId.set(f.id, f);
+    }
+    for (const f of getSupplementaryFctFoods()) {
+      if (!byId.has(f.id)) {
+        byId.set(f.id, f);
+      }
+    }
+    cachedFullServerCatalog = [...byId.values()];
+    // Warm up the search corpus WeakMap once on initialization so even query #1 runs in <60ms
+    searchFoodsIntelligent(cachedFullServerCatalog, 'rice', { limit: 1 });
+  }
+  return cachedFullServerCatalog;
+}
+
+export function getPendingValidationFoods(): FoodItem[] {
+  return getFullServerFoodCatalog().filter(
+    (f) => !f.canonicalFoodId && (f.qualityStatus === 'pending_validation' || !isFoodNutritionallyUsable(f))
+  );
+}
 
 interface CachedValue<T> {
   value: T;
@@ -33,12 +85,14 @@ interface CachedValue<T> {
 const SEARCH_CACHE = new Map<string, CachedValue<GlobalSearchResponse>>();
 const BARCODE_CACHE = new Map<string, CachedValue<FoodItem | null>>();
 let OVERRIDES_CACHE: CachedValue<FoodItem[]> | null = null;
+let supabaseRpcBackoffUntil = 0;
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
 function clearFoodCaches(): void {
   SEARCH_CACHE.clear();
   BARCODE_CACHE.clear();
   OVERRIDES_CACHE = null;
+  supabaseRpcBackoffUntil = 0;
 }
 
 let serverSupabaseClient: SupabaseClient | null = null;
@@ -74,6 +128,12 @@ export interface GlobalSearchOptions {
   source?: string;
   barcode?: string;
   semantic?: boolean;
+  page?: number;
+  limit?: number;
+  group?: FoodResultGroup | 'all';
+  familyId?: string;
+  includeExternal?: boolean;
+  allowAiFallback?: boolean;
 }
 
 export interface SourceStatus {
@@ -85,6 +145,13 @@ export interface SourceStatus {
 
 export interface GlobalSearchResponse {
   items: FoodItem[];
+  grouped: GroupedFoodResults;
+  totalCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  elapsedMs: number;
+  regionalSuggestion?: RegionalSearchSuggestion | null;
   sourceMeta: {
     ifctCount: number;
     dbCount?: number;
@@ -93,6 +160,8 @@ export interface GlobalSearchResponse {
     offError?: string;
     usdaError?: string;
     usdaConfigured: boolean;
+    externalFallbackUsed?: boolean;
+    geminiFallbackUsed?: boolean;
   };
 }
 
@@ -824,10 +893,17 @@ function mapSourceIdToSourceType(sourceId: string, sourceName: string, isCustom:
   if (isCustom || sourceId === 'user_custom') return 'personal_custom';
   if (
     sourceId === 'ifct_2017' ||
+    sourceId === 'indb_2024' ||
     sourceId === 'ifct_cooked_verified' ||
+    sourceId === 'calculated_recipe' ||
+    sourceId === 'gemini_estimated' ||
+    sourceId === 'uk_fct' ||
+    sourceId === 'us_fct' ||
     sourceId === 'usda_fdc' ||
     sourceId === 'nccdb_clinical' ||
     sourceName.includes('IFCT') ||
+    sourceName.includes('INDB') ||
+    sourceName.includes('CoFID') ||
     sourceName.includes('USDA') ||
     sourceName.includes('NCCDB')
   ) {
@@ -841,8 +917,13 @@ function mapSourceIdForFood(food: FoodItem): string {
   const name = (food.sourceName || '').toLowerCase();
   if (food.isCustom || food.sourceType === 'personal_custom') return 'user_custom';
   if (name.includes('ifct')) return 'ifct_2017';
+  if (name.includes('indb') || name.includes('indian nutrient databank')) return 'indb_2024';
+  if (name.includes('cofid') || name.includes('mccance') || name.includes('uk fct')) return 'uk_fct';
+  if (name.includes('us fct')) return 'us_fct';
   if (name.includes('nccdb')) return 'nccdb_clinical';
   if (name.includes('usda')) return 'usda_fdc';
+  if (food.qualityStatus === 'calculated' || name.includes('recipe calculation')) return 'calculated_recipe';
+  if (food.qualityStatus === 'estimated' || name.includes('gemini')) return 'gemini_estimated';
   if (food.sourceType === 'verified_reference') return 'ifct_cooked_verified';
   if (food.sourceType === 'branded') return 'manufacturer_verified';
   return 'open_food_facts';
@@ -859,6 +940,15 @@ const CANONICAL_SOURCE_ROWS = [
     notes: 'Tier 1: Indian raw agricultural ingredients & proximate composition master',
   },
   {
+    id: 'indb_2024',
+    source_name: 'INDB (Indian Nutrient Databank)',
+    source_priority: 1,
+    authority_level: 'scientific_reference',
+    base_url: 'https://www.indb.org.in/',
+    license: 'CC BY / Research Attribution',
+    notes: 'Tier 1: Indian Nutrient Databank (INDB) per-100g recipe & food composition',
+  },
+  {
     id: 'ifct_cooked_verified',
     source_name: 'Calothrix Verified Indian Cooked Reference',
     source_priority: 1,
@@ -866,6 +956,42 @@ const CANONICAL_SOURCE_ROWS = [
     base_url: null,
     license: 'ICMR-NIN IFCT 2017 Derived',
     notes: 'Tier 1: Verified cooked Indian & global dishes with yield and retention',
+  },
+  {
+    id: 'uk_fct',
+    source_name: 'UK CoFID (McCance and Widdowson 2021)',
+    source_priority: 2,
+    authority_level: 'scientific_reference',
+    base_url: 'https://www.gov.uk/government/publications/composition-of-foods-integrated-dataset-cofid',
+    license: 'Open Government Licence',
+    notes: 'Tier 2: UK Composition of Foods Integrated Dataset (CoFID 2021)',
+  },
+  {
+    id: 'us_fct',
+    source_name: 'US FCT / USDA FoodData Central',
+    source_priority: 2,
+    authority_level: 'usda_fdc',
+    base_url: 'https://fdc.nal.usda.gov/',
+    license: 'Public Domain (CC0)',
+    notes: 'Tier 2: USDA FoodData Central / US FCT per-100g composition',
+  },
+  {
+    id: 'calculated_recipe',
+    source_name: 'Calorex Validated Recipe Calculation',
+    source_priority: 2,
+    authority_level: 'verified_cooked',
+    base_url: null,
+    license: 'Internal Nutrition Dataset',
+    notes: 'Tier 2: Ingredient-weighted recipe calculation with cooking yield factors from IFCT/INDB',
+  },
+  {
+    id: 'gemini_estimated',
+    source_name: 'Calorex AI-Assisted Nutrition Estimate',
+    source_priority: 3,
+    authority_level: 'verified_cooked',
+    base_url: null,
+    license: 'Internal Nutrition Dataset',
+    notes: 'Tier 3: Controlled Gemini-assisted nutritional estimate with traceable reference foods',
   },
   {
     id: 'usda_fdc',
@@ -982,6 +1108,24 @@ function mapMasterRowToFoodItem(row: Record<string, unknown>): FoodItem {
     category: (row.category as FoodCategory) || 'International foods',
     foodState: (row.food_state as FoodState) || 'prepared',
     canonicalFamily: row.canonical_family ? String(row.canonical_family) : undefined,
+    foodFamilyId: row.food_family_id ? String(row.food_family_id) : (row.canonical_family ? String(row.canonical_family) : undefined),
+    parentFoodId: row.parent_food_id ? String(row.parent_food_id) : undefined,
+    resultGroup:
+      row.result_group === 'basic_ingredient' ||
+      row.result_group === 'cooked_food' ||
+      row.result_group === 'prepared_dish'
+        ? row.result_group
+        : undefined,
+    preparationStyle: row.preparation_style ? String(row.preparation_style) : undefined,
+    qualityStatus:
+      row.quality_status === 'verified' ||
+      row.quality_status === 'calculated' ||
+      row.quality_status === 'estimated' ||
+      row.quality_status === 'pending_validation'
+        ? row.quality_status
+        : undefined,
+    calculationMethod: row.calculation_method ? String(row.calculation_method) : undefined,
+    confidenceScore: parseNullableNumber(row.confidence_score) ?? undefined,
     measurementBasis:
       row.measurement_basis === 'per_serving' || row.measurement_basis === 'per_100ml'
         ? row.measurement_basis
@@ -1141,13 +1285,31 @@ export async function seedMasterFoodsToSupabase(userAccessToken?: string): Promi
       return { ok: false, seededFoods: 0, skippedAdminEdited: 0, error: srcErr.message };
     }
 
+    // Seed food_families if migration table is present (non-blocking if not yet applied)
+    try {
+      await sb.from('food_families').upsert(
+        FOOD_FAMILIES.map((ff) => ({
+          id: ff.id,
+          slug: ff.slug,
+          display_name: ff.displayName,
+          category: ff.category,
+          aliases: ff.aliases,
+          regional_names: ff.regionalNames,
+          description: ff.description,
+        })),
+        { onConflict: 'id' }
+      );
+    } catch {
+      // Older schema without food_families table; proceed with backward-compatible seed
+    }
+
     // Preserve any food records already modified by admins in Supabase (version > 1)
     const { data: editedRows } = await sb.from('foods').select('id').gt('version', 1);
     const adminEditedIds = new Set(
       Array.isArray(editedRows) ? editedRows.map((r: { id: string }) => r.id) : []
     );
 
-    const targets = GLOBAL_REFERENCE_FOODS.filter((f) => !adminEditedIds.has(f.id));
+    const targets = getFullServerFoodCatalog().filter((f) => !adminEditedIds.has(f.id));
     const BATCH_SIZE = 100;
     let seededCount = 0;
 
@@ -1167,7 +1329,18 @@ export async function seedMasterFoodsToSupabase(userAccessToken?: string): Promi
         food_group: f.foodGroup || null,
         category: f.category,
         food_state: f.foodState || 'prepared',
-        canonical_family: f.canonicalFamily || null,
+        canonical_family: f.canonicalFamily || f.foodFamilyId || null,
+        food_family_id: f.foodFamilyId || null,
+        parent_food_id: f.parentFoodId || null,
+        result_group: inferFoodResultGroup(f),
+        preparation_style: f.preparationStyle || null,
+        quality_status: f.qualityStatus || 'verified',
+        is_searchable: f.isSearchable !== false,
+        canonical_food_id: f.canonicalFoodId || null,
+        calculation_method: f.calculationMethod || null,
+        source_reference_foods: f.sourceReferenceFoods || [],
+        confidence_score: f.confidenceScore ?? null,
+        original_source_values: f.originalSourceValues || {},
         measurement_basis: f.measurementBasis || 'per_100g',
         serving_name: f.servingName || '100 g',
         serving_weight_grams: f.servingWeightGrams || 100,
@@ -1803,17 +1976,29 @@ export async function searchGlobalFoods(
   options: GlobalSearchOptions,
   userAccessToken?: string
 ): Promise<GlobalSearchResponse> {
+  const t0 = performance.now();
   const query = options.query.trim();
   const category = options.category?.trim();
   const country = options.country?.trim();
   const sourceFilter = options.source?.trim();
+  const groupFilter = options.group && options.group !== 'all' ? options.group : undefined;
+  const familyFilter = options.familyId?.trim() || undefined;
+  const page = Math.max(1, Number(options.page || 1));
+  const limit = Math.min(100, Math.max(1, Number(options.limit || 40)));
   const isBarcodeQuery = /^\d{8,14}$/.test(query) || Boolean(options.barcode);
 
   if (isBarcodeQuery) {
     const code = (options.barcode || query).replace(/\D/g, '');
     const { item, error } = await lookupBarcodeFromOpenFoodFacts(code, userAccessToken);
+    const items = item && !item.isDiscontinued ? [item] : [];
     return {
-      items: item && !item.isDiscontinued ? [item] : [],
+      items,
+      grouped: groupSearchResultsByType(items),
+      totalCount: items.length,
+      page: 1,
+      limit,
+      hasMore: false,
+      elapsedMs: Math.round((performance.now() - t0) * 100) / 100,
       sourceMeta: {
         ifctCount: item?.sourceName?.includes('IFCT') ? 1 : 0,
         dbCount: 0,
@@ -1821,104 +2006,190 @@ export async function searchGlobalFoods(
         usdaCount: 0,
         offError: error,
         usdaConfigured: Boolean(getUsdaApiKey()),
+        externalFallbackUsed: true,
+        geminiFallbackUsed: false,
       },
     };
   }
 
   const cacheKey = JSON.stringify({
-    query,
+    query: query.toLowerCase(),
     category,
     country,
     sourceFilter,
+    groupFilter,
+    familyFilter,
+    page,
+    limit,
     semantic: Boolean(options.semantic),
+    includeExternal: Boolean(options.includeExternal),
   });
   const cached = SEARCH_CACHE.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.value;
+    return {
+      ...cached.value,
+      elapsedMs: Math.round((performance.now() - t0) * 100) / 100,
+    };
   }
 
-  // Pull recent admin overrides (including discontinued IDs) so local catalog stays synchronized
-  const overrides = await fetchPublicFoodOverrides(userAccessToken);
+  // 1. Fast DB-First Search: Local Indexed Master Catalog (IFCT + INDB + Karnataka + UK/US FCT)
+  //    + Supabase Postgres Master RPC (bounded with tight timeout + circuit breaker so searches stay well under 200ms)
+  const fullCatalog = getFullServerFoodCatalog();
+  const nowMs = Date.now();
+  let overrides: FoodItem[] = OVERRIDES_CACHE && OVERRIDES_CACHE.expiresAt > nowMs ? OVERRIDES_CACHE.value : [];
+  let dbItems: FoodItem[] = [];
+
+  if (nowMs >= supabaseRpcBackoffUntil) {
+    const timedOut = Symbol('timeout');
+    const [ovRes, dbRes] = await Promise.all([
+      overrides.length > 0
+        ? Promise.resolve(overrides)
+        : Promise.race([
+            fetchPublicFoodOverrides(userAccessToken),
+            new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), 50)),
+          ]),
+      Promise.race([
+        searchSupabaseFoodsMaster(options, userAccessToken),
+        new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), 55)),
+      ]),
+    ]);
+
+    if (ovRes === timedOut || dbRes === timedOut) {
+      // Back off remote RPC for 60s when Supabase is slow/unmigrated so searches run in <20ms
+      supabaseRpcBackoffUntil = Date.now() + 60_000;
+    }
+    if (ovRes !== timedOut) overrides = ovRes;
+    if (dbRes !== timedOut) dbItems = dbRes;
+  }
+
   const overrideById = new Map(overrides.map((f) => [f.id, f]));
 
-  // 1. Local Verified DB with overrides applied
-  const preFiltered = GLOBAL_REFERENCE_FOODS.map((f) => overrideById.get(f.id) || f).filter((food) => {
-    if (food.isDiscontinued) return false;
-    if (category && category !== 'All' && food.category !== category) return false;
-    if (country && country !== 'All' && food.country !== country) return false;
-    if (sourceFilter && sourceFilter !== 'All' && food.sourceType !== sourceFilter) return false;
-    return true;
-  });
+  const preFiltered = fullCatalog
+    .map((f) => overrideById.get(f.id) || f)
+    .filter((food) => {
+      if (!isFoodNutritionallyUsable(food)) return false;
+      if (category && category !== 'All' && food.category !== category) return false;
+      if (country && country !== 'All' && food.country !== country) return false;
+      if (sourceFilter && sourceFilter !== 'All' && food.sourceType !== sourceFilter) return false;
+      if (groupFilter && inferFoodResultGroup(food) !== groupFilter) return false;
+      if (familyFilter && (food.foodFamilyId || food.canonicalFamily) !== familyFilter) return false;
+      return true;
+    });
 
   let localMatches: FoodItem[];
   if (!query) {
-    localMatches = preFiltered.slice(0, 60);
+    localMatches = preFiltered;
   } else if (options.semantic) {
     localMatches = preFiltered
       .filter((food) => scoreSemanticMatch(food, query) > 10)
       .sort((a, b) => scoreSemanticMatch(b, query) - scoreSemanticMatch(a, query));
   } else {
-    localMatches = searchFoodsIntelligent(preFiltered, query, { limit: 45 });
+    localMatches = searchFoodsIntelligent(preFiltered, query, {
+      group: groupFilter || 'all',
+      familyId: familyFilter,
+    });
   }
 
-  // 2. Supabase Postgres Master Search + External APIs in parallel
-  const shouldQueryExternal =
+  const applyPostFilters = (list: FoodItem[]) =>
+    list.filter((food) => {
+      if (!isFoodNutritionallyUsable(food)) return false;
+      if (category && category !== 'All' && food.category !== category) return false;
+      if (country && country !== 'All' && food.country !== country) return false;
+      if (sourceFilter && sourceFilter !== 'All' && food.sourceType !== sourceFilter) return false;
+      if (groupFilter && inferFoodResultGroup(food) !== groupFilter) return false;
+      if (familyFilter && (food.foodFamilyId || food.canonicalFamily) !== familyFilter) return false;
+      return true;
+    });
+
+  const filteredDb = applyPostFilters(dbItems);
+  const primaryMerged = dedupeAndRankGlobalFoods(
+    [...filteredDb, ...localMatches],
+    query,
+    country,
+    Boolean(options.semantic)
+  );
+
+  // 2. Fallback-ONLY External API calls (USDA / Open Food Facts)
+  //    Normal searches NEVER wait for external APIs when local/Supabase DB already has >= 3 relevant matches!
+  let filteredOff: FoodItem[] = [];
+  let filteredUsda: FoodItem[] = [];
+  let offError: string | undefined;
+  let usdaError: string | undefined;
+  let externalFallbackUsed = false;
+  const usdaConfigured = Boolean(getUsdaApiKey());
+
+  const shouldFallbackToExternal =
     query.length >= 2 &&
+    (Boolean(options.includeExternal) || primaryMerged.length === 0) &&
     (!sourceFilter ||
       sourceFilter === 'All' ||
       sourceFilter === 'branded' ||
       sourceFilter === 'community' ||
       sourceFilter === 'verified_reference');
-  const externalQuery = options.semantic
-    ? query
-        .replace(
-          /\b(high protein|low calorie|rich in fibre|vegetarian|vegan|indian|breakfast|dinner)\b/gi,
-          ''
+
+  if (shouldFallbackToExternal) {
+    externalFallbackUsed = true;
+    const externalQuery = options.semantic
+      ? query
+          .replace(
+            /\b(high protein|low calorie|rich in fibre|vegetarian|vegan|indian|breakfast|dinner)\b/gi,
+            ''
+          )
+          .trim() || query
+      : query;
+
+    const [offRes, usdaRes] = await Promise.all([
+      sourceFilter !== 'verified_reference'
+        ? searchOpenFoodFacts(externalQuery, country)
+        : Promise.resolve({ items: [] as FoodItem[], error: undefined }),
+      sourceFilter !== 'community'
+        ? searchUsdaFoodDataCentral(externalQuery)
+        : Promise.resolve({
+            items: [] as FoodItem[],
+            configured: usdaConfigured,
+            error: undefined,
+          }),
+    ]);
+
+    filteredOff = applyPostFilters(offRes.items);
+    offError = offRes.error;
+    filteredUsda = applyPostFilters(usdaRes.items);
+    usdaError = usdaRes.error;
+  }
+
+  const allMerged =
+    filteredOff.length > 0 || filteredUsda.length > 0
+      ? dedupeAndRankGlobalFoods(
+          [...primaryMerged, ...filteredUsda, ...filteredOff],
+          query,
+          country,
+          Boolean(options.semantic)
         )
-        .trim() || query
-    : query;
+      : primaryMerged;
 
-  const [dbItems, offRes, usdaRes] = await Promise.all([
-    searchSupabaseFoodsMaster(options, userAccessToken),
-    shouldQueryExternal && sourceFilter !== 'verified_reference'
-      ? searchOpenFoodFacts(externalQuery, country)
-      : Promise.resolve({ items: [] as FoodItem[], error: undefined }),
-    shouldQueryExternal && sourceFilter !== 'community'
-      ? searchUsdaFoodDataCentral(externalQuery)
-      : Promise.resolve({
-          items: [] as FoodItem[],
-          configured: Boolean(getUsdaApiKey()),
-          error: undefined,
-        }),
-  ]);
+  // 3. Fallback-ONLY Gemini Regional Query Resolver
+  //    NEVER invoked on normal searches with matches; ONLY when DB + external returns 0 matches!
+  let regionalSuggestion: RegionalSearchSuggestion | null = null;
+  let geminiFallbackUsed = false;
+  if (allMerged.length === 0 && query.length >= 3 && options.allowAiFallback !== false) {
+    geminiFallbackUsed = true;
+    regionalSuggestion = await resolveRegionalFoodQueryWithGemini(query, preFiltered);
+  }
 
-  const offItems = offRes.items;
-  const offError = offRes.error;
-  const usdaItems = usdaRes.items;
-  const usdaError = usdaRes.error;
-  const usdaConfigured = Boolean(getUsdaApiKey());
+  const totalCount = allMerged.length;
+  const offset = (page - 1) * limit;
+  const pageItems = allMerged.slice(offset, offset + limit);
+  const grouped = groupSearchResultsByType(pageItems);
 
-  const applyPostFilters = (list: FoodItem[]) =>
-    list.filter((food) => {
-      if (food.isDiscontinued) return false;
-      if (category && category !== 'All' && food.category !== category) return false;
-      if (sourceFilter && sourceFilter !== 'All' && food.sourceType !== sourceFilter) return false;
-      return true;
-    });
-
-  const filteredDb = applyPostFilters(dbItems);
-  const filteredUsda = applyPostFilters(usdaItems);
-  const filteredOff = applyPostFilters(offItems);
-
-  // Unified cross-source relevance re-ranking & deduplication while enforcing 5-tier priority & completeness
-  const merged = dedupeAndRankGlobalFoods(
-    [...filteredDb, ...localMatches, ...filteredUsda, ...filteredOff],
-    query,
-    country,
-    Boolean(options.semantic)
-  );
   const response: GlobalSearchResponse = {
-    items: merged,
+    items: pageItems,
+    grouped,
+    totalCount,
+    page,
+    limit,
+    hasMore: offset + limit < totalCount,
+    elapsedMs: Math.round((performance.now() - t0) * 100) / 100,
+    ...(regionalSuggestion ? { regionalSuggestion } : {}),
     sourceMeta: {
       ifctCount: localMatches.length,
       dbCount: filteredDb.length,
@@ -1927,6 +2198,8 @@ export async function searchGlobalFoods(
       offError,
       usdaError,
       usdaConfigured,
+      externalFallbackUsed,
+      geminiFallbackUsed,
     },
   };
 

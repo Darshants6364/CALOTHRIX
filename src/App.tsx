@@ -11,6 +11,7 @@ import { MealAiScannerModal } from './components/MealAiScannerModal';
 import { RoleSelectionScreen } from './components/RoleSelectionScreen';
 import { ToastContainer } from './components/ToastContainer';
 import { TrainerLayout } from './components/TrainerLayout';
+import { WeeklyAssessmentModal } from './components/WeeklyAssessmentModal';
 import { WeightEntryModal } from './components/WeightEntryModal';
 import { MacroLogProvider, useMacroLogStore } from './hooks/useMacroLogStore';
 import { TrainerDashboardProvider } from './hooks/useTrainerDashboard';
@@ -164,6 +165,7 @@ const AppShell: React.FC = () => {
       <InviteAcceptModal />
       <GoalCelebrationController />
       <MacroShareModal />
+      <WeeklyAssessmentModal />
     </>
   );
 };

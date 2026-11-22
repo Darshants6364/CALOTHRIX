@@ -1,14 +1,24 @@
 import { supabase } from '../lib/supabaseClient';
 import type {
   FoodItem,
+  FoodResultGroup,
   FoodState,
   FoodVersionRecord,
+  GroupedFoodResults,
+  RegionalSearchSuggestion,
   VerificationStatus,
   WeeklySummaryResult,
 } from '../types';
 
 export interface GlobalFoodSearchResult {
   items: FoodItem[];
+  grouped?: GroupedFoodResults;
+  totalCount?: number;
+  page?: number;
+  limit?: number;
+  hasMore?: boolean;
+  elapsedMs?: number;
+  regionalSuggestion?: RegionalSearchSuggestion | null;
   sourceMeta?: {
     ifctCount: number;
     dbCount?: number;
@@ -17,6 +27,8 @@ export interface GlobalFoodSearchResult {
     offError?: string;
     usdaError?: string;
     usdaConfigured: boolean;
+    externalFallbackUsed?: boolean;
+    geminiFallbackUsed?: boolean;
   };
   error?: string;
 }
@@ -70,6 +82,11 @@ export async function searchGlobalFoodsApi(params: {
   source?: string;
   barcode?: string;
   semantic?: boolean;
+  page?: number;
+  limit?: number;
+  group?: FoodResultGroup | 'all';
+  familyId?: string;
+  includeExternal?: boolean;
 }): Promise<GlobalFoodSearchResult> {
   try {
     const url = new URL('/api/foods/search', window.location.origin);
@@ -79,6 +96,11 @@ export async function searchGlobalFoodsApi(params: {
     if (params.source) url.searchParams.set('source', params.source);
     if (params.barcode) url.searchParams.set('barcode', params.barcode);
     if (params.semantic) url.searchParams.set('semantic', 'true');
+    if (params.page) url.searchParams.set('page', String(params.page));
+    if (params.limit) url.searchParams.set('limit', String(params.limit));
+    if (params.group && params.group !== 'all') url.searchParams.set('group', params.group);
+    if (params.familyId) url.searchParams.set('familyId', params.familyId);
+    if (params.includeExternal) url.searchParams.set('includeExternal', 'true');
 
     const res = await fetch(url.toString());
     if (!res.ok) {
@@ -324,3 +346,73 @@ export async function fetchFoodVersionsApi(
     };
   }
 }
+
+export async function fetchPendingValidationFoodsApi(): Promise<{
+  totalPending: number;
+  items: FoodItem[];
+  error?: string;
+}> {
+  try {
+    const authHeaders = await getAccessTokenHeader();
+    const res = await fetch('/api/admin/foods/pending-validation', { headers: authHeaders });
+    const json = (await res.json()) as { totalPending?: number; items?: FoodItem[]; error?: string };
+    if (!res.ok) {
+      return { totalPending: 0, items: [], error: json.error || `HTTP ${res.status}` };
+    }
+    return { totalPending: json.totalPending ?? 0, items: json.items || [] };
+  } catch (err) {
+    return {
+      totalPending: 0,
+      items: [],
+      error: err instanceof Error ? err.message : 'Failed to load pending foods',
+    };
+  }
+}
+
+export async function runAdminAiFoodCompletionApi(foodIds?: string[]): Promise<{
+  processed: number;
+  updated: number;
+  skippedVerified: number;
+  keptPending: number;
+  error?: string;
+}> {
+  try {
+    const authHeaders = await getAccessTokenHeader();
+    const res = await fetch('/api/admin/foods/ai-complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify({ foodIds: foodIds || [] }),
+    });
+    const json = (await res.json()) as {
+      processed?: number;
+      updated?: number;
+      skippedVerified?: number;
+      keptPending?: number;
+      error?: string;
+    };
+    if (!res.ok) {
+      return {
+        processed: 0,
+        updated: 0,
+        skippedVerified: 0,
+        keptPending: 0,
+        error: json.error || `HTTP ${res.status}`,
+      };
+    }
+    return {
+      processed: json.processed ?? 0,
+      updated: json.updated ?? 0,
+      skippedVerified: json.skippedVerified ?? 0,
+      keptPending: json.keptPending ?? 0,
+    };
+  } catch (err) {
+    return {
+      processed: 0,
+      updated: 0,
+      skippedVerified: 0,
+      keptPending: 0,
+      error: err instanceof Error ? err.message : 'AI completion failed',
+    };
+  }
+}
+

@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity,
   ArrowRight,
   Calculator,
   CheckCircle2,
@@ -13,15 +12,18 @@ import {
   Sparkles,
   TrendingDown,
   TrendingUp,
+  X,
 } from 'lucide-react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { AiCoachDrawer } from '../components/AiCoachDrawer';
 import { CalorieRing } from '../components/CalorieRing';
 import { DailyQuestArena } from '../components/DailyQuestArena';
 import { DateStrip } from '../components/DateStrip';
 import { MacroCard } from '../components/MacroCard';
+import { SmartCalorieTrackerPanel } from '../components/SmartCalorieTrackerPanel';
+import { WeeklyAssessmentBanner } from '../components/WeeklyAssessmentBanner';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { MEAL_CATEGORIES, MealCategory } from '../types';
+import { getGoalDisplayLabel } from '../utils/fitnessCalculator';
 import {
   getSmartFoodRecommendations,
   getWeeklyCalorieBankSummary,
@@ -83,12 +85,24 @@ export const HomePage: React.FC = () => {
     dailyWaterGoalMl,
     addWaterMl,
     setDailyWaterGoalMl,
-    activeBurnKcalByDate,
-    addActiveBurnKcal,
     copyMealFromPreviousDay,
   } = useMacroLogStore();
 
-  const [coachOpen, setCoachOpen] = useState(false);
+  const [calculatorModalOpen, setCalculatorModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!calculatorModalOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCalculatorModalOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [calculatorModalOpen]);
 
   const isDark = resolvedTheme === 'dark';
   const todayKey = getTodayDateKey();
@@ -97,10 +111,6 @@ export const HomePage: React.FC = () => {
   const { goals, settings, profile, weightGoal } = state;
   const greeting = getTimeOfDayGreeting();
   const firstName = (authDetails?.name || profile.name).split(' ')[0] || 'there';
-
-  const todayBurnKcal = activeBurnKcalByDate[selectedDate] || 0;
-  const effectiveDailyCalorieGoal =
-    goals.calories > 0 ? goals.calories + todayBurnKcal : 0;
 
   const weeklyBank = useMemo(
     () =>
@@ -277,14 +287,7 @@ export const HomePage: React.FC = () => {
     [allFoods, goals, profile.dietaryPreference, profile.foodRestrictions, selectedDateTotals]
   );
 
-  const goalSummaryLabel =
-    profile.fitnessGoal === 'fat_loss'
-      ? 'Fat Loss Plan'
-      : profile.fitnessGoal === 'muscle_gain'
-      ? 'Muscle Gain Plan'
-      : profile.fitnessGoal === 'recomposition'
-      ? 'Body Recomposition'
-      : 'Maintenance Plan';
+  const goalSummaryLabel = getGoalDisplayLabel(profile.fitnessGoal);
 
   return (
     <div className="space-y-6">
@@ -350,8 +353,19 @@ export const HomePage: React.FC = () => {
             <Plus className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
             <span>Search Food</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setCalculatorModalOpen(true)}
+            className="col-span-2 sm:col-span-1 min-h-[44px] px-3 sm:px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+          >
+            <Calculator className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
+            <span>Smart Calorie Calculator</span>
+          </button>
         </div>
       </section>
+
+      <WeeklyAssessmentBanner compact />
 
       {/* Pending Coaching Alerts (Invites & Trainer Target Proposals) */}
       {(pendingRecommendations.length > 0 || pendingInvitations.length > 0) && (
@@ -505,25 +519,29 @@ export const HomePage: React.FC = () => {
               {goals.calories > 0 && (
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {goalSummaryLabel}
-                  {todayBurnKcal > 0
-                    ? ` · Base ${goals.calories.toLocaleString()} + ${todayBurnKcal} active burn`
-                    : goals.estimatedWeeks
-                    ? ` · Est. ${goals.estimatedWeeks} weeks to target`
-                    : ''}
+                  {goals.estimatedWeeks ? ` · Est. ${goals.estimatedWeeks} weeks to target` : ''}
                 </p>
               )}
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <button
                 type="button"
-                onClick={() => setActiveTab('goals')}
-                className="text-xs font-medium text-[#4E6800] dark:text-[#C8FF00] hover:underline whitespace-nowrap shrink-0"
+                onClick={() => setCalculatorModalOpen(true)}
+                className="text-xs font-medium text-[#4E6800] dark:text-[#C8FF00] hover:underline whitespace-nowrap shrink-0 inline-flex items-center gap-1"
               >
-                {goals.calories > 0 ? 'Edit goals' : 'Set daily goals →'}
+                <Calculator className="w-3.5 h-3.5" />
+                <span>Smart Calculator</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('goals')}
+                className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:underline whitespace-nowrap shrink-0"
+              >
+                {goals.calories > 0 ? 'Edit goals' : 'Set goals →'}
               </button>
             </div>
           </div>
-          <CalorieRing consumed={selectedDateTotals.calories} goal={effectiveDailyCalorieGoal} />
+          <CalorieRing consumed={selectedDateTotals.calories} goal={goals.calories} />
         </div>
 
         {/* Daily Macro Split & Target Alignment (MyFitnessPal Nutrition Style) */}
@@ -668,9 +686,9 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Weekly Calorie Bank, Active Burn Allowance & Finish My Day Coach */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        <div className="lg:col-span-5 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3">
+      {/* Weekly Calorie Bank */}
+      <section className="grid grid-cols-1 gap-4 items-stretch">
+        <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3">
           <div className="flex items-start justify-between gap-2">
             <div>
               <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
@@ -698,66 +716,6 @@ export const HomePage: React.FC = () => {
             </span>
             <span>Protein ≥85%: {weeklyBank.proteinTargetDaysHit}/7d</span>
           </div>
-        </div>
-
-        <div className="lg:col-span-4 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-              <div>
-                <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                  Active Workout Burn
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums">
-                  +{todayBurnKcal.toLocaleString()} kcal allowance today
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              type="button"
-              disabled={todayBurnKcal <= 0}
-              onClick={() => addActiveBurnKcal(selectedDate, -50)}
-              className="min-h-[34px] px-2.5 rounded-lg border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-600 dark:text-slate-300 disabled:opacity-40"
-            >
-              -50
-            </button>
-            <button
-              type="button"
-              onClick={() => addActiveBurnKcal(selectedDate, 150)}
-              className="min-h-[34px] px-3 rounded-lg bg-stone-100 dark:bg-slate-800 hover:bg-stone-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-900 dark:text-slate-100"
-            >
-              +150 kcal
-            </button>
-            <button
-              type="button"
-              onClick={() => addActiveBurnKcal(selectedDate, 300)}
-              className="min-h-[34px] px-3 rounded-lg bg-stone-100 dark:bg-slate-800 hover:bg-stone-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-900 dark:text-slate-100"
-            >
-              +300 kcal
-            </button>
-          </div>
-        </div>
-
-        <div className="lg:col-span-3 bg-[#111317] dark:bg-[#14161C] border border-black/10 dark:border-white/15 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-3 text-white">
-          <div>
-            <div className="text-xs font-bold text-[#C8FF00] flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              Finish My Day Coach
-            </div>
-            <p className="text-[11px] text-slate-300 mt-1 leading-snug">
-              Get instant snack or dinner ideas tailored to your remaining macros.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setCoachOpen(true)}
-            className="w-full min-h-[38px] px-3 rounded-xl bg-[#C8FF00] text-black text-xs font-bold hover:brightness-95 transition-all"
-          >
-            Ask AI Coach →
-          </button>
         </div>
       </section>
 
@@ -1366,31 +1324,52 @@ export const HomePage: React.FC = () => {
         </section>
       )}
 
-      <AiCoachDrawer
-        isOpen={coachOpen}
-        onClose={() => setCoachOpen(false)}
-        targetDate={selectedDate}
-        remainingCalories={
-          effectiveDailyCalorieGoal > 0
-            ? Math.max(0, effectiveDailyCalorieGoal - selectedDateTotals.calories)
-            : 500
-        }
-        remainingProtein={
-          goals.protein > 0
-            ? Math.max(0, round1(goals.protein - selectedDateTotals.protein))
-            : 35
-        }
-        remainingCarbs={
-          goals.carbs > 0
-            ? Math.max(0, round1(goals.carbs - selectedDateTotals.carbs))
-            : 50
-        }
-        remainingFat={
-          goals.fat > 0
-            ? Math.max(0, round1(goals.fat - selectedDateTotals.fat))
-            : 18
-        }
-      />
+      {calculatorModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="home-smart-calculator-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCalculatorModalOpen(false);
+          }}
+        >
+          <div className="relative w-full max-w-5xl max-h-[94dvh] sm:max-h-[90vh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#F5F6F8] dark:bg-[#0B0C0F] border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 border-b border-black/10 dark:border-white/10 bg-white/95 dark:bg-[#111317]/95 backdrop-blur-md">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-[#C8FF00]/20 dark:bg-[#C8FF00]/15 flex items-center justify-center shrink-0">
+                  <Calculator className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+                </div>
+                <div className="min-w-0">
+                  <h2
+                    id="home-smart-calculator-modal-title"
+                    className="text-sm sm:text-base font-bold text-[#111317] dark:text-white truncate"
+                  >
+                    Smart Calorie Calculator
+                  </h2>
+                  <p className="text-[11px] text-[#52555E] dark:text-[#9A9CA3] truncate">
+                    Recalculate targets, macros, hydration &amp; adaptive timeline estimates
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCalculatorModalOpen(false)}
+                aria-label="Close Smart Calorie Calculator"
+                className="min-h-[44px] min-w-[44px] rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-[#111317] dark:text-white hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto overscroll-contain p-3 sm:p-6">
+              <SmartCalorieTrackerPanel
+                compactHeader
+                onApplied={() => setCalculatorModalOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

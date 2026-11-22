@@ -10,6 +10,7 @@ import type {
   WeeklySummaryResult,
 } from '../types';
 import { addDaysToDateKey, formatShortDate, getMondayToSundayWeek } from './dateUtils';
+import { normalizeFitnessGoal } from './fitnessCalculator';
 import {
   calculateScaledNutrition,
   getEntriesForDate,
@@ -305,9 +306,11 @@ export function evaluateAdaptiveCalorieAdjustment(params: {
   const dailyEnergyImbalance = (avgWeeklyWeightChangeKg * 7700) / 7;
   const observedTdee = Math.max(1100, Math.round(avgDailyIntake - dailyEnergyImbalance));
 
+  const normalizedGoal = normalizeFitnessGoal(profile.fitnessGoal);
   let desiredWeeklyDeltaKg = 0;
-  if (profile.fitnessGoal === 'fat_loss') desiredWeeklyDeltaKg = -0.35;
-  else if (profile.fitnessGoal === 'muscle_gain') desiredWeeklyDeltaKg = 0.2;
+  if (normalizedGoal === 'lose_weight') desiredWeeklyDeltaKg = -0.35;
+  else if (normalizedGoal === 'build_muscle') desiredWeeklyDeltaKg = 0.2;
+  else if (normalizedGoal === 'fat_gain') desiredWeeklyDeltaKg = 0.35;
   else desiredWeeklyDeltaKg = 0;
 
   const idealCaloriesForGoal = Math.round(observedTdee + (desiredWeeklyDeltaKg * 7700) / 7);

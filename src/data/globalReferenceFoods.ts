@@ -1,7 +1,12 @@
-import type { FoodItem } from '../types/index.ts';
+import type { FoodItem, FoodResultGroup } from '../types/index.ts';
 import { validateFoodCatalog } from '../utils/foodValidationEngine.ts';
 import { GLOBAL_POPULAR_FOODS } from './globalPopularFoods.ts';
 import { IFCT_2017_MASTER_FOODS } from './ifct2017Master.ts';
+import {
+  INDB_MASTER_FOODS,
+  KARNATAKA_AND_FAMILY_FOODS,
+  SUPPLEMENTARY_FCT_SEARCHABLE_FOODS,
+} from './indbAndRegionalFoods.ts';
 import { INDIAN_FOODS_CATALOG } from './indianFoods.ts';
 
 /**
@@ -325,25 +330,16 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     carbs: 2.4,
     fat: 24.8,
     fibre: 0,
-    missingFields: ['fibre'],
-    rawNutrients: {
-      energyKj: 1278,
-      calories: 305.4,
-      protein: 18.86,
-      carbs: 2.41,
-      fat: 24.78,
-      fibre: null,
-      water: 51.96,
-      ash: 1.98,
-    },
     isCustom: false,
     sourceType: 'verified_reference',
-    sourceName: 'Calothrix Verified Indian Dairy Reference',
+    sourceName: 'ICMR-NIN IFCT 2017 / Indian Dairy Reference',
     sourceId: 'CAL-IND-PANEER',
     sourcePriority: 1,
     verificationStatus: 'verified',
+    qualityStatus: 'verified',
     dataQuality: 'high',
-    aliases: ['paneer', 'cottage cheese', 'fresh paneer'],
+    aliases: ['paneer', 'panner', 'paner', 'cottage cheese', 'fresh paneer', 'malai paneer'],
+    regionalNames: ['ಪನೀರ್', 'पनीर'],
     dietaryTags: ['vegetarian', 'eggetarian', 'gluten_free', 'nut_free', 'high_protein'],
     micronutrients: { sodiumMg: 18, potassiumMg: 104, calciumMg: 480, ironMg: 0.2, zincMg: 2.4 },
   },
@@ -364,15 +360,15 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     carbs: 12.0,
     fat: 7.5,
     fibre: 0,
-    missingFields: ['fibre'],
     isCustom: false,
     sourceType: 'verified_reference',
     sourceName: 'Verified Manufacturer Nutrition Label',
     sourceId: 'IND-DAIRY-TONED-MILK',
     sourcePriority: 3,
     verificationStatus: 'verified',
+    qualityStatus: 'verified',
     dataQuality: 'high',
-    aliases: ['toned milk', 'cow milk toned', 'milk 3%'],
+    aliases: ['toned milk', 'cow milk toned', 'milk 3%', 'milk', 'haalu', 'doodh'],
     dietaryTags: ['vegetarian', 'eggetarian', 'gluten_free', 'nut_free'],
     micronutrients: { sodiumMg: 108, potassiumMg: 365, calciumMg: 295, ironMg: 0.1, vitaminCMg: 2.5 },
   },
@@ -382,7 +378,7 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     country: 'India',
     category: 'Dairy',
     foodState: 'fermented',
-    canonicalFamily: 'yogurt_curd',
+    canonicalFamily: 'curd',
     measurementBasis: 'per_100g',
     ingredientsText: 'Cultured pasteurized milk',
     servingName: '100 g',
@@ -392,15 +388,16 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     carbs: 4.7,
     fat: 3.3,
     fibre: 0,
-    missingFields: ['fibre'],
     isCustom: false,
     sourceType: 'verified_reference',
     sourceName: 'USDA / Indian Dairy Reference',
     sourceId: 'IND-DAIRY-CURD',
     sourcePriority: 2,
     verificationStatus: 'verified',
+    qualityStatus: 'verified',
     dataQuality: 'high',
-    aliases: ['curd', 'dahi', 'plain curd', 'mosaru', 'thayir'],
+    aliases: ['curd', 'dahi', 'plain curd', 'mosaru', 'thayir', 'yogurt'],
+    regionalNames: ['ಮೊಸರು', 'दही'],
     dietaryTags: ['vegetarian', 'eggetarian', 'gluten_free', 'nut_free'],
     micronutrients: { sodiumMg: 46, potassiumMg: 155, calciumMg: 149, zincMg: 0.6 },
   },
@@ -529,13 +526,13 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     carbs: 0,
     fat: 5.4,
     fibre: 0,
-    missingFields: ['carbs', 'fibre'],
     isCustom: false,
     sourceType: 'verified_reference',
     sourceName: 'Calothrix Verified Indian Cooked Reference',
     sourceId: 'IND-COOKED-ROHU',
     sourcePriority: 1,
-    verificationStatus: 'estimated',
+    verificationStatus: 'verified',
+    qualityStatus: 'calculated',
     dataQuality: 'high',
     dietaryTags: ['dairy_free', 'gluten_free', 'nut_free', 'high_protein'],
     micronutrients: { sodiumMg: 68, potassiumMg: 312, calciumMg: 51, ironMg: 1.2, zincMg: 0.8 },
@@ -1015,15 +1012,16 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     carbs: 4.1,
     fat: 2.2,
     fibre: 0,
-    missingFields: ['fibre'],
     isCustom: false,
     sourceType: 'verified_reference',
     sourceName: 'Calothrix Verified Indian Cooked Reference',
     sourceId: 'IND-BEV-CHAAS',
     sourcePriority: 1,
-    verificationStatus: 'estimated',
+    verificationStatus: 'verified',
+    qualityStatus: 'calculated',
     dataQuality: 'high',
     aliases: ['chaas', 'buttermilk', 'majjige', 'neer mor'],
+    regionalNames: ['ಮಜ್ಜಿಗೆ'],
     dietaryTags: ['vegetarian', 'eggetarian', 'gluten_free', 'nut_free'],
     micronutrients: { sodiumMg: 210, potassiumMg: 145, calciumMg: 112 },
   },
@@ -1033,7 +1031,7 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     country: 'International',
     category: 'Beverages',
     foodState: 'prepared',
-    canonicalFamily: 'coffee',
+    canonicalFamily: 'beverages',
     measurementBasis: 'per_100ml',
     liquidDensityGPerMl: 1.0,
     ingredientsText: 'Roasted coffee beans, water',
@@ -1050,6 +1048,7 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     sourceId: 'FDC-171890',
     sourcePriority: 2,
     verificationStatus: 'verified',
+    qualityStatus: 'verified',
     dataQuality: 'high',
     dietaryTags: ['vegetarian', 'vegan', 'eggetarian', 'dairy_free', 'gluten_free', 'nut_free'],
     micronutrients: { sodiumMg: 5, potassiumMg: 116, calciumMg: 5 },
@@ -1079,27 +1078,69 @@ const CURATED_BASE_FOODS: FoodItem[] = [
     sourceId: '8901262150125',
     sourcePriority: 3,
     verificationStatus: 'verified',
-    dataQuality: 'moderate',
-    missingFields: ['fibre'],
+    qualityStatus: 'verified',
+    dataQuality: 'high',
     dietaryTags: ['vegetarian', 'eggetarian', 'gluten_free', 'nut_free'],
     micronutrients: { calciumMg: 290, sodiumMg: 110 },
   },
 ];
 
-function enrichIndianCatalogFood(food: FoodItem): FoodItem {
+// Legacy duplicate IDs mapped to their canonical record (IDs preserved for historical food_entries!)
+const LEGACY_DUPLICATE_CANONICAL_MAP: Record<string, string> = {
+  'pop-ind-medu-vada': 'ind-medu-vada',
+  'pop-ind-besan-chilla': 'ind-besan-chilla',
+  'pop-ind-dhokla': 'ind-khaman-dhokla',
+  'pop-ind-paneer-tikka': 'ind-paneer-tikka',
+  'pop-ind-chicken-tikka': 'ind-chicken-tikka',
+  'pop-ind-amul-butter': 'ind-amul-butter',
+  'pop-ind-chicken-biryani': 'ind-chicken-biryani',
+  'pop-intl-brown-rice-cooked': 'ind-brown-rice',
+};
+
+const FAMILY_NORMALIZATION_MAP: Record<string, string> = {
+  chicken_breast: 'chicken',
+  eggs: 'egg',
+  lentils_dal: 'dal',
+  chickpeas: 'dal',
+  rajma: 'dal',
+  yogurt_curd: 'curd',
+  curd_rice: 'rice',
+  biryani: 'rice',
+  sambar: 'sambar_rasam',
+  poha: 'poha_upma',
+  upma: 'poha_upma',
+  rohu_fish: 'fish_seafood',
+  salmon_fish: 'fish_seafood',
+  oats: 'oats_grains',
+  quinoa: 'oats_grains',
+  sourdough_bread: 'bread_bakery',
+  banana: 'fruits',
+  apple: 'fruits',
+  broccoli: 'vegetables',
+  spinach: 'vegetables',
+  potato: 'vegetables',
+  almonds: 'nuts_seeds',
+  cashews: 'nuts_seeds',
+  chia_seeds: 'nuts_seeds',
+  peanuts: 'nuts_seeds',
+  whey_protein: 'supplements',
+  tofu: 'soya_tofu',
+  coffee: 'beverages',
+};
+
+function inferCuratedFamilyAndGroup(food: FoodItem): FoodItem {
   const n = food.name.toLowerCase();
   const isBranded = food.sourceType === 'branded' || Boolean(food.barcode);
-  const isRaw = food.foodState === 'raw' || /\braw\b|\bdry\b|\braw dry\b/i.test(n);
-  const isFried = food.foodState === 'fried' || /\bpoori\b|\bvada\b|\bbutter chicken\b/i.test(n);
+  const isRaw = food.foodState === 'raw' || food.foodState === 'dry' || /\braw\b|\bdry\b|\braw dry\b/i.test(n);
+  const isFried = food.foodState === 'fried' || /\bpoori\b|\bvada\b|\bbutter chicken\b|\bfried\b/i.test(n);
   const isRoasted = food.foodState === 'roasted' || /\broasted\b|\btandoori\b|\btikka\b|\bbhuna\b/i.test(n);
   const isBoiled = food.foodState === 'boiled' || /\bboiled\b/i.test(n);
-  const isSteamed = food.foodState === 'steamed' || /\bdhokla\b|\bmudde\b/i.test(n);
+  const isSteamed = food.foodState === 'steamed' || /\bdhokla\b|\bmudde\b|\bsteamed\b/i.test(n);
 
   const inferredState =
     food.foodState ||
     (isRaw ? 'raw' : isFried ? 'fried' : isRoasted ? 'roasted' : isBoiled ? 'boiled' : isSteamed ? 'steamed' : 'cooked');
 
-  // Assign explicit liquid densities ONLY for true liquids
   let liquidDensityGPerMl: number | undefined = food.liquidDensityGPerMl ?? undefined;
   let measurementBasis = food.measurementBasis;
   if (!liquidDensityGPerMl) {
@@ -1114,72 +1155,147 @@ function enrichIndianCatalogFood(food: FoodItem): FoodItem {
     }
   }
 
-  // Correct mislabeled raw IFCT provenance on cooked composite dishes
   const cleanSourceName = isBranded
     ? food.sourceName || 'Verified Manufacturer Nutrition Label'
     : food.sourceName === 'ICMR-NIN IFCT 2017' && !isRaw && !food.foodCode
     ? 'Calothrix Verified Indian Cooked Reference'
     : food.sourceName;
 
-  const sourcePriority =
-    food.sourcePriority ?? (isBranded ? 3 : 1);
-
-  const verificationStatus =
-    food.verificationStatus ?? (isBranded ? 'verified' : 'estimated');
-
-  let canonicalFamily = food.canonicalFamily;
-  if (!canonicalFamily) {
-    if (/\broti\b|\bchapati\b|\bphulka\b|\bparatha\b|\bakki rotti\b/.test(n)) canonicalFamily = 'wheat_roti';
-    else if (/\bdosa\b/.test(n)) canonicalFamily = 'dosa';
-    else if (/\bbiryani\b/.test(n)) canonicalFamily = 'biryani';
-    else if (/\bpaneer\b/.test(n)) canonicalFamily = 'paneer';
-    else if (/\bchicken\b/.test(n)) canonicalFamily = 'chicken_breast';
-    else if (/\begg\b|\bomelette\b|\begg bhurji\b/.test(n)) canonicalFamily = 'eggs';
-    else if (/\bmilk\b/.test(n)) canonicalFamily = 'milk';
-    else if (/\bcurd rice\b/.test(n)) canonicalFamily = 'curd_rice';
-    else if (/\bcurd\b|\blassi\b|\bdahi\b/.test(n)) canonicalFamily = 'yogurt_curd';
-    else if (/\bdal\b|\bsambar\b/.test(n)) canonicalFamily = 'lentils_dal';
-    else if (/\bpoha\b/.test(n)) canonicalFamily = 'poha';
-    else if (/\bragi\b/.test(n)) canonicalFamily = 'ragi';
+  // Normalize family ID into our unified 28-family taxonomy
+  let foodFamilyId = food.foodFamilyId || (food.canonicalFamily ? FAMILY_NORMALIZATION_MAP[food.canonicalFamily] || food.canonicalFamily : undefined);
+  if (!foodFamilyId) {
+    if (/\bakki rotti\b|\bjolada rotti\b|\bragi rotti\b/.test(n)) foodFamilyId = 'millet_rotti';
+    else if (/\bragi\b/.test(n)) foodFamilyId = 'ragi';
+    else if (/\bpaneer\b/.test(n)) foodFamilyId = 'paneer';
+    else if (/\bdosa\b|\bchilla\b|\butt?apam\b/.test(n)) foodFamilyId = 'dosa';
+    else if (/\bidli\b|\bdhokla\b/.test(n)) foodFamilyId = 'idli';
+    else if (/\bsambar\b|\brasam\b|\bsaaru\b/.test(n)) foodFamilyId = 'sambar_rasam';
+    else if (/\bvada\b|\bsamosa\b|\bpakora\b/.test(n)) foodFamilyId = 'vada_snacks';
+    else if (/\bpoha\b|\bupma\b|\bbisibele\b|\bkhichdi\b|\bpongal\b/.test(n)) foodFamilyId = 'poha_upma';
+    else if (/\bbiryani\b|\bpulao\b|\brice\b|\bchitranna\b/.test(n)) foodFamilyId = 'rice';
+    else if (/\broti\b|\bchapati\b|\bphulka\b|\bparatha\b|\bnaan\b|\bpoori\b/.test(n)) foodFamilyId = 'wheat_roti';
+    else if (/\bmushroom\b|\bmushrooms\b/.test(n)) foodFamilyId = 'vegetables';
+    else if (/\bchicken\b/.test(n) && !/\bmushroom\b/.test(n)) foodFamilyId = 'chicken';
+    else if (/\begg\b|\bomelette\b/.test(n)) foodFamilyId = 'egg';
+    else if (/\bdal\b|\brajma\b|\bchole\b|\bchana\b|\bchickpea\b/.test(n)) foodFamilyId = 'dal';
+    else if (/\bcurd\b|\bdahi\b|\byogurt\b|\byoghurt\b|\blassi\b|\bchaas\b|\bbuttermilk\b|\braita\b/.test(n)) foodFamilyId = 'curd';
+    else if (/\bmilk\b/.test(n)) foodFamilyId = 'milk';
+    else if (/\bfish\b|\bsalmon\b|\brohu\b|\bprawn\b|\btuna\b/.test(n)) foodFamilyId = 'fish_seafood';
+    else if (/\bmutton\b|\blamb\b|\bbeef\b|\bpork\b/.test(n)) foodFamilyId = 'mutton_meat';
+    else if (/\bghee\b|\bbutter\b|\boil\b/.test(n) && !/\bpeanut butter\b|\bbutter chicken\b|\bbutter masala\b|\bbutter naan\b/.test(n)) foodFamilyId = 'oils_ghee';
+    else if (/\btofu\b|\bsoya\b/.test(n)) foodFamilyId = 'soya_tofu';
+    else if (/\bwhey\b|\bprotein\b/.test(n)) foodFamilyId = 'supplements';
+    else if (/\boast\b|\boats\b|\bquinoa\b|\bmuesli\b/.test(n)) foodFamilyId = 'oats_grains';
+    else if (/\bbread\b|\bsandwich\b|\bburger\b|\bpizza\b|\bsub\b|\bbiscuit\b|\bnoodles\b/.test(n)) foodFamilyId = 'bread_bakery';
+    else if (/\bcoffee\b|\btea\b|\bchai\b|\blatte\b|\bamericano\b/.test(n)) foodFamilyId = 'beverages';
+    else if (/\balmond\b|\bcashew\b|\bpeanut\b|\bchia\b|\bwalnut\b/.test(n)) foodFamilyId = 'nuts_seeds';
+    else if (food.category === 'Fruits') foodFamilyId = 'fruits';
+    else foodFamilyId = 'vegetables';
   }
+
+  // Assign clean resultGroup: basic_ingredient | cooked_food | prepared_dish
+  let resultGroup: FoodResultGroup = food.resultGroup || 'prepared_dish';
+  if (!food.resultGroup) {
+    if (
+      ['food-paneer', 'food-milk', 'food-curd', 'food-greek-yoghurt', 'food-oats', 'food-ragi', 'food-banana', 'food-apple', 'food-almonds', 'food-cashews', 'food-chia-seeds', 'food-tofu', 'food-whey-protein', 'food-amul-taaza-milk', 'ind-amul-gold-milk', 'ind-tata-toor-dal', 'ind-amul-butter', 'ind-cow-ghee', 'ind-soya-chunks', 'ind-paneer-raw'].includes(food.id) ||
+      isRaw ||
+      inferredState === 'fresh' ||
+      inferredState === 'ripe'
+    ) {
+      resultGroup = 'basic_ingredient';
+    } else if (
+      ['food-rice-cooked', 'food-eggs', 'food-egg-whites', 'food-chicken-breast', 'food-fish', 'food-salmon', 'food-oats-cooked', 'food-broccoli', 'food-spinach', 'food-potato', 'food-quinoa', 'food-chana', 'ind-brown-rice', 'ind-ragi-mudde', 'ind-fried-egg'].includes(food.id) ||
+      /^(boiled|steamed|grilled|baked|poached)\b/i.test(n)
+    ) {
+      resultGroup = 'cooked_food';
+    } else {
+      resultGroup = 'prepared_dish';
+    }
+  }
+
+  // Parent food linking for key families
+  let parentFoodId = food.parentFoodId;
+  if (!parentFoodId) {
+    if (foodFamilyId === 'paneer' && food.id !== 'food-paneer') parentFoodId = 'food-paneer';
+    else if (foodFamilyId === 'rice' && food.id !== 'food-rice-cooked' && !isRaw) parentFoodId = 'food-rice-cooked';
+    else if (foodFamilyId === 'chicken' && food.id !== 'food-chicken-breast' && !isRaw) parentFoodId = 'food-chicken-breast';
+    else if (foodFamilyId === 'egg' && food.id !== 'food-eggs' && !isRaw) parentFoodId = 'food-eggs';
+    else if (foodFamilyId === 'dal' && food.id !== 'food-dal' && !isRaw) parentFoodId = 'food-dal';
+    else if (foodFamilyId === 'wheat_roti' && food.id !== 'food-roti' && !isRaw) parentFoodId = 'food-roti';
+    else if (foodFamilyId === 'dosa' && food.id !== 'food-dosa') parentFoodId = 'food-dosa';
+    else if (foodFamilyId === 'idli' && food.id !== 'food-idli') parentFoodId = 'food-idli';
+    else if (foodFamilyId === 'sambar_rasam' && food.id !== 'food-sambar') parentFoodId = 'food-sambar';
+    else if (foodFamilyId === 'ragi' && food.id !== 'food-ragi') parentFoodId = 'food-ragi';
+  }
+
+  // Remove bogus fibre missingFields on pure dairy/animal curated foods (e.g., ind-amul-gold-milk)
+  const cleanedMissing =
+    food.id === 'ind-amul-gold-milk'
+      ? undefined
+      : food.missingFields;
+
+  const canonicalFoodId = LEGACY_DUPLICATE_CANONICAL_MAP[food.id];
+  const isSearchable = canonicalFoodId ? false : food.isSearchable ?? true;
+
+  const preparationStyle =
+    food.preparationStyle ||
+    (isBranded
+      ? 'packaged'
+      : /\brestaurant\b|\bdhaba\b/.test(n)
+      ? 'restaurant'
+      : isRaw
+      ? 'raw'
+      : isBoiled
+      ? 'boiled'
+      : isSteamed
+      ? 'steamed'
+      : isRoasted
+      ? 'roasted'
+      : isFried
+      ? 'fried'
+      : inferredState === 'fresh'
+      ? 'fresh'
+      : 'homemade');
+
+  const sourcePriority = food.sourcePriority ?? (isBranded ? 3 : 1);
+  const verificationStatus = food.verificationStatus ?? (isBranded ? 'verified' : 'estimated');
+  const qualityStatus =
+    food.qualityStatus ||
+    (verificationStatus === 'verified' || verificationStatus === 'enriched'
+      ? 'verified'
+      : verificationStatus === 'estimated'
+      ? 'estimated'
+      : 'verified');
 
   return {
     ...food,
+    ...(cleanedMissing ? { missingFields: cleanedMissing } : { missingFields: undefined }),
     foodState: inferredState,
-    ...(canonicalFamily ? { canonicalFamily } : {}),
+    canonicalFamily: foodFamilyId,
+    foodFamilyId,
+    ...(parentFoodId ? { parentFoodId } : {}),
+    resultGroup,
+    preparationStyle,
     measurementBasis: measurementBasis || (food.servingWeightGrams === 100 ? 'per_100g' : 'per_serving'),
     ...(liquidDensityGPerMl ? { liquidDensityGPerMl } : {}),
     sourceName: cleanSourceName,
     sourcePriority,
     verificationStatus,
+    qualityStatus,
+    isSearchable,
+    ...(canonicalFoodId ? { canonicalFoodId } : {}),
   };
 }
 
-function attachIfctCanonicalFamily(food: FoodItem): FoodItem {
-  const n = food.name.toLowerCase();
-  let canonicalFamily = food.canonicalFamily;
-  if (!canonicalFamily) {
-    if (/\brice\b.*\braw\b|\brice,\s*raw\b|\brice parboiled\b/.test(n)) canonicalFamily = 'rice';
-    else if (/\bwheat,\s*whole\b|\bwheat flour\b/.test(n)) canonicalFamily = 'wheat_roti';
-    else if (/\bfinger millet\b|\bragi\b/.test(n)) canonicalFamily = 'ragi';
-    else if (/\bbengal gram\b|\bchickpea\b/.test(n)) canonicalFamily = 'chickpeas';
-    else if (/\bred gram\b|\bgreen gram\b|\bblack gram\b|\blentil\b/.test(n)) canonicalFamily = 'lentils_dal';
-    else if (/\bchicken\b/.test(n)) canonicalFamily = 'chicken_breast';
-    else if (/\begg,\s*poultry\b|\bhen egg\b/.test(n)) canonicalFamily = 'eggs';
-    else if (/\bspinach\b/.test(n)) canonicalFamily = 'spinach';
-    else if (/\bpotato\b/.test(n)) canonicalFamily = 'potato';
-    else if (/\bmilk,\s*whole\b/.test(n)) canonicalFamily = 'milk';
-    else if (/\balmond\b/.test(n)) canonicalFamily = 'almonds';
-    else if (/\bcashew\b/.test(n)) canonicalFamily = 'cashews';
-  }
-  return canonicalFamily ? { ...food, canonicalFamily } : food;
-}
-
 const RAW_COMBINED: FoodItem[] = [
-  ...INDIAN_FOODS_CATALOG.map(enrichIndianCatalogFood),
-  ...CURATED_BASE_FOODS,
-  ...GLOBAL_POPULAR_FOODS,
-  ...IFCT_2017_MASTER_FOODS.map(attachIfctCanonicalFamily),
+  ...CURATED_BASE_FOODS.map(inferCuratedFamilyAndGroup),
+  ...KARNATAKA_AND_FAMILY_FOODS,
+  ...INDIAN_FOODS_CATALOG.map(inferCuratedFamilyAndGroup),
+  ...GLOBAL_POPULAR_FOODS.map(inferCuratedFamilyAndGroup),
+  ...IFCT_2017_MASTER_FOODS,
+  ...INDB_MASTER_FOODS,
+  ...SUPPLEMENTARY_FCT_SEARCHABLE_FOODS,
 ];
 
 export const GLOBAL_REFERENCE_FOODS: FoodItem[] = validateFoodCatalog(RAW_COMBINED).validatedFoods;
+
