@@ -91,6 +91,52 @@ export type AuthMode = 'loading' | 'unauthenticated' | 'guest' | 'authenticated'
 const GUEST_MODE_KEY = 'calothrix_guest_mode_v1';
 const GUEST_USER_ID = 'guest-local-user';
 const ADMIN_OVERRIDES_STORAGE_KEY = 'calothrix_admin_food_overrides_v1';
+const PENDING_SYNC_KEY = 'calothrix_pending_sync_v1';
+const COACH_MODE_PREF_KEY = 'calothrix_coach_mode_pref_v1';
+const QUESTS_HOME_PREF_KEY = 'calothrix_quests_home_pref_v1';
+
+const TAB_PATHS: Record<NavTab, string> = {
+  home: '/',
+  'food-log': '/log',
+  'food-database': '/foods',
+  weight: '/weight',
+  progress: '/progress',
+  goals: '/goals',
+  profile: '/profile',
+  'admin-quality': '/admin',
+};
+
+function getTabFromPathname(pathname: string): NavTab {
+  const clean = pathname.replace(/\/+$/, '') || '/';
+  const match = (Object.entries(TAB_PATHS) as [NavTab, string][]).find(([, p]) => p === clean);
+  return match ? match[0] : 'home';
+}
+
+type PendingSyncAction =
+  | { id: string; userId: string; type: 'insert_food'; payload: FoodLogEntry }
+  | { id: string; userId: string; type: 'update_food'; payload: FoodLogEntry }
+  | { id: string; userId: string; type: 'delete_food'; payload: { entryId: string } }
+  | { id: string; userId: string; type: 'insert_weight'; payload: WeightEntry }
+  | { id: string; userId: string; type: 'delete_weight'; payload: { entryId: string } };
+
+function readPendingSyncQueue(): PendingSyncAction[] {
+  try {
+    const raw = localStorage.getItem(PENDING_SYNC_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingSyncQueue(queue: PendingSyncAction[]): void {
+  try {
+    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(queue.slice(-100)));
+  } catch {
+    // Ignore quota errors
+  }
+}
 
 interface FoodModalState {
   isOpen: boolean;
@@ -126,6 +172,14 @@ interface MacroLogContextValue {
   authDetails: { name: string; email: string; avatarUrl?: string; provider: string } | null;
   needsSchemaSetup: boolean;
   syncingDb: boolean;
+  isOnline: boolean;
+  pendingSyncCount: number;
+  syncPendingNow: () => Promise<number>;
+  showCoachMode: boolean;
+  setShowCoachMode: (enabled: boolean) => void;
+  showQuestsOnHome: boolean;
+  setShowQuestsOnHome: (enabled: boolean) => void;
+  deleteAccount: (confirmationText: string) => Promise<{ ok: boolean; error?: string; warning?: string }>;
   resolvedTheme: 'light' | 'dark';
   toggleTheme: () => void;
   activeTab: NavTab;
@@ -325,7 +379,75 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return createEmptyState(savedTheme);
   });
 
-  const [activeTab, setActiveTab] = useState<NavTab>('home');
+  const [activeTabState, setActiveTabState] = useState<NavTab>(() =>
+    typeof window !== 'undefined' ? getTabFromPathname(window.location.pathname) : 'home'
+  );
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(() => readPendingSyncQueue().length);
+  const [showCoachModeState, setShowCoachModeState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(COACH_MODE_PREF_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [showQuestsOnHomeState, setShowQuestsOnHomeState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(QUESTS_HOME_PREF_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const lastFoodSubmitRef = useRef<{ fingerprint: string; timestamp: number }>({
+    fingerprint: '',
+    timestamp: 0,
+  });
+
+  const activeTab = activeTabState;
+  const setActiveTab = useCallback((tab: NavTab) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      const targetPath = TAB_PATHS[tab] || '/';
+      if (window.location.pathname !== targetPath) {
+        try {
+          window.history.pushState({ tab }, '', targetPath);
+        } catch {
+          // Ignore pushState restrictions in sandboxed iframes
+        }
+      }
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onPopState = () => {
+      setActiveTabState(getTabFromPathname(window.location.pathname));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const setShowCoachMode = useCallback((enabled: boolean) => {
+    setShowCoachModeState(enabled);
+    try {
+      localStorage.setItem(COACH_MODE_PREF_KEY, enabled ? '1' : '0');
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, []);
+
+  const setShowQuestsOnHome = useCallback((enabled: boolean) => {
+    setShowQuestsOnHomeState(enabled);
+    try {
+      localStorage.setItem(QUESTS_HOME_PREF_KEY, enabled ? '1' : '0');
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, []);
+
   const [trainerTab, setTrainerTab] = useState<TrainerNavTab>('overview');
   const [selectedTrainerClientId, setSelectedTrainerClientId] = useState<string | null>(null);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(() => {
@@ -447,15 +569,83 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, 3600);
   }, []);
 
+  const enqueuePendingSync = useCallback((action: PendingSyncAction) => {
+    const queue = readPendingSyncQueue().filter((item) => item.id !== action.id);
+    queue.push(action);
+    writePendingSyncQueue(queue);
+    setPendingSyncCount(queue.length);
+  }, []);
+
+  const syncPendingNow = useCallback(async (): Promise<number> => {
+    const user = authUserRef.current;
+    if (!user || (typeof navigator !== 'undefined' && !navigator.onLine)) return 0;
+    const queue = readPendingSyncQueue();
+    if (queue.length === 0) return 0;
+
+    let synced = 0;
+    const remaining: PendingSyncAction[] = [];
+    for (const item of queue) {
+      if (item.userId !== user.id) {
+        remaining.push(item);
+        continue;
+      }
+      let res: DbMutationResult = { ok: false };
+      if (item.type === 'insert_food') {
+        res = await insertFoodEntryDb(item.payload);
+      } else if (item.type === 'update_food') {
+        res = await updateFoodEntryDb(item.payload);
+      } else if (item.type === 'delete_food') {
+        res = await deleteFoodEntryDb(user.id, item.payload.entryId);
+      } else if (item.type === 'insert_weight') {
+        res = await insertWeightEntryDb(item.payload);
+      } else if (item.type === 'delete_weight') {
+        res = await deleteWeightEntryDb(user.id, item.payload.entryId);
+      }
+      if (res.ok) {
+        synced += 1;
+      } else {
+        remaining.push(item);
+      }
+    }
+    writePendingSyncQueue(remaining);
+    setPendingSyncCount(remaining.length);
+    if (synced > 0) {
+      notify(`Synced ${synced} pending ${synced === 1 ? 'change' : 'changes'}`);
+    }
+    return synced;
+  }, [notify]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleOnline = () => {
+      setIsOnline(true);
+      void syncPendingNow();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [syncPendingNow]);
+
   const handleDbResult = useCallback(
-    (res: DbMutationResult) => {
+    (res: DbMutationResult, fallbackAction?: PendingSyncAction) => {
       if (res.ok) return;
       if (res.needsSetup) {
         setNeedsSchemaSetup(true);
       }
-      notify(res.errorMessage || 'Could not save to Supabase database', 'error');
+      if (fallbackAction) {
+        enqueuePendingSync(fallbackAction);
+        notify('Saved locally — will sync automatically when connection returns', 'info');
+        return;
+      }
+      notify(res.errorMessage || 'Could not save to cloud database', 'error');
     },
-    [notify]
+    [enqueuePendingSync, notify]
   );
 
   const refreshCoachingAlertsForUser = useCallback(async (userId: string) => {
@@ -516,7 +706,14 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const mealsRaw = localStorage.getItem(`calothrix_saved_meals_${userId}`);
       const parsedMeals = mealsRaw ? (JSON.parse(mealsRaw) as SavedMealCombo[]) : [];
-      setSavedMeals(Array.isArray(parsedMeals) ? parsedMeals : []);
+      const metaMeals = Array.isArray(user?.user_metadata?.saved_meals)
+        ? (user?.user_metadata?.saved_meals as SavedMealCombo[])
+        : [];
+      const mergedMealsMap = new Map<string, SavedMealCombo>();
+      for (const m of [...metaMeals, ...(Array.isArray(parsedMeals) ? parsedMeals : [])]) {
+        if (m && m.id) mergedMealsMap.set(m.id, m);
+      }
+      setSavedMeals(Array.from(mergedMealsMap.values()).slice(0, 40));
     } catch {
       setSavedMeals([]);
     }
@@ -552,24 +749,99 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const result = await loadUserStateFromSupabase(user, savedTheme);
         let nextState = result.state;
+        let mergedGuestCount = 0;
 
-        // If user started in Guest Mode and their Supabase account has zero logs yet, preserve & sync guest data
-        if (wasGuest && !result.needsSchemaSetup && nextState.foodEntries.length === 0) {
+        // Non-destructive Guest-to-Account merge: preserve both existing cloud logs AND guest logs
+        if (wasGuest && !result.needsSchemaSetup) {
           const guestState = storageService.loadState();
-          if (guestState.foodEntries.length > 0 || guestState.customFoods.length > 0 || guestState.weightEntries.length > 0) {
-            const migratedState: MacroLogPersistedState = {
-              ...nextState,
-              foodEntries: guestState.foodEntries.map((e) => ({ ...e, userId: user.id })),
-              customFoods: guestState.customFoods.map((f) => ({ ...f, userId: user.id })),
-              weightEntries: guestState.weightEntries.map((w) => ({ ...w, userId: user.id })),
-              favoriteFoodIds: guestState.favoriteFoodIds,
-              recentFoodIds: guestState.recentFoodIds,
-              goals: guestState.goals.calories > 0 ? { ...guestState.goals, userId: user.id } : nextState.goals,
-              profile: { ...nextState.profile, accountRole: 'individual', roleSelected: true },
-            };
-            nextState = migratedState;
-            void syncLocalStateToSupabase(user.id, migratedState);
+          const hasGuestRecords =
+            guestState.foodEntries.length > 0 ||
+            guestState.customFoods.length > 0 ||
+            guestState.weightEntries.length > 0;
+
+          if (hasGuestRecords) {
+            const existingFoodIds = new Set(nextState.foodEntries.map((e) => e.id));
+            const newGuestFoodEntries = guestState.foodEntries
+              .filter((e) => !existingFoodIds.has(e.id))
+              .map((e) => ({ ...e, userId: user.id }));
+
+            const existingCustomIds = new Set(nextState.customFoods.map((f) => f.id));
+            const newGuestCustomFoods = guestState.customFoods
+              .filter((f) => !existingCustomIds.has(f.id))
+              .map((f) => ({ ...f, userId: user.id }));
+
+            const existingWeightIds = new Set(nextState.weightEntries.map((w) => w.id));
+            const newGuestWeights = guestState.weightEntries
+              .filter((w) => !existingWeightIds.has(w.id))
+              .map((w) => ({ ...w, userId: user.id }));
+
+            mergedGuestCount =
+              newGuestFoodEntries.length + newGuestCustomFoods.length + newGuestWeights.length;
+
+            if (mergedGuestCount > 0) {
+              const mergedFavs = Array.from(
+                new Set([...nextState.favoriteFoodIds, ...guestState.favoriteFoodIds])
+              );
+              const mergedRecents = Array.from(
+                new Set([...guestState.recentFoodIds, ...nextState.recentFoodIds])
+              ).slice(0, 12);
+
+              const migratedState: MacroLogPersistedState = {
+                ...nextState,
+                foodEntries: [...newGuestFoodEntries, ...nextState.foodEntries],
+                customFoods: [...newGuestCustomFoods, ...nextState.customFoods],
+                weightEntries: [...newGuestWeights, ...nextState.weightEntries],
+                favoriteFoodIds: mergedFavs,
+                recentFoodIds: mergedRecents,
+                goals:
+                  nextState.goals.calories === 0 && guestState.goals.calories > 0
+                    ? { ...guestState.goals, userId: user.id }
+                    : nextState.goals,
+                profile: { ...nextState.profile, roleSelected: true },
+              };
+              nextState = migratedState;
+              void syncLocalStateToSupabase(user.id, {
+                ...migratedState,
+                foodEntries: newGuestFoodEntries,
+                customFoods: newGuestCustomFoods,
+                weightEntries: newGuestWeights,
+              });
+            }
           }
+
+          // Merge guest water & saved meals into authenticated user cache
+          try {
+            const guestWaterRaw = localStorage.getItem(`calothrix_water_${GUEST_USER_ID}`);
+            if (guestWaterRaw) {
+              const guestWater = JSON.parse(guestWaterRaw) as { logs?: Record<string, number>; goalMl?: number };
+              const userWaterRaw = localStorage.getItem(`calothrix_water_${user.id}`);
+              const userWater = userWaterRaw
+                ? (JSON.parse(userWaterRaw) as { logs?: Record<string, number>; goalMl?: number })
+                : {};
+              const mergedLogs = { ...(guestWater.logs || {}), ...(userWater.logs || {}) };
+              localStorage.setItem(
+                `calothrix_water_${user.id}`,
+                JSON.stringify({ logs: mergedLogs, goalMl: userWater.goalMl || guestWater.goalMl || 2500 })
+              );
+            }
+            const guestMealsRaw = localStorage.getItem(`calothrix_saved_meals_${GUEST_USER_ID}`);
+            if (guestMealsRaw) {
+              const guestMeals = JSON.parse(guestMealsRaw) as SavedMealCombo[];
+              const userMealsRaw = localStorage.getItem(`calothrix_saved_meals_${user.id}`);
+              const userMeals = userMealsRaw ? (JSON.parse(userMealsRaw) as SavedMealCombo[]) : [];
+              const byId = new Map<string, SavedMealCombo>();
+              for (const m of [...guestMeals, ...userMeals]) {
+                if (m?.id) byId.set(m.id, m);
+              }
+              localStorage.setItem(
+                `calothrix_saved_meals_${user.id}`,
+                JSON.stringify(Array.from(byId.values()).slice(0, 40))
+              );
+            }
+          } catch {
+            // Ignore cache merge failures
+          }
+
           localStorage.removeItem(GUEST_MODE_KEY);
         } else if (wasGuest) {
           localStorage.removeItem(GUEST_MODE_KEY);
@@ -635,8 +907,65 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setDailyWaterGoalMlState(defaultWater);
         }
 
+        if (mergedGuestCount > 0) {
+          notify(`Merged ${mergedGuestCount} guest ${mergedGuestCount === 1 ? 'entry' : 'entries'} into your account`);
+        }
+
         if (!result.needsSchemaSetup) {
           void refreshCoachingAlertsForUser(user.id);
+          void syncPendingNow();
+
+          // Cross-device hydrate from water_logs and user_saved_meals tables if migration is applied
+          void supabase
+            .from('water_logs')
+            .select('date, amount_ml')
+            .eq('user_id', user.id)
+            .order('date', { ascending: false })
+            .limit(90)
+            .then(({ data, error }) => {
+              if (!error && Array.isArray(data) && data.length > 0) {
+                setWaterIntakeMlByDate((prev) => {
+                  const merged = { ...prev };
+                  for (const row of data as { date: string; amount_ml: number }[]) {
+                    if (row.date && Number.isFinite(row.amount_ml)) {
+                      merged[row.date] = Math.max(merged[row.date] || 0, Number(row.amount_ml));
+                    }
+                  }
+                  return merged;
+                });
+              }
+            });
+
+          void supabase
+            .from('user_saved_meals')
+            .select('id, name, meal_type, items, total_calories, total_protein, total_carbs, total_fat, total_fibre, created_at')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(40)
+            .then(({ data, error }) => {
+              if (!error && Array.isArray(data) && data.length > 0) {
+                const mapped: SavedMealCombo[] = (data as Record<string, unknown>[]).map((row) => ({
+                  id: String(row.id),
+                  name: String(row.name || 'Saved Meal'),
+                  mealType: (row.meal_type as MealCategory) || 'lunch',
+                  items: Array.isArray(row.items) ? (row.items as SavedMealComboItem[]) : [],
+                  totalCalories: Number(row.total_calories || 0),
+                  totalProtein: Number(row.total_protein || 0),
+                  totalCarbs: Number(row.total_carbs || 0),
+                  totalFat: Number(row.total_fat || 0),
+                  totalFibre: Number(row.total_fibre || 0),
+                  createdAt: String(row.created_at || new Date().toISOString()),
+                }));
+                setSavedMeals((prev) => {
+                  const byId = new Map<string, SavedMealCombo>();
+                  for (const item of [...prev, ...mapped]) {
+                    byId.set(item.id, item);
+                  }
+                  return Array.from(byId.values()).slice(0, 40);
+                });
+              }
+            });
+
           void fetchWeeklyAssessmentsDb(user.id).then((waRes) => {
             if (waRes.ok && waRes.items.length > 0) {
               setWeeklyAssessments(waRes.items);
@@ -659,7 +988,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSyncingDb(false);
       }
     },
-    [hydrateAuxiliaryLocalCaches, refreshCoachingAlertsForUser]
+    [hydrateAuxiliaryLocalCaches, notify, refreshCoachingAlertsForUser, syncPendingNow]
   );
 
   const enterGuestMode = useCallback(() => {
@@ -761,12 +1090,14 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
 
     const handleOAuthMessage = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       if (!event.data || event.data.type !== 'CALOTHRIX_SUPABASE_OAUTH') return;
-      const hashStr: string = event.data.hash || '';
-      const searchStr: string = event.data.search || '';
+      const hashStr: string = typeof event.data.hash === 'string' ? event.data.hash : '';
+      const searchStr: string = typeof event.data.search === 'string' ? event.data.search : '';
       const hashParams = new URLSearchParams(hashStr.replace(/^#/, ''));
       const searchParams = new URLSearchParams(searchStr.replace(/^\?/, ''));
 
+      const authCode = searchParams.get('code');
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
       const errorDesc =
@@ -774,6 +1105,19 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (errorDesc) {
         notify(decodeURIComponent(errorDesc), 'error');
+        return;
+      }
+
+      if (authCode) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(authCode);
+        if (error) {
+          notify(error.message, 'error');
+          return;
+        }
+        if (data.user) {
+          await hydrateForUser(data.user);
+          notify('Signed in with Google');
+        }
         return;
       }
 
@@ -867,9 +1211,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       );
 
       if (!popup) {
-        return {
-          error: 'Popup was blocked by your browser. Please allow popups for this site and try again.',
-        };
+        // Mobile browsers often block popups — gracefully fall back to full-page redirect
+        window.location.assign(data.url);
       }
       return {};
     } catch (err) {
@@ -954,7 +1297,76 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setAuthMode('unauthenticated');
     setActiveTab('home');
     notify('Signed out', 'info');
-  }, [notify]);
+  }, [notify, setActiveTab]);
+
+  const deleteAccount = useCallback(
+    async (confirmationText: string): Promise<{ ok: boolean; error?: string; warning?: string }> => {
+      if (confirmationText.trim() !== 'DELETE') {
+        return { ok: false, error: 'Please type DELETE to confirm account deletion.' };
+      }
+      const user = authUserRef.current;
+      if (!user) {
+        // Guest local data wipe
+        localStorage.removeItem(GUEST_MODE_KEY);
+        localStorage.removeItem(`calothrix_water_${GUEST_USER_ID}`);
+        localStorage.removeItem(`calothrix_saved_meals_${GUEST_USER_ID}`);
+        localStorage.removeItem(`calothrix_burn_${GUEST_USER_ID}`);
+        const savedTheme =
+          (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
+        storageService.clearAll(savedTheme);
+        setState(createEmptyState(savedTheme));
+        setAuthMode('unauthenticated');
+        setActiveTab('home');
+        notify('Local guest data erased', 'info');
+        return { ok: true };
+      }
+
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) {
+          return { ok: false, error: 'Your session expired. Please sign in again and retry.' };
+        }
+        const res = await fetch('/api/account', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ confirm: 'DELETE' }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          warning?: string;
+        };
+        if (!res.ok || !data.ok) {
+          return { ok: false, error: data.error || 'Could not delete account right now.' };
+        }
+
+        // Clear local caches & sign out
+        localStorage.removeItem(GUEST_MODE_KEY);
+        localStorage.removeItem(`calothrix_water_${user.id}`);
+        localStorage.removeItem(`calothrix_saved_meals_${user.id}`);
+        localStorage.removeItem(`calothrix_burn_${user.id}`);
+        localStorage.removeItem(`calothrix_weekly_assessments_${user.id}`);
+        writePendingSyncQueue([]);
+        setPendingSyncCount(0);
+        await supabase.auth.signOut();
+        setAuthUser(null);
+        const savedTheme =
+          (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
+        setState(createEmptyState(savedTheme));
+        setAuthMode('unauthenticated');
+        setActiveTab('home');
+        notify(data.warning ? data.warning : 'Your account and data have been deleted.', 'info');
+        return { ok: true, warning: data.warning };
+      } catch {
+        return { ok: false, error: 'Network error while deleting account. Please try again.' };
+      }
+    },
+    [notify, setActiveTab]
+  );
 
   const retrySupabaseSync = useCallback(async (): Promise<boolean> => {
     const user = authUserRef.current;
@@ -1160,6 +1572,17 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const actorId = getActiveActorId();
       if (!actorId) return;
 
+      // Duplicate submission guard (prevents accidental double-taps on mobile within 1.5s)
+      const fingerprint = `${food.id}|${Math.round(quantityGrams * 10)}|${mealType}|${date}`;
+      const nowMs = Date.now();
+      if (
+        lastFoodSubmitRef.current.fingerprint === fingerprint &&
+        nowMs - lastFoodSubmitRef.current.timestamp < 1500
+      ) {
+        return;
+      }
+      lastFoodSubmitRef.current = { fingerprint, timestamp: nowMs };
+
       const scaled = calculateScaledNutrition(food, quantityGrams);
       const servingsCount =
         Math.round((quantityGrams / Math.max(1, food.servingWeightGrams)) * 100) / 100;
@@ -1199,12 +1622,22 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }));
 
       if (authUserRef.current) {
-        void insertFoodEntryDb(newEntry).then(handleDbResult);
-        void upsertFoodPreferencesDb(actorId, stateRef.current.favoriteFoodIds, nextRecents);
+        const pendingAction: PendingSyncAction = {
+          id: `insert_food_${newEntry.id}`,
+          userId: actorId,
+          type: 'insert_food',
+          payload: newEntry,
+        };
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          enqueuePendingSync(pendingAction);
+        } else {
+          void insertFoodEntryDb(newEntry).then((r) => handleDbResult(r, pendingAction));
+          void upsertFoodPreferencesDb(actorId, stateRef.current.favoriteFoodIds, nextRecents);
+        }
       }
       notify(`Added ${food.name} (${scaled.calories} kcal)`);
     },
-    [getActiveActorId, handleDbResult, notify]
+    [enqueuePendingSync, getActiveActorId, handleDbResult, notify]
   );
 
   const updateFoodEntry = useCallback(
@@ -1320,11 +1753,21 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         foodEntries: prev.foodEntries.filter((e) => e.id !== entryId),
       }));
       if (authUserRef.current) {
-        void deleteFoodEntryDb(actorId, entryId).then(handleDbResult);
+        const pendingAction: PendingSyncAction = {
+          id: `delete_food_${entryId}`,
+          userId: actorId,
+          type: 'delete_food',
+          payload: { entryId },
+        };
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          enqueuePendingSync(pendingAction);
+        } else {
+          void deleteFoodEntryDb(actorId, entryId).then((r) => handleDbResult(r, pendingAction));
+        }
       }
       notify('Food entry removed', 'info');
     },
-    [getActiveActorId, handleDbResult, notify]
+    [enqueuePendingSync, getActiveActorId, handleDbResult, notify]
   );
 
   const duplicateFoodEntry = useCallback(
@@ -1904,6 +2347,19 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const nextLogs = { ...prev, [dateKey]: nextVal };
         if (actorId) {
           syncWaterMeta(actorId, nextLogs, dailyWaterGoalMl);
+          if (authUserRef.current) {
+            void supabase
+              .from('water_logs')
+              .upsert(
+                {
+                  user_id: actorId,
+                  date: dateKey,
+                  amount_ml: nextVal,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'user_id,date' }
+              );
+          }
         }
         return nextLogs;
       });
@@ -1974,6 +2430,11 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch {
       // Ignore storage errors
     }
+    if (authUserRef.current) {
+      void supabase.auth.updateUser({
+        data: { saved_meals: nextMeals.slice(0, 20) },
+      });
+    }
   }, []);
 
   const saveMealCombo = useCallback(
@@ -1998,6 +2459,21 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         persistSavedMeals(actorId, next);
         return next;
       });
+      if (authUserRef.current) {
+        void supabase.from('user_saved_meals').upsert({
+          id: combo.id,
+          user_id: actorId,
+          name: combo.name,
+          meal_type: combo.mealType,
+          items: combo.items,
+          total_calories: combo.totalCalories,
+          total_protein: combo.totalProtein,
+          total_carbs: combo.totalCarbs,
+          total_fat: combo.totalFat,
+          total_fibre: combo.totalFibre,
+          created_at: combo.createdAt,
+        });
+      }
       notify(`Saved combo "${cleanName}" (${combo.totalCalories} kcal)`);
       return combo;
     },
@@ -2012,6 +2488,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (actorId) persistSavedMeals(actorId, next);
         return next;
       });
+      if (authUserRef.current && actorId) {
+        void supabase
+          .from('user_saved_meals')
+          .delete()
+          .eq('user_id', actorId)
+          .eq('id', comboId);
+      }
       notify('Saved meal deleted', 'info');
     },
     [getActiveActorId, notify, persistSavedMeals]
@@ -2538,6 +3021,14 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       authDetails,
       needsSchemaSetup,
       syncingDb,
+      isOnline,
+      pendingSyncCount,
+      syncPendingNow,
+      showCoachMode: showCoachModeState || coachPlans.length > 0 || pendingInvitations.length > 0,
+      setShowCoachMode,
+      showQuestsOnHome: showQuestsOnHomeState,
+      setShowQuestsOnHome,
+      deleteAccount,
       resolvedTheme,
       toggleTheme,
       activeTab,
@@ -2634,9 +3125,18 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       authDetails,
       needsSchemaSetup,
       syncingDb,
+      isOnline,
+      pendingSyncCount,
+      syncPendingNow,
+      showCoachModeState,
+      setShowCoachMode,
+      showQuestsOnHomeState,
+      setShowQuestsOnHome,
+      deleteAccount,
       resolvedTheme,
       toggleTheme,
       activeTab,
+      setActiveTab,
       selectedDate,
       allFoods,
       selectedDateEntries,

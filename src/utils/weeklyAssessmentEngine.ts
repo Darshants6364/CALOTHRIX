@@ -27,7 +27,7 @@ import type {
   WeeklyAssessmentDueStatus,
   WeeklyAssessmentRecord,
   WeightEntry,
-} from '../types';
+} from '../types/index.ts';
 import {
   allocateMacrosForCalories,
   CALCULATION_VERSION,
@@ -37,8 +37,8 @@ import {
   normalizeFitnessGoal,
   normalizeMacroFocus,
   SMART_FITNESS_GOAL_META,
-} from './fitnessCalculator';
-import { addDaysToDateKey, getTodayDateKey, parseLocalDateKey } from './dateUtils';
+} from './fitnessCalculator.ts';
+import { addDaysToDateKey, getTodayDateKey, parseLocalDateKey } from './dateUtils.ts';
 
 export const EWMA_ALPHA = 0.28;
 export const MAX_WEEKLY_TDEE_SHIFT_KCAL = 125;

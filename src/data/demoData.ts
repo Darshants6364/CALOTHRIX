@@ -1,13 +1,13 @@
-import {
+import type {
   FoodItem,
   FoodLogEntry,
   MacroLogPersistedState,
   MealCategory,
   WeightEntry,
-} from '../types';
-import { addDaysToDateKey, getTodayDateKey } from '../utils/dateUtils';
-import { calculateScaledNutrition } from '../utils/nutritionUtils';
-import { DEFAULT_FOODS } from './defaultFoods';
+} from '../types/index.ts';
+import { addDaysToDateKey, getTodayDateKey } from '../utils/dateUtils.ts';
+import { calculateScaledNutrition } from '../utils/nutritionUtils.ts';
+import { DEFAULT_FOODS } from './defaultFoods.ts';
 
 export const DEMO_USER_ID = 'demo-user-01';
 

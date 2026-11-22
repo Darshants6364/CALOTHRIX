@@ -1,12 +1,12 @@
-import {
+import type {
   FoodLogEntry,
   MacroNutrients,
   MacroLogPersistedState,
   NutritionGoals,
-} from '../types';
-import { addDaysToDateKey, getTodayDateKey } from './dateUtils';
-import { normalizeFitnessGoal } from './fitnessCalculator';
-import { isCalorieGoalAchieved, sumMacros } from './nutritionUtils';
+} from '../types/index.ts';
+import { addDaysToDateKey, getTodayDateKey } from './dateUtils.ts';
+import { normalizeFitnessGoal } from './fitnessCalculator.ts';
+import { isCalorieGoalAchieved, sumMacros } from './nutritionUtils.ts';
 
 export interface DailyQuest {
   id: string;

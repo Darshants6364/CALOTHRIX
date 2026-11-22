@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { openShareStudio } from './MacroShareModal';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { formatShortDate } from '../utils/dateUtils';
 import { round1 } from '../utils/nutritionUtils';
 import {
@@ -212,6 +213,8 @@ const MealAiScannerModalContent: React.FC = () => {
   } = useMacroLogStore();
 
   const [mode, setMode] = useState<ScannerTab>(mealScannerModal.initialMode || 'photo');
+  const modalContainerRef = useRef<HTMLDivElement | null>(null);
+  useModalFocusTrap(modalContainerRef, true, closeMealScannerModal);
   const [mealType, setMealType] = useState<MealCategory>(mealScannerModal.initialMeal || 'lunch');
   const [logDate, setLogDate] = useState<string>(mealScannerModal.targetDate);
   const [prepStyle, setPrepStyle] = useState<MealPrepStyle>('standard');
@@ -1162,8 +1165,14 @@ const MealAiScannerModalContent: React.FC = () => {
       role="dialog"
       aria-modal="true"
       aria-label="AI Photo and Voice Meal Analyzer"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeMealScannerModal();
+      }}
     >
-      <div className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden pb-[env(safe-area-inset-bottom)] sm:pb-0">
+      <div
+        ref={modalContainerRef}
+        className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden overscroll-contain pb-[env(safe-area-inset-bottom)] sm:pb-0"
+      >
         <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-2.5 shrink-0" />
 
         {/* Header */}
@@ -1793,7 +1802,7 @@ const MealAiScannerModalContent: React.FC = () => {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="text-xs font-semibold text-lime-800 dark:text-lime-300">
-                      Detected Meal · Confidence: {analysis.confidence}
+                      AI Estimate · Confidence: {analysis.confidence} · Review &amp; adjust grams before saving
                     </div>
                     <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">
                       {analysis.mealTitle}

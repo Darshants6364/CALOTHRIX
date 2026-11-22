@@ -27,7 +27,7 @@ export async function analyzeMealViaApi(params: {
   const timeoutId = window.setTimeout(() => controller.abort(), 28000);
 
   try {
-    const res = await fetch('/api/ai/analyze-meal', {
+    const res = await fetchWithFreshAuth('/api/ai/analyze-meal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -59,7 +59,7 @@ export async function scanNutritionLabelViaApi(params: {
   mimeType?: string;
   mediaBase64: string;
 }): Promise<NutritionLabelOcrResult> {
-  const res = await fetch('/api/ai/scan-label', {
+  const res = await fetchWithFreshAuth('/api/ai/scan-label', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -84,7 +84,7 @@ export async function askNutritionCoachViaApi(params: {
   dietaryPreference?: string;
   restrictions?: string[];
 }): Promise<CoachAdviceResult> {
-  const res = await fetch('/api/ai/coach', {
+  const res = await fetchWithFreshAuth('/api/ai/coach', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

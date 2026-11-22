@@ -123,3 +123,15 @@ export function getDateStripAround(centerDateKey: string, range = 3): string[] {
   }
   return keys;
 }
+
+/**
+ * Returns `count` consecutive YYYY-MM-DD date keys ending on `endDateKey` (inclusive).
+ */
+export function getLastNDates(count: number, endDateKey: string = getTodayDateKey()): string[] {
+  const n = Math.max(1, Math.floor(count));
+  const keys: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    keys.push(addDaysToDateKey(endDateKey, -i));
+  }
+  return keys;
+}
