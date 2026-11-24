@@ -68,6 +68,7 @@ import {
   WeightEntry,
   WeightGoal,
 } from '../types';
+import { isDatabaseAdmin } from '../utils/adminAccess';
 import { addDaysToDateKey, getTodayDateKey } from '../utils/dateUtils';
 import {
   CALCULATION_VERSION,
@@ -169,6 +170,7 @@ interface MacroLogContextValue {
   state: MacroLogPersistedState;
   authMode: AuthMode;
   authUser: User | null;
+  isAdmin: boolean;
   authDetails: { name: string; email: string; avatarUrl?: string; provider: string } | null;
   needsSchemaSetup: boolean;
   syncingDb: boolean;
@@ -370,8 +372,42 @@ function makeId(prefix: string): string {
 export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authMode, setAuthMode] = useState<AuthMode>('loading');
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [serverIsAdmin, setServerIsAdmin] = useState(false);
   const [needsSchemaSetup, setNeedsSchemaSetup] = useState(false);
   const [syncingDb, setSyncingDb] = useState(false);
+
+  const isAdmin = useMemo(
+    () => (authMode === 'authenticated' && (serverIsAdmin || isDatabaseAdmin(authUser, null))),
+    [authMode, authUser, serverIsAdmin]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (authMode !== 'authenticated' || !authUser) {
+      setServerIsAdmin(false);
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token || cancelled) return;
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const json = (await res.json()) as { isAdmin?: boolean };
+        if (!cancelled) {
+          setServerIsAdmin(Boolean(json.isAdmin));
+        }
+      } catch {
+        // Keep JWT app_metadata fallback on network errors
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authMode, authUser]);
 
   const [state, setState] = useState<MacroLogPersistedState>(() => {
     const savedTheme =
@@ -3018,6 +3054,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       state,
       authMode,
       authUser,
+      isAdmin,
       authDetails,
       needsSchemaSetup,
       syncingDb,
@@ -3122,6 +3159,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       state,
       authMode,
       authUser,
+      isAdmin,
       authDetails,
       needsSchemaSetup,
       syncingDb,

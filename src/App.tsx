@@ -12,7 +12,6 @@ import { MacroLogProvider, useMacroLogStore } from './hooks/useMacroLogStore';
 import { HomePage } from './pages/HomePage';
 import { LandingPage } from './pages/LandingPage';
 import { AccountRole, ENABLE_TRAINER_PORTAL } from './types';
-import { isDatabaseAdmin } from './utils/adminAccess';
 
 // Lazy-loaded pages & heavy modals for fast mobile initial load
 const FoodLogPage = lazy(() =>
@@ -109,7 +108,7 @@ function shouldOpenAuthDirectly(): { openAuth: boolean; portal: AccountRole } {
 }
 
 const MacroLogRouter: React.FC = () => {
-  const { activeTab, authUser, state } = useMacroLogStore();
+  const { activeTab, isAdmin } = useMacroLogStore();
 
   const renderPage = () => {
     switch (activeTab) {
@@ -128,7 +127,7 @@ const MacroLogRouter: React.FC = () => {
       case 'profile':
         return <ProfileSettingsPage />;
       case 'admin-quality':
-        return isDatabaseAdmin(authUser, state.profile) ? <AdminQualityPage /> : <HomePage />;
+        return isAdmin ? <AdminQualityPage /> : <HomePage />;
       default:
         return <HomePage />;
     }

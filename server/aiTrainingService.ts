@@ -12,6 +12,7 @@ import type {
   AiTrainingPayloadSnapshot,
   AiTrainingRun,
 } from '../src/types/index.ts';
+import { getSupabaseConfig } from './security.ts';
 
 const FALLBACK_STORE_PATH = '/tmp/calothrix-ai-training-store.json';
 const CACHE_TTL_MS = 60 * 1000;
@@ -40,19 +41,11 @@ interface FallbackTrainingStore {
 }
 
 function getTrainingSupabase(userToken?: string): SupabaseClient | null {
-  const url = (
-    process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
-  ).trim();
-  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  const anonKey = (
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
-  ).trim();
+  const { url, publishableKey, serviceRoleKey } = getSupabaseConfig();
+  const key = serviceRoleKey || publishableKey;
+  if (!url || !key) return null;
 
-  if (!url || (!serviceKey && !anonKey)) return null;
-  const key = serviceKey || anonKey;
-
-  if (userToken && !serviceKey) {
+  if (userToken && !serviceRoleKey) {
     return createClient(url, key, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
       auth: { persistSession: false, autoRefreshToken: false },

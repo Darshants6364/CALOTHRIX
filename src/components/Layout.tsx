@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { ENABLE_TRAINER_PORTAL, NavTab } from '../types';
-import { isDatabaseAdmin } from '../utils/adminAccess';
 import { CalothrixLogo } from './CalothrixLogo';
 import { SchemaSetupBanner } from './SchemaSetupBanner';
 
@@ -46,7 +45,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const {
     state,
     authMode,
-    authUser,
+    isAdmin,
     authDetails,
     isOnline,
     pendingSyncCount,
@@ -64,7 +63,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   } = useMacroLogStore();
 
   const isGuest = authMode === 'guest';
-  const isAdmin = isDatabaseAdmin(authUser, state.profile);
 
   const desktopNavItems: NavItem[] = [
     ...PRIMARY_NAV_ITEMS,

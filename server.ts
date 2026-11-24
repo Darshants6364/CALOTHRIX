@@ -133,6 +133,19 @@ async function startServer() {
     });
   });
 
+  // Server-verified session capabilities (keeps ADMIN_EMAILS strictly server-side)
+  app.get('/api/auth/me', async (req, res) => {
+    try {
+      const actor = await resolveRequestActor(req);
+      return res.json({
+        authenticated: actor.authenticated,
+        isAdmin: actor.authenticated ? actor.isAdmin : false,
+      });
+    } catch {
+      return res.json({ authenticated: false, isAdmin: false });
+    }
+  });
+
   // Authenticated self-service Account & Personal Data Deletion
   app.delete('/api/account', accountMutationLimiter, async (req, res) => {
     try {

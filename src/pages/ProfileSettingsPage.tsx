@@ -23,7 +23,6 @@ import {
   GoalSpeed,
   WorkoutIntensity,
 } from '../types';
-import { isDatabaseAdmin } from '../utils/adminAccess';
 import { normalizeFitnessGoal } from '../utils/fitnessCalculator';
 import { convertDisplayWeightToKg, convertWeightToDisplay } from '../utils/nutritionUtils';
 
@@ -37,7 +36,7 @@ export const ProfileSettingsPage: React.FC = () => {
   const {
     state,
     authMode,
-    authUser,
+    isAdmin,
     authDetails,
     showCoachMode,
     setShowCoachMode,
@@ -53,7 +52,6 @@ export const ProfileSettingsPage: React.FC = () => {
 
   const { profile, settings } = state;
   const isGuest = authMode === 'guest';
-  const isAdmin = isDatabaseAdmin(authUser, profile);
 
   const [name, setName] = useState(profile.name);
   const [age, setAge] = useState(String(profile.age));
