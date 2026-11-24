@@ -270,6 +270,10 @@ export function createEmptyState(
       workoutIntensity: 'moderate',
       fitnessGoal: 'maintenance',
       goalSpeed: 'moderate',
+      adaptivePaused: false,
+      manualOverrideActive: false,
+      cycleAnchorDate: null,
+      onboardingCompleted: false,
       dietaryPreference: 'omnivore',
       foodRestrictions: [],
       accountRole: 'individual',
@@ -290,6 +294,7 @@ export function createEmptyState(
       fat: 0,
       fibre: 0,
       targetWeightKg: undefined,
+      manualOverrideActive: false,
       updatedAt: new Date().toISOString(),
     },
     weightGoal: {

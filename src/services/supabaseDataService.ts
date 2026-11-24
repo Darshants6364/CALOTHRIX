@@ -16,8 +16,10 @@ import {
   MeasurementBasis,
   Micronutrients,
   NutritionGoals,
+  NutritionTargetHistoryRecord,
   UserProfile,
   VerificationStatus,
+  WeeklyAssessmentAiExplanation,
   WeeklyAssessmentRecord,
   WeeklyAssessmentStatus,
   WeightEntry,
@@ -129,6 +131,12 @@ export function createZeroUserState(
       workoutIntensity: 'moderate',
       fitnessGoal: 'maintenance',
       goalSpeed: 'moderate',
+      adaptiveTdeeKcal: null,
+      lastWeeklyAssessmentAt: null,
+      adaptivePaused: false,
+      manualOverrideActive: false,
+      cycleAnchorDate: null,
+      onboardingCompleted: false,
       dietaryPreference: 'omnivore',
       foodRestrictions: [],
       accountRole: 'individual',
@@ -149,6 +157,7 @@ export function createZeroUserState(
       fat: 0,
       fibre: 0,
       targetWeightKg: undefined,
+      manualOverrideActive: false,
       updatedAt: now,
     },
     weightGoal: {
@@ -275,6 +284,13 @@ export async function loadUserStateFromSupabase(
         adaptiveTdeeKcal:
           pRow.adaptive_tdee_kcal != null ? Number(pRow.adaptive_tdee_kcal) : null,
         lastWeeklyAssessmentAt: pRow.last_weekly_assessment_at || null,
+        adaptivePaused: Boolean(pRow.adaptive_paused),
+        manualOverrideActive: Boolean(pRow.manual_override_active),
+        cycleAnchorDate: pRow.cycle_anchor_date ? String(pRow.cycle_anchor_date) : null,
+        onboardingCompleted:
+          typeof pRow.onboarding_completed === 'boolean'
+            ? pRow.onboarding_completed || hasExistingUserActivity
+            : hasExistingUserActivity,
         dietaryPreference: (pRow.dietary_preference as DietaryPreference) || 'omnivore',
         foodRestrictions: Array.isArray(pRow.food_restrictions)
           ? (pRow.food_restrictions as FoodRestriction[])
@@ -324,6 +340,10 @@ export async function loadUserStateFromSupabase(
         goalSpeed: gRow.goal_speed || undefined,
         estimatedWeeks:
           gRow.estimated_weeks != null ? Number(gRow.estimated_weeks) : undefined,
+        manualOverrideActive:
+          typeof gRow.manual_override_active === 'boolean'
+            ? gRow.manual_override_active
+            : Boolean(profile.manualOverrideActive),
         updatedAt: gRow.updated_at || baseZero.goals.updatedAt,
       }
     : baseZero.goals;
@@ -467,14 +487,26 @@ export async function upsertProfileAndSettings(
     is_pregnant_or_breastfeeding: Boolean(profile.isPregnantOrBreastfeeding),
   };
 
-  const { error } = await supabase.from('profiles').upsert(smartTrackerPayload);
+  const adaptiveCyclePayload = {
+    ...smartTrackerPayload,
+    adaptive_paused: Boolean(profile.adaptivePaused),
+    manual_override_active: Boolean(profile.manualOverrideActive),
+    cycle_anchor_date: profile.cycleAnchorDate ?? null,
+    onboarding_completed: Boolean(profile.onboardingCompleted),
+  };
+
+  const { error } = await supabase.from('profiles').upsert(adaptiveCyclePayload);
   if (error && isMissingColumnError(error)) {
-    const mid = await supabase.from('profiles').upsert(extendedPayload);
-    if (mid.error && isMissingColumnError(mid.error)) {
-      const fallback = await supabase.from('profiles').upsert(corePayload);
-      return formatDbError(fallback.error);
+    const smartRes = await supabase.from('profiles').upsert(smartTrackerPayload);
+    if (smartRes.error && isMissingColumnError(smartRes.error)) {
+      const mid = await supabase.from('profiles').upsert(extendedPayload);
+      if (mid.error && isMissingColumnError(mid.error)) {
+        const fallback = await supabase.from('profiles').upsert(corePayload);
+        return formatDbError(fallback.error);
+      }
+      return formatDbError(mid.error);
     }
-    return formatDbError(mid.error);
+    return formatDbError(smartRes.error);
   }
   return formatDbError(error);
 }
@@ -513,14 +545,23 @@ export async function upsertNutritionGoals(
     calculation_version: goals.calculationVersion || 'calothrix-smart-v2.0',
   };
 
-  const { error } = await supabase.from('nutrition_goals').upsert(smartTrackerPayload);
+  const adaptiveGoalsPayload = {
+    ...smartTrackerPayload,
+    manual_override_active: Boolean(goals.manualOverrideActive),
+  };
+
+  const { error } = await supabase.from('nutrition_goals').upsert(adaptiveGoalsPayload);
   if (error && isMissingColumnError(error)) {
-    const mid = await supabase.from('nutrition_goals').upsert(extendedPayload);
-    if (mid.error && isMissingColumnError(mid.error)) {
-      const fallback = await supabase.from('nutrition_goals').upsert(corePayload);
-      return formatDbError(fallback.error);
+    const smartRes = await supabase.from('nutrition_goals').upsert(smartTrackerPayload);
+    if (smartRes.error && isMissingColumnError(smartRes.error)) {
+      const mid = await supabase.from('nutrition_goals').upsert(extendedPayload);
+      if (mid.error && isMissingColumnError(mid.error)) {
+        const fallback = await supabase.from('nutrition_goals').upsert(corePayload);
+        return formatDbError(fallback.error);
+      }
+      return formatDbError(mid.error);
     }
-    return formatDbError(mid.error);
+    return formatDbError(smartRes.error);
   }
   return formatDbError(error);
 }
@@ -912,10 +953,18 @@ function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmen
   const prevTrend = Number(row.previous_trend_weight_kg || row.previous_weight_kg || 0);
   const nextTrend = Number(row.assessed_trend_weight_kg || row.assessed_weight_kg || 0);
   const deltaKg = Math.round((nextTrend - prevTrend) * 100) / 100;
+  const cycleDays = Number(row.cycle_days || 14);
   const aiSummaryRaw =
     row.ai_summary && typeof row.ai_summary === 'object'
       ? (row.ai_summary as Record<string, unknown>)
       : {};
+  const structuredRaw =
+    (row.structured_ai_output && typeof row.structured_ai_output === 'object'
+      ? (row.structured_ai_output as WeeklyAssessmentAiExplanation['structured'])
+      : undefined) ||
+    (aiSummaryRaw.structured && typeof aiSummaryRaw.structured === 'object'
+      ? (aiSummaryRaw.structured as WeeklyAssessmentAiExplanation['structured'])
+      : undefined);
 
   return {
     id: String(row.id),
@@ -923,6 +972,7 @@ function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmen
     weekStartDate: String(row.week_start_date),
     weekEndDate: String(row.week_end_date),
     assessmentWeekNumber: Number(row.assessment_week_number || 1),
+    cycleDays,
     previousWeightKg: Number(row.previous_weight_kg || 0),
     assessedWeightKg: Number(row.assessed_weight_kg || 0),
     previousTrendWeightKg: prevTrend,
@@ -931,6 +981,9 @@ function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmen
     weeklyWeightChangePct: prevTrend > 0 ? Math.round((deltaKg / prevTrend) * 10000) / 100 : 0,
     avgDailyCalories: Number(row.avg_daily_calories || 0),
     avgDailyProtein: Number(row.avg_daily_protein || 0),
+    avgDailyCarbs: row.avg_daily_carbs != null ? Number(row.avg_daily_carbs) : undefined,
+    avgDailyFat: row.avg_daily_fat != null ? Number(row.avg_daily_fat) : undefined,
+    avgDailyFibre: row.avg_daily_fibre != null ? Number(row.avg_daily_fibre) : undefined,
     priorTdeeKcal: Number(row.prior_tdee_kcal || 0),
     calibratedTdeeKcal: Number(row.calibrated_tdee_kcal || 0),
     previousRecommendedCalories: prevCals,
@@ -944,7 +997,7 @@ function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmen
       row.recommended_hydration_ml != null ? Number(row.recommended_hydration_ml) : undefined,
     foodLoggedDays: Number(row.food_logged_days || 0),
     weightLoggedDays: Number(row.weight_logged_days || 0),
-    loggingCompletenessPct: Math.round((Number(row.food_logged_days || 0) / 7) * 100),
+    loggingCompletenessPct: Math.round((Number(row.food_logged_days || 0) / Math.max(1, cycleDays)) * 100),
     adherencePercentage: Number(row.adherence_percentage || 0),
     confidenceLevel:
       row.confidence_level === 'high' || row.confidence_level === 'moderate'
@@ -952,6 +1005,9 @@ function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmen
         : 'low',
     adjustmentType:
       (row.adjustment_type as WeeklyAssessmentRecord['adjustmentType']) || 'maintained',
+    statusTag:
+      (row.assessment_status_tag as WeeklyAssessmentRecord['statusTag']) ||
+      structuredRaw?.status,
     adjustmentReason: String(row.adjustment_reason || ''),
     goalCompleted: Boolean(row.goal_completed),
     suggestedMaintenanceCalories:
@@ -959,7 +1015,7 @@ function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmen
         ? Number(row.suggested_maintenance_calories)
         : null,
     aiSummary: {
-      headline: String(aiSummaryRaw.headline || 'Weekly Progress Assessment'),
+      headline: String(aiSummaryRaw.headline || '14-Day Progress Review'),
       bodyChangeAnalysis: String(aiSummaryRaw.bodyChangeAnalysis || ''),
       calorieAdjustmentReason: String(
         aiSummaryRaw.calorieAdjustmentReason || row.adjustment_reason || ''
@@ -972,6 +1028,7 @@ function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmen
         aiSummaryRaw.provider === 'gemini' || aiSummaryRaw.provider === 'deterministic'
           ? aiSummaryRaw.provider
           : 'deterministic',
+      structured: structuredRaw,
     },
     rationaleBullets: Array.isArray(row.rationale_bullets)
       ? (row.rationale_bullets as string[])
@@ -1011,7 +1068,7 @@ export async function upsertWeeklyAssessmentDb(
   userId: string,
   assessment: WeeklyAssessmentRecord
 ): Promise<DbMutationResult & { id?: string }> {
-  const payload = {
+  const basePayload = {
     user_id: userId,
     week_start_date: assessment.weekStartDate,
     week_end_date: assessment.weekEndDate,
@@ -1047,11 +1104,31 @@ export async function upsertWeeklyAssessmentDb(
     updated_at: new Date().toISOString(),
   };
 
+  const extendedPayload = {
+    ...basePayload,
+    cycle_days: assessment.cycleDays ?? 14,
+    assessment_status_tag: assessment.statusTag ?? assessment.aiSummary?.structured?.status ?? null,
+    structured_ai_output: assessment.aiSummary?.structured ?? null,
+    avg_daily_carbs: assessment.avgDailyCarbs ?? 0,
+    avg_daily_fat: assessment.avgDailyFat ?? 0,
+    avg_daily_fibre: assessment.avgDailyFibre ?? 0,
+  };
+
   const { data, error } = await supabase
     .from('weekly_assessments')
-    .upsert(payload, { onConflict: 'user_id,week_start_date,week_end_date' })
+    .upsert(extendedPayload, { onConflict: 'user_id,week_start_date,week_end_date' })
     .select('id')
     .maybeSingle();
+
+  if (error && isMissingColumnError(error)) {
+    const fallback = await supabase
+      .from('weekly_assessments')
+      .upsert(basePayload, { onConflict: 'user_id,week_start_date,week_end_date' })
+      .select('id')
+      .maybeSingle();
+    if (fallback.error) return formatDbError(fallback.error);
+    return { ok: true, id: fallback.data?.id ? String(fallback.data.id) : assessment.id };
+  }
 
   if (error) return formatDbError(error);
   return { ok: true, id: data?.id ? String(data.id) : assessment.id };
@@ -1073,6 +1150,89 @@ export async function updateWeeklyAssessmentStatusDb(
     .eq('user_id', userId)
     .eq('id', assessmentId);
 
+  return formatDbError(error);
+}
+
+// ============================================================================
+// NUTRITION TARGET HISTORY (Versioned Target Changes with Fallback)
+// ============================================================================
+
+export async function fetchTargetHistoryDb(
+  userId: string
+): Promise<{ ok: boolean; items: NutritionTargetHistoryRecord[]; tableMissing?: boolean }> {
+  const { data, error } = await supabase
+    .from('nutrition_target_history')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return {
+      ok: false,
+      items: [],
+      tableMissing: isSchemaOrPermissionError(error),
+    };
+  }
+
+  const items: NutritionTargetHistoryRecord[] = (data || []).map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: String(r.id),
+      userId: String(r.user_id),
+      previousCalories: r.previous_calories != null ? Number(r.previous_calories) : null,
+      previousProtein: r.previous_protein != null ? Number(r.previous_protein) : null,
+      previousCarbs: r.previous_carbs != null ? Number(r.previous_carbs) : null,
+      previousFat: r.previous_fat != null ? Number(r.previous_fat) : null,
+      previousFibre: r.previous_fibre != null ? Number(r.previous_fibre) : null,
+      newCalories: Number(r.new_calories || 0),
+      newProtein: Number(r.new_protein || 0),
+      newCarbs: Number(r.new_carbs || 0),
+      newFat: Number(r.new_fat || 0),
+      newFibre: Number(r.new_fibre || 0),
+      targetWeightKg: r.target_weight_kg != null ? Number(r.target_weight_kg) : null,
+      effectiveDate: String(r.effective_date || ''),
+      adjustmentReason: String(r.adjustment_reason || ''),
+      assessmentId: r.assessment_id ? String(r.assessment_id) : null,
+      applied: Boolean(r.applied ?? true),
+      adjustmentType:
+        r.adjustment_type === 'manual' || r.adjustment_type === 'adaptive'
+          ? r.adjustment_type
+          : 'initial',
+      createdAt: String(r.created_at || new Date().toISOString()),
+    };
+  });
+
+  return { ok: true, items };
+}
+
+export async function insertTargetHistoryDb(
+  userId: string,
+  record: NutritionTargetHistoryRecord
+): Promise<DbMutationResult> {
+  const payload = {
+    id: record.id,
+    user_id: userId,
+    previous_calories: record.previousCalories,
+    previous_protein: record.previousProtein,
+    previous_carbs: record.previousCarbs,
+    previous_fat: record.previousFat,
+    previous_fibre: record.previousFibre,
+    new_calories: record.newCalories,
+    new_protein: record.newProtein,
+    new_carbs: record.newCarbs,
+    new_fat: record.newFat,
+    new_fibre: record.newFibre,
+    target_weight_kg: record.targetWeightKg ?? null,
+    effective_date: record.effectiveDate,
+    adjustment_reason: record.adjustmentReason,
+    assessment_id: record.assessmentId ?? null,
+    applied: record.applied,
+    adjustment_type: record.adjustmentType,
+    created_at: record.createdAt,
+  };
+
+  const { error } = await supabase.from('nutrition_target_history').insert(payload);
   return formatDbError(error);
 }
 

@@ -196,13 +196,12 @@ export const DateStrip: React.FC<DateStripProps> = ({ selectedDate, onSelectDate
                     cy="16"
                     r={radius}
                     fill="none"
-                    stroke={
-                      isSelected
-                        ? 'rgba(255,255,255,0.24)'
-                        : 'currentColor'
-                    }
+                    stroke={isSelected ? undefined : 'currentColor'}
                     strokeOpacity={isSelected ? 1 : 0.16}
                     strokeWidth="2.6"
+                    className={
+                      isSelected ? 'stroke-white/30 dark:stroke-[#090A0C]/35' : ''
+                    }
                   />
                   {ratio > 0 && (
                     <circle
@@ -212,13 +211,13 @@ export const DateStrip: React.FC<DateStripProps> = ({ selectedDate, onSelectDate
                       fill="none"
                       stroke={
                         isSelected
-                          ? '#090A0C'
+                          ? undefined
                           : pctDisplay >= 100
                           ? '#C8FF00'
                           : '#84cc16'
                       }
                       className={isSelected ? 'stroke-white dark:stroke-[#090A0C]' : ''}
-                      strokeWidth="2.6"
+                      strokeWidth={isSelected ? '3' : '2.6'}
                       strokeLinecap={ratio >= 1 ? 'butt' : 'round'}
                       strokeDasharray={circumference}
                       strokeDashoffset={strokeDashoffset}

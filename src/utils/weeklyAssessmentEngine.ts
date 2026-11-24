@@ -1,12 +1,12 @@
 /**
- * CALOTHRIX — 7-Day Adaptive Assessment Engine (Deterministic Core)
+ * CALOTHRIX — 14-Day Adaptive Assessment Engine (Deterministic Core)
  *
  * Pure, unit-testable TypeScript module shared by client and server.
  * Zero Gemini dependency: Gemini only explains outputs computed here.
  *
  * Weight Smoothing Algorithm:
  *   Exponentially Weighted Moving Average (EWMA) with alpha = 0.28 across daily
- *   averaged weigh-ins (up to 28 days historical window), paired with 7-day rolling
+ *   averaged weigh-ins (up to 45 days historical window), paired with 7-day rolling
  *   averages so short-term water/sodium/glycogen noise never triggers knee-jerk calorie shifts.
  *
  * Distinct Operations:
@@ -16,6 +16,8 @@
  */
 
 import type {
+  AdaptiveAiStructuredOutput,
+  AdaptiveAssessmentStatusTag,
   AssessmentConfidenceLevel,
   DailyNutritionSummary,
   GoalSpeed,
@@ -40,11 +42,12 @@ import {
 } from './fitnessCalculator.ts';
 import { addDaysToDateKey, getTodayDateKey, parseLocalDateKey } from './dateUtils.ts';
 
+export const ASSESSMENT_CYCLE_DAYS = 14;
 export const EWMA_ALPHA = 0.28;
-export const MAX_WEEKLY_TDEE_SHIFT_KCAL = 125;
-export const MIN_FOOD_DAYS_FOR_TUNING = 5;
-export const MIN_WEIGHT_DAYS_FOR_TUNING = 4;
-export const MIN_ADHERENCE_PCT_FOR_TUNING = 78;
+export const MAX_WEEKLY_TDEE_SHIFT_KCAL = 150;
+export const MIN_FOOD_DAYS_FOR_TUNING = 9;
+export const MIN_WEIGHT_DAYS_FOR_TUNING = 5;
+export const MIN_ADHERENCE_PCT_FOR_TUNING = 75;
 
 export interface WeightTrendAnalysis {
   latestMeasuredWeightKg: number;
@@ -53,6 +56,7 @@ export interface WeightTrendAnalysis {
   previous7dAvgWeightKg: number;
   assessedTrendWeightKg: number;
   previousTrendWeightKg: number;
+  cycleWeightChangeKg: number;
   weeklyWeightChangeKg: number;
   weeklyWeightChangePct: number;
   multiWeekWeeklyRateKg: number | null;
@@ -71,13 +75,14 @@ export interface DeterministicWeeklyAssessmentInput {
   dailyNutrition: DailyNutritionSummary[];
   previousAssessments?: WeeklyAssessmentRecord[];
   referenceDateKey?: string; // Defaults to today (YYYY-MM-DD)
-  assessmentWeekNumber?: number;
+  assessmentWeekNumber?: number; // Cycle number (1, 2, 3...)
 }
 
 export interface DeterministicWeeklyAssessmentOutput {
   weekStartDate: string;
   weekEndDate: string;
   assessmentWeekNumber: number;
+  cycleDays: number;
   weightAnalysis: WeightTrendAnalysis;
   foodLoggedDays: number;
   weightLoggedDays: number;
@@ -87,6 +92,7 @@ export interface DeterministicWeeklyAssessmentOutput {
   avgDailyProtein: number;
   avgDailyCarbs: number;
   avgDailyFat: number;
+  avgDailyFibre: number;
   confidenceLevel: AssessmentConfidenceLevel;
   confidenceReasons: string[];
   estimatedBmr: number;
@@ -108,6 +114,7 @@ export interface DeterministicWeeklyAssessmentOutput {
   recommendedHydrationMl: number;
   projectedWeeksToGoal: number | null;
   adjustmentType: WeeklyAdjustmentType;
+  statusTag: AdaptiveAssessmentStatusTag;
   adjustmentReason: string;
   goalCompleted: boolean;
   suggestedMaintenanceCalories: number | null;
@@ -135,7 +142,7 @@ function daysBetweenDateKeys(startKey: string, endKey: string): number {
 /**
  * Collapses multiple weigh-ins on the same date into a single daily mean, sorted oldest -> newest.
  */
-function aggregateDailyWeights(entries: WeightEntry[]): { date: string; weightKg: number }[] {
+export function aggregateDailyWeights(entries: WeightEntry[]): { date: string; weightKg: number }[] {
   const map = new Map<string, number[]>();
   for (const e of entries) {
     if (!e.date || !Number.isFinite(e.weightKg) || e.weightKg < 25 || e.weightKg > 350) continue;
@@ -152,28 +159,46 @@ function aggregateDailyWeights(entries: WeightEntry[]): { date: string; weightKg
 }
 
 /**
- * Computes EWMA trend series and rolling 7-day averages while separating measured vs smoothed weight.
+ * Computes EWMA trend series and rolling 7-day averages across the 14-day cycle while separating measured vs smoothed weight.
  */
 export function analyzeWeightTrend(
   weightEntries: WeightEntry[],
-  weekStartDate: string,
-  weekEndDate: string,
+  cycleStartDate: string,
+  cycleEndDate: string,
   fallbackWeightKg: number,
   priorAssessment?: WeeklyAssessmentRecord | null
 ): WeightTrendAnalysis {
-  const daily = aggregateDailyWeights(weightEntries).filter((d) => d.date <= weekEndDate);
-  const window28Start = addDaysToDateKey(weekEndDate, -27);
-  const prevWeekStart = addDaysToDateKey(weekStartDate, -7);
-  const prevWeekEnd = addDaysToDateKey(weekStartDate, -1);
+  const daily = aggregateDailyWeights(weightEntries).filter((d) => d.date <= cycleEndDate);
+  const window45Start = addDaysToDateKey(cycleEndDate, -44);
+  const current7dStart = addDaysToDateKey(cycleEndDate, -6);
+  const prevCycleStart = addDaysToDateKey(cycleStartDate, -ASSESSMENT_CYCLE_DAYS);
+  const prevCycleEnd = addDaysToDateKey(cycleStartDate, -1);
 
-  const recent28 = daily.filter((d) => d.date >= window28Start);
-  const currentWeekEntries = daily.filter((d) => d.date >= weekStartDate && d.date <= weekEndDate);
-  const prevWeekEntries = daily.filter((d) => d.date >= prevWeekStart && d.date <= prevWeekEnd);
+  const recent45 = daily.filter((d) => d.date >= window45Start);
+  const currentCycleEntries = daily.filter(
+    (d) => d.date >= cycleStartDate && d.date <= cycleEndDate
+  );
+  const prevCycleEntries = daily.filter(
+    (d) => d.date >= prevCycleStart && d.date <= prevCycleEnd
+  );
+
+  // Rolling 7-day averages: last 7 days vs earlier portion / prior cycle
+  const current7dEntries = daily.filter(
+    (d) => d.date >= current7dStart && d.date <= cycleEndDate
+  );
+  const earlyCycleEntries = daily.filter(
+    (d) => d.date >= cycleStartDate && d.date < current7dStart
+  );
+  const prevWindow7dStart = addDaysToDateKey(current7dStart, -7);
+  const prevWindow7dEnd = addDaysToDateKey(current7dStart, -1);
+  const prev7dEntries = daily.filter(
+    (d) => d.date >= prevWindow7dStart && d.date <= prevWindow7dEnd
+  );
 
   const safeFallback = fallbackWeightKg > 25 ? fallbackWeightKg : 65;
 
-  // Build EWMA over the 28-day window (or all available entries up to weekEndDate)
-  const seriesSource = recent28.length > 0 ? recent28 : daily;
+  // Build EWMA over the 45-day window (or all available entries up to cycleEndDate)
+  const seriesSource = recent45.length > 0 ? recent45 : daily;
   const ewmaPoints: { date: string; measured: number; trend: number }[] = [];
 
   for (const pt of seriesSource) {
@@ -187,38 +212,45 @@ export function analyzeWeightTrend(
   }
 
   const latestMeasuredWeightKg =
-    currentWeekEntries.length > 0
-      ? currentWeekEntries[currentWeekEntries.length - 1].weightKg
+    currentCycleEntries.length > 0
+      ? currentCycleEntries[currentCycleEntries.length - 1].weightKg
       : daily.length > 0
       ? daily[daily.length - 1].weightKg
       : safeFallback;
 
   const current7dAvgWeightKg =
-    currentWeekEntries.length > 0
+    current7dEntries.length > 0
       ? round2(
-          currentWeekEntries.reduce((s, d) => s + d.weightKg, 0) / currentWeekEntries.length
+          current7dEntries.reduce((s, d) => s + d.weightKg, 0) / current7dEntries.length
+        )
+      : currentCycleEntries.length > 0
+      ? round2(
+          currentCycleEntries.reduce((s, d) => s + d.weightKg, 0) / currentCycleEntries.length
         )
       : latestMeasuredWeightKg;
 
   const previous7dAvgWeightKg =
-    prevWeekEntries.length > 0
-      ? round2(prevWeekEntries.reduce((s, d) => s + d.weightKg, 0) / prevWeekEntries.length)
+    priorAssessment?.current7dAvgWeightKg && prevCycleEntries.length === 0
+      ? priorAssessment.current7dAvgWeightKg
+      : prev7dEntries.length > 0
+      ? round2(prev7dEntries.reduce((s, d) => s + d.weightKg, 0) / prev7dEntries.length)
+      : earlyCycleEntries.length > 0
+      ? round2(earlyCycleEntries.reduce((s, d) => s + d.weightKg, 0) / earlyCycleEntries.length)
       : priorAssessment?.assessedWeightKg ??
-        (currentWeekEntries.length >= 2 ? currentWeekEntries[0].weightKg : safeFallback);
+        (currentCycleEntries.length >= 2 ? currentCycleEntries[0].weightKg : safeFallback);
 
   const previousMeasuredWeightKg =
     priorAssessment?.assessedWeightKg ??
-    (prevWeekEntries.length > 0
-      ? prevWeekEntries[prevWeekEntries.length - 1].weightKg
-      : currentWeekEntries.length >= 2
-      ? currentWeekEntries[0].weightKg
+    (prevCycleEntries.length > 0
+      ? prevCycleEntries[prevCycleEntries.length - 1].weightKg
+      : currentCycleEntries.length >= 2
+      ? currentCycleEntries[0].weightKg
       : safeFallback);
 
   const assessedTrendWeightKg =
     ewmaPoints.length > 0 ? ewmaPoints[ewmaPoints.length - 1].trend : latestMeasuredWeightKg;
 
-  // Find EWMA point at or before prevWeekEnd
-  const priorEwmaPoints = ewmaPoints.filter((p) => p.date <= prevWeekEnd);
+  const priorEwmaPoints = ewmaPoints.filter((p) => p.date <= prevCycleEnd);
   const previousTrendWeightKg =
     priorAssessment?.assessedTrendWeightKg ??
     (priorEwmaPoints.length > 0
@@ -227,13 +259,27 @@ export function analyzeWeightTrend(
       ? ewmaPoints[0].trend
       : previousMeasuredWeightKg);
 
-  const weeklyWeightChangeKg = round2(assessedTrendWeightKg - previousTrendWeightKg);
+  const cycleWeightChangeKg = round2(assessedTrendWeightKg - previousTrendWeightKg);
+
+  // Normalize weekly rate over the actual elapsed span of this cycle (~13–14 days)
+  let weeklySpanDays = 14;
+  if (priorEwmaPoints.length > 0 && ewmaPoints.length > 0) {
+    const anchorDate = priorEwmaPoints[priorEwmaPoints.length - 1].date;
+    const endDate = ewmaPoints[ewmaPoints.length - 1].date;
+    weeklySpanDays = Math.max(7, Math.min(21, daysBetweenDateKeys(anchorDate, endDate)));
+  } else if (ewmaPoints.length >= 2) {
+    const first = ewmaPoints[0];
+    const last = ewmaPoints[ewmaPoints.length - 1];
+    weeklySpanDays = Math.max(7, Math.min(21, daysBetweenDateKeys(first.date, last.date)));
+  }
+
+  const weeklyWeightChangeKg = round2((cycleWeightChangeKg / weeklySpanDays) * 7);
   const weeklyWeightChangePct =
     previousTrendWeightKg > 0
       ? round2((weeklyWeightChangeKg / previousTrendWeightKg) * 100)
       : 0;
 
-  // Compute multi-week rate (14–28 days) when available for genuine plateau detection
+  // Compute multi-week rate (14–45 days) when available for plateau / trend confidence
   let multiWeekWeeklyRateKg: number | null = null;
   let totalDaysInHistory = 0;
   if (ewmaPoints.length >= 2) {
@@ -252,13 +298,15 @@ export function analyzeWeightTrend(
     previous7dAvgWeightKg,
     assessedTrendWeightKg: round2(assessedTrendWeightKg),
     previousTrendWeightKg: round2(previousTrendWeightKg),
+    cycleWeightChangeKg,
     weeklyWeightChangeKg,
     weeklyWeightChangePct,
     multiWeekWeeklyRateKg,
-    weightLoggedDaysCurrentWeek: currentWeekEntries.length,
-    weightLoggedDaysPreviousWeek: prevWeekEntries.length,
+    weightLoggedDaysCurrentWeek: currentCycleEntries.length,
+    weightLoggedDaysPreviousWeek: prevCycleEntries.length,
     totalDaysInHistory,
-    hasMultiWeekHistory: totalDaysInHistory >= 12 && prevWeekEntries.length >= 2,
+    hasMultiWeekHistory:
+      totalDaysInHistory >= 14 && (prevCycleEntries.length >= 2 || Boolean(priorAssessment)),
     algorithm: 'ewma_alpha_0.28',
   };
 }
@@ -310,6 +358,24 @@ export function buildDailyNutritionSummaries(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+export function deriveAssessmentStatusTag(
+  adjustmentType: WeeklyAdjustmentType,
+  confidenceLevel: AssessmentConfidenceLevel,
+  calorieDeltaKcal: number,
+  adherencePercentage: number
+): AdaptiveAssessmentStatusTag {
+  if (confidenceLevel === 'low' || adjustmentType === 'insufficient_data') {
+    return 'insufficient_data';
+  }
+  if (calorieDeltaKcal !== 0 || adjustmentType === 'goal_completed_maintenance') {
+    return 'targets_updated';
+  }
+  if (adherencePercentage < MIN_ADHERENCE_PCT_FOR_TUNING || adjustmentType === 'safety_guarded') {
+    return 'needs_attention';
+  }
+  return 'on_track';
+}
+
 /**
  * Deterministic fallback explanation when Gemini is unavailable, times out, or fails schema validation.
  * Never invents numbers; strictly narrates the deterministic engine's outputs.
@@ -319,31 +385,33 @@ export function buildDeterministicWeeklyExplanation(
   profile: UserProfile
 ): WeeklyAssessmentAiExplanation {
   const goalLabel = SMART_FITNESS_GOAL_META[out.normalizedGoal].label;
-  const deltaSign = out.weightAnalysis.weeklyWeightChangeKg > 0 ? '+' : '';
+  const cycleNum = out.assessmentWeekNumber;
+  const deltaKg = out.weightAnalysis.cycleWeightChangeKg;
+  const deltaSign = deltaKg > 0 ? '+' : '';
   const weightDir =
-    Math.abs(out.weightAnalysis.weeklyWeightChangeKg) < 0.08
+    Math.abs(deltaKg) < 0.08
       ? 'remained steady'
-      : out.weightAnalysis.weeklyWeightChangeKg > 0
-      ? `increased by ${deltaSign}${out.weightAnalysis.weeklyWeightChangeKg.toFixed(2)} kg (smoothed trend)`
-      : `decreased by ${Math.abs(out.weightAnalysis.weeklyWeightChangeKg).toFixed(2)} kg (smoothed trend)`;
+      : deltaKg > 0
+      ? `increased by ${deltaSign}${deltaKg.toFixed(2)} kg (smoothed trend)`
+      : `decreased by ${Math.abs(deltaKg).toFixed(2)} kg (smoothed trend)`;
 
-  let headline = `Week ${out.assessmentWeekNumber} Check-In: Weight ${out.weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg — Targets Reviewed`;
+  let headline = `Cycle ${cycleNum} (14-Day) Check-In: Weight ${out.weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg — Targets Reviewed`;
   if (out.goalCompleted) {
     headline = `Goal Weight Reached (${out.weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg) — Maintenance Transition Ready`;
   } else if (out.confidenceLevel === 'low') {
-    headline = `Week ${out.assessmentWeekNumber} Check-In: Low Data Confidence — Existing Targets Preserved`;
+    headline = `Cycle ${cycleNum} Review: More Tracking Needed — Keeping Current Targets`;
   } else if (out.calorieDeltaKcal > 0) {
-    headline = `Week ${out.assessmentWeekNumber} Check-In: +${out.calorieDeltaKcal} kcal Target Update for ${goalLabel}`;
+    headline = `Your 14-Day Progress Review: +${out.calorieDeltaKcal} kcal Update for ${goalLabel}`;
   } else if (out.calorieDeltaKcal < 0) {
-    headline = `Week ${out.assessmentWeekNumber} Check-In: ${out.calorieDeltaKcal} kcal Target Tuning for ${goalLabel}`;
+    headline = `Your 14-Day Progress Review: ${out.calorieDeltaKcal} kcal Adjustment for ${goalLabel}`;
   } else {
-    headline = `Week ${out.assessmentWeekNumber} Check-In: Weight ${out.weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg — Macros Recalibrated`;
+    headline = `Your 14-Day Progress Review: Weight ${out.weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg — On Track`;
   }
 
   const bodyChangeAnalysis =
-    `Your latest measured weight is ${out.weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg (7-day average ${out.weightAnalysis.current7dAvgWeightKg.toFixed(1)} kg), ` +
-    `while your EWMA smoothed trend weight ${weightDir} from ${out.weightAnalysis.previousTrendWeightKg.toFixed(1)} kg to ${out.weightAnalysis.assessedTrendWeightKg.toFixed(1)} kg. ` +
-    `Short-term scale shifts always include water, sodium, and glycogen variance rather than pure muscle or fat tissue change.`;
+    `Your 7-day average weight moved from ${out.weightAnalysis.previous7dAvgWeightKg.toFixed(1)} kg to ${out.weightAnalysis.current7dAvgWeightKg.toFixed(1)} kg (latest weigh-in ${out.weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg), ` +
+    `while your smoothed trend ${weightDir} (${out.weightAnalysis.previousTrendWeightKg.toFixed(1)} → ${out.weightAnalysis.assessedTrendWeightKg.toFixed(1)} kg). ` +
+    `Day-to-day scale shifts naturally reflect water and meal timing alongside real progress.`;
 
   const calorieAdjustmentReason = out.adjustmentReason;
 
@@ -359,48 +427,78 @@ export function buildDeterministicWeeklyExplanation(
   const actionableTips: string[] = [];
   if (out.confidenceLevel === 'low') {
     actionableTips.push(
-      `Log all meals on at least ${MIN_FOOD_DAYS_FOR_TUNING} of 7 days next week so your average intake reflects true consumption.`
+      `Log meals on at least ${MIN_FOOD_DAYS_FOR_TUNING} of ${ASSESSMENT_CYCLE_DAYS} days so your intake average reflects true consumption.`
     );
     actionableTips.push(
-      `Step on the scale ${MIN_WEIGHT_DAYS_FOR_TUNING}+ mornings under consistent conditions (fasted, after waking) to build a reliable trend line.`
+      `Record at least ${MIN_WEIGHT_DAYS_FOR_TUNING} morning weigh-ins across the ${ASSESSMENT_CYCLE_DAYS}-day window under consistent conditions.`
     );
     actionableTips.push(
       `Aim for ~${out.recommendedProtein} g daily protein using staples like ${proteinFoods}.`
     );
   } else if (out.goalCompleted) {
     actionableTips.push(
-      `Transition to your estimated maintenance target of ${out.calibratedTdeeKcal.toLocaleString()} kcal/day for 2–4 weeks to stabilize at your new weight.`
+      `Transition to your estimated maintenance target of ${out.calibratedTdeeKcal.toLocaleString()} kcal/day for 2–4 weeks to stabilize.`
     );
     actionableTips.push(
       `Keep protein steady near ${out.recommendedProtein} g/day (${proteinFoods}) while keeping resistance training consistent.`
     );
     actionableTips.push(
-      `Once weight stabilizes at maintenance, choose your next goal—such as Body Recomposition, Build Muscle, or Maintain Weight.`
+      `Once weight stabilizes, select your next phase—such as Body Recomposition, Build Muscle, or Maintain Weight.`
     );
   } else {
     if (out.avgDailyProtein < out.recommendedProtein * 0.88) {
       actionableTips.push(
-        `Your weekly protein averaged ${Math.round(out.avgDailyProtein)} g vs ${out.recommendedProtein} g target—add 25–30 g protein per meal with ${proteinFoods}.`
+        `Your 14-day protein averaged ${Math.round(out.avgDailyProtein)} g vs ${out.recommendedProtein} g target—add 25–30 g protein per meal with ${proteinFoods}.`
       );
     } else {
       actionableTips.push(
-        `Protein consistency is solid (${Math.round(out.avgDailyProtein)} g/day)—anchor meals around ${proteinFoods} to hit ${out.recommendedProtein} g/day.`
+        `Protein consistency is solid (${Math.round(out.avgDailyProtein)} g/day)—keep meals anchored around ${proteinFoods} to hit ${out.recommendedProtein} g/day.`
       );
     }
     actionableTips.push(
-      `Center energy around ${out.recommendedCalories.toLocaleString()} kcal/day using ${carbFoods} and at least ${out.recommendedFibre} g fibre.`
+      `Center energy around ${out.recommendedCalories.toLocaleString()} kcal/day using ${carbFoods} and ~${out.recommendedFibre} g fibre.`
     );
     actionableTips.push(
-      `Continue 4+ morning weigh-ins per week so Week ${out.assessmentWeekNumber + 1} refines your calibrated maintenance estimate (${out.calibratedTdeeKcal.toLocaleString()} kcal/day).`
+      `Keep logging weigh-ins 3+ times per week so your next 14-day review stays sharp and accurate.`
     );
   }
 
   const confidenceExplanation =
-    `Data confidence is ${out.confidenceLevel.toUpperCase()} based on ${out.foodLoggedDays}/7 logged food days, ` +
-    `${out.weightLoggedDays}/7 weight check-ins, and ${Math.round(out.adherencePercentage)}% calorie adherence` +
+    `Data confidence is ${out.confidenceLevel.toUpperCase()} based on ${out.foodLoggedDays}/${ASSESSMENT_CYCLE_DAYS} logged food days, ` +
+    `${out.weightLoggedDays}/${ASSESSMENT_CYCLE_DAYS} weigh-ins, and ${Math.round(out.adherencePercentage)}% target consistency` +
     (out.weightAnalysis.hasMultiWeekHistory
       ? ` across ${out.weightAnalysis.totalDaysInHistory} days of weight history.`
-      : ' (early tracking window; longer history increases calibration precision).');
+      : ' (early 14-day baseline; subsequent reviews increase calibration precision).');
+
+  const calorieAction: AdaptiveAiStructuredOutput['calorie_action'] =
+    out.adjustmentType === 'insufficient_data'
+      ? 'preserve'
+      : out.calorieDeltaKcal > 0
+      ? 'increase'
+      : out.calorieDeltaKcal < 0
+      ? 'decrease'
+      : 'maintain';
+
+  const conciseSummary =
+    out.confidenceLevel === 'low'
+      ? `Logged ${out.foodLoggedDays}/${ASSESSMENT_CYCLE_DAYS} food days and ${out.weightLoggedDays} weigh-ins. Targets are held at ${out.recommendedCalories.toLocaleString()} kcal until more data is logged.`
+      : out.calorieDeltaKcal === 0
+      ? `7-day average weight is ${out.weightAnalysis.current7dAvgWeightKg.toFixed(1)} kg (${deltaSign}${deltaKg.toFixed(2)} kg smoothed). Staying at ${out.recommendedCalories.toLocaleString()} kcal/day keeps you aligned with ${goalLabel}.`
+      : `7-day average weight is ${out.weightAnalysis.current7dAvgWeightKg.toFixed(1)} kg (${deltaSign}${deltaKg.toFixed(2)} kg smoothed) with ${Math.round(out.adherencePercentage)}% adherence. Adjusting target to ${out.recommendedCalories.toLocaleString()} kcal/day (${out.calorieDeltaKcal > 0 ? '+' : ''}${out.calorieDeltaKcal} kcal).`;
+
+  const structured: AdaptiveAiStructuredOutput = {
+    status: out.statusTag,
+    summary: conciseSummary,
+    weight_change_kg: deltaKg,
+    calorie_action: calorieAction,
+    previous_calories: out.previousRecommendedCalories,
+    recommended_calories: out.recommendedCalories,
+    protein_g: out.recommendedProtein,
+    carbs_g: out.recommendedCarbs,
+    fat_g: out.recommendedFat,
+    reason: out.adjustmentReason,
+    confidence: out.confidenceLevel,
+  };
 
   return {
     headline,
@@ -409,17 +507,18 @@ export function buildDeterministicWeeklyExplanation(
     actionableTips: actionableTips.slice(0, 3),
     confidenceExplanation,
     provider: 'deterministic',
+    structured,
   };
 }
 
 /**
- * Core 7-Day Deterministic Adaptive Assessment Engine.
+ * Core 14-Day Deterministic Adaptive Assessment Engine.
  */
 export function runDeterministicWeeklyAssessment(
   input: DeterministicWeeklyAssessmentInput
 ): DeterministicWeeklyAssessmentOutput {
   const weekEndDate = input.referenceDateKey || getTodayDateKey();
-  const weekStartDate = addDaysToDateKey(weekEndDate, -6);
+  const weekStartDate = addDaysToDateKey(weekEndDate, -(ASSESSMENT_CYCLE_DAYS - 1));
 
   const sortedPrevious = [...(input.previousAssessments || [])]
     .filter((a) => a.status === 'applied')
@@ -437,7 +536,7 @@ export function runDeterministicWeeklyAssessment(
   const baselineWeightKg =
     input.profile.currentWeightKg > 25 ? input.profile.currentWeightKg : 65;
 
-  // 1. Analyze measured vs trend weight
+  // 1. Analyze measured vs trend weight across 14-day window (with up to 45d history)
   const weightAnalysis = analyzeWeightTrend(
     input.weightEntries,
     weekStartDate,
@@ -447,28 +546,32 @@ export function runDeterministicWeeklyAssessment(
   );
 
   // 2. Analyze food logging completeness vs calorie adherence (strictly separate!)
-  const weekNutrition = input.dailyNutrition.filter(
+  const cycleNutrition = input.dailyNutrition.filter(
     (d) => d.date >= weekStartDate && d.date <= weekEndDate && d.calories > 0
   );
-  const foodLoggedDays = weekNutrition.length;
+  const foodLoggedDays = cycleNutrition.length;
   const weightLoggedDays = weightAnalysis.weightLoggedDaysCurrentWeek;
-  const loggingCompletenessPct = Math.round((foodLoggedDays / 7) * 100);
+  const loggingCompletenessPct = Math.round((foodLoggedDays / ASSESSMENT_CYCLE_DAYS) * 100);
 
   const avgDailyCalories =
     foodLoggedDays > 0
-      ? Math.round(weekNutrition.reduce((s, d) => s + d.calories, 0) / foodLoggedDays)
+      ? Math.round(cycleNutrition.reduce((s, d) => s + d.calories, 0) / foodLoggedDays)
       : 0;
   const avgDailyProtein =
     foodLoggedDays > 0
-      ? round1(weekNutrition.reduce((s, d) => s + d.protein, 0) / foodLoggedDays)
+      ? round1(cycleNutrition.reduce((s, d) => s + d.protein, 0) / foodLoggedDays)
       : 0;
   const avgDailyCarbs =
     foodLoggedDays > 0
-      ? round1(weekNutrition.reduce((s, d) => s + d.carbs, 0) / foodLoggedDays)
+      ? round1(cycleNutrition.reduce((s, d) => s + d.carbs, 0) / foodLoggedDays)
       : 0;
   const avgDailyFat =
     foodLoggedDays > 0
-      ? round1(weekNutrition.reduce((s, d) => s + d.fat, 0) / foodLoggedDays)
+      ? round1(cycleNutrition.reduce((s, d) => s + d.fat, 0) / foodLoggedDays)
+      : 0;
+  const avgDailyFibre =
+    foodLoggedDays > 0
+      ? round1(cycleNutrition.reduce((s, d) => s + (d.fibre || 0), 0) / foodLoggedDays)
       : 0;
 
   // Previous targets
@@ -478,7 +581,7 @@ export function runDeterministicWeeklyAssessment(
     heightCm: input.profile.heightCm || 170,
     currentWeightKg: weightAnalysis.previousMeasuredWeightKg || baselineWeightKg,
     targetWeightKg: input.profile.targetWeightKg || input.goals.targetWeightKg || baselineWeightKg,
-    dailyAverageSteps: input.profile.dailyAverageSteps || 7500,
+    dailyAverageSteps: input.profile.dailyAverageSteps ?? 7500,
     activityLevel: input.profile.activityLevel || 'moderate',
     workoutFrequencyPerWeek: input.profile.workoutFrequencyPerWeek ?? 3,
     workoutIntensity: input.profile.workoutIntensity || 'moderate',
@@ -500,11 +603,11 @@ export function runDeterministicWeeklyAssessment(
   const previousRecommendedFibre =
     input.goals.fibre > 0 ? Math.round(input.goals.fibre) : initialCalc.fibreGrams;
 
-  // Calorie adherence: average closeness of each logged day to previousRecommendedCalories
+  // Calorie adherence: closeness of each logged day to previousRecommendedCalories
   const adherencePercentage =
     foodLoggedDays > 0 && previousRecommendedCalories > 0
       ? round1(
-          weekNutrition.reduce((sum, day) => {
+          cycleNutrition.reduce((sum, day) => {
             const devPct =
               Math.abs(day.calories - previousRecommendedCalories) / previousRecommendedCalories;
             return sum + Math.max(0, 100 - Math.min(100, devPct * 100));
@@ -512,24 +615,24 @@ export function runDeterministicWeeklyAssessment(
         )
       : 0;
 
-  // 3. Data Quality Gate
+  // 3. Data Quality Gate (14-day window thresholds)
   const confidenceReasons: string[] = [];
   if (foodLoggedDays < MIN_FOOD_DAYS_FOR_TUNING) {
     confidenceReasons.push(
-      `Only ${foodLoggedDays}/7 food days logged (need at least ${MIN_FOOD_DAYS_FOR_TUNING} days).`
+      `Only ${foodLoggedDays}/${ASSESSMENT_CYCLE_DAYS} food days logged (need at least ${MIN_FOOD_DAYS_FOR_TUNING} days).`
     );
   }
   if (weightLoggedDays < MIN_WEIGHT_DAYS_FOR_TUNING) {
     confidenceReasons.push(
-      `Only ${weightLoggedDays}/7 weigh-ins recorded (need at least ${MIN_WEIGHT_DAYS_FOR_TUNING} distributed check-ins).`
+      `Only ${weightLoggedDays}/${ASSESSMENT_CYCLE_DAYS} weigh-ins recorded (need at least ${MIN_WEIGHT_DAYS_FOR_TUNING} distributed check-ins).`
     );
   }
   if (avgDailyCalories <= 0) {
-    confidenceReasons.push('Missing daily calorie intake data for this 7-day window.');
+    confidenceReasons.push(`Missing daily calorie intake data for this ${ASSESSMENT_CYCLE_DAYS}-day cycle.`);
   }
   if (adherencePercentage < MIN_ADHERENCE_PCT_FOR_TUNING && foodLoggedDays >= MIN_FOOD_DAYS_FOR_TUNING) {
     confidenceReasons.push(
-      `Calorie adherence was ${Math.round(adherencePercentage)}% (auto calorie tuning requires ~80%+ adherence).`
+      `Target consistency was ${Math.round(adherencePercentage)}% (adjustments work best at ~${MIN_ADHERENCE_PCT_FOR_TUNING}%+ consistency).`
     );
   }
 
@@ -542,8 +645,8 @@ export function runDeterministicWeeklyAssessment(
   if (!hasMinimumData) {
     confidenceLevel = 'low';
   } else if (
-    foodLoggedDays >= 6 &&
-    weightLoggedDays >= 5 &&
+    foodLoggedDays >= 11 &&
+    weightLoggedDays >= 7 &&
     adherencePercentage >= 80 &&
     (weightAnalysis.hasMultiWeekHistory || assessmentWeekNumber >= 2)
   ) {
@@ -571,7 +674,7 @@ export function runDeterministicWeeklyAssessment(
     heightCm: input.profile.heightCm || 170,
     currentWeightKg: reliableWeightKg,
     targetWeightKg,
-    dailyAverageSteps: input.profile.dailyAverageSteps || 7500,
+    dailyAverageSteps: input.profile.dailyAverageSteps ?? 7500,
     activityLevel: input.profile.activityLevel || 'moderate',
     workoutFrequencyPerWeek: input.profile.workoutFrequencyPerWeek ?? 3,
     workoutIntensity: input.profile.workoutIntensity || 'moderate',
@@ -595,7 +698,6 @@ export function runDeterministicWeeklyAssessment(
   let calibratedTdeeKcal = estimatedTdeeKcal;
 
   if (confidenceLevel !== 'low' && avgDailyCalories > 0) {
-    // Use multi-week trend when available for stability, else 7-day EWMA trend
     const weeklyTrendDeltaKg =
       weightAnalysis.multiWeekWeeklyRateKg !== null
         ? weightAnalysis.multiWeekWeeklyRateKg
@@ -611,7 +713,7 @@ export function runDeterministicWeeklyAssessment(
       inferredTdeeKcal = rawInferred;
     }
 
-    // Week 1 rule: stay anchored to formula TDEE as primary starting estimate
+    // Cycle 1 rule: stay anchored to formula TDEE as primary starting estimate unless strong multi-week history exists
     if (assessmentWeekNumber <= 1 && !weightAnalysis.hasMultiWeekHistory) {
       calibratedTdeeKcal = estimatedTdeeKcal;
     } else if (inferredTdeeKcal !== null) {
@@ -672,14 +774,14 @@ export function runDeterministicWeeklyAssessment(
   } else if (confidenceLevel === 'low') {
     targetCaloriesNext = previousRecommendedCalories;
     adjustmentType = 'insufficient_data';
-    adjustmentReason = `Insufficient tracking data (${foodLoggedDays}/7 food days, ${weightLoggedDays}/7 weigh-ins). Calorie targets were kept unchanged at ${previousRecommendedCalories.toLocaleString()} kcal/day until at least ${MIN_FOOD_DAYS_FOR_TUNING} food days and ${MIN_WEIGHT_DAYS_FOR_TUNING} weigh-ins are logged.`;
+    adjustmentReason = `Insufficient tracking data (${foodLoggedDays}/${ASSESSMENT_CYCLE_DAYS} food days, ${weightLoggedDays}/${ASSESSMENT_CYCLE_DAYS} weigh-ins). Calorie targets were kept unchanged at ${previousRecommendedCalories.toLocaleString()} kcal/day until at least ${MIN_FOOD_DAYS_FOR_TUNING} food days and ${MIN_WEIGHT_DAYS_FOR_TUNING} weigh-ins are logged.`;
     rationaleBullets.push(...confidenceReasons);
     rationaleBullets.push('Existing daily calorie and macro targets preserved to avoid noise-driven changes.');
   } else if (goalCompleted) {
     suggestedMaintenanceCalories = calibratedTdeeKcal;
     targetCaloriesNext = calibratedTdeeKcal;
     adjustmentType = 'goal_completed_maintenance';
-    adjustmentReason = `Target weight (${targetWeightKg.toFixed(1)} kg) has been reached (measured ${weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg, trend ${weightAnalysis.assessedTrendWeightKg.toFixed(1)} kg). Stopping the previous ${hadLossGoal ? 'deficit' : 'surplus'} and offering a transition to estimated maintenance (~${calibratedTdeeKcal.toLocaleString()} kcal/day).`;
+    adjustmentReason = `Target weight (${targetWeightKg.toFixed(1)} kg) has been reached (measured ${weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg, trend ${weightAnalysis.assessedTrendWeightKg.toFixed(1)} kg). Stopping the previous ${hadLossGoal ? 'deficit' : 'surplus'} and recommending a transition to estimated maintenance (~${calibratedTdeeKcal.toLocaleString()} kcal/day).`;
     rationaleBullets.push(`Goal weight of ${targetWeightKg.toFixed(1)} kg achieved.`);
     rationaleBullets.push(
       `Previous ${hadLossGoal ? 'fat-loss deficit' : 'weight-gain surplus'} automatically halted.`
@@ -690,15 +792,14 @@ export function runDeterministicWeeklyAssessment(
   } else if (adherencePercentage < MIN_ADHERENCE_PCT_FOR_TUNING) {
     targetCaloriesNext = previousRecommendedCalories;
     adjustmentType = 'maintained';
-    adjustmentReason = `Weight-dependent macros were recalculated for ${reliableWeightKg.toFixed(1)} kg, while calories remain at ${previousRecommendedCalories.toLocaleString()} kcal/day because weekly calorie adherence was ${Math.round(adherencePercentage)}% (below the ~80% threshold for calorie adjustments).`;
+    adjustmentReason = `Macros were refreshed for ${reliableWeightKg.toFixed(1)} kg, while daily calories stay at ${previousRecommendedCalories.toLocaleString()} kcal because 14-day intake consistency was ${Math.round(adherencePercentage)}% (below the ~${MIN_ADHERENCE_PCT_FOR_TUNING}% threshold for calorie changes).`;
     rationaleBullets.push(
-      `Food logging completeness (${loggingCompletenessPct}%) is tracked separately from calorie adherence (${Math.round(adherencePercentage)}%).`
+      `Logged ${foodLoggedDays} of ${ASSESSMENT_CYCLE_DAYS} days with ${Math.round(adherencePercentage)}% target consistency.`
     );
     rationaleBullets.push(
-      'Holding daily calories steady until intake consistently tracks near the existing target.'
+      'Holding daily calories steady until intake consistently tracks near your active target.'
     );
   } else {
-    // High/Moderate confidence AND >= 78% adherence -> evaluate goal-specific progression
     const trendChangeKg = weightAnalysis.weeklyWeightChangeKg;
     const trendChangePct = weightAnalysis.weeklyWeightChangePct;
     const multiWeekRate = weightAnalysis.multiWeekWeeklyRateKg;
@@ -712,16 +813,16 @@ export function runDeterministicWeeklyAssessment(
         const delta = effectiveRate <= 0 ? 150 : 100;
         targetCaloriesNext = previousRecommendedCalories + delta;
         adjustmentType = 'increased';
-        adjustmentReason = `Smoothed weight trend (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk) is below your ${goalSpeed} Build Muscle target pace (+${expectedMin.toFixed(2)}–${expectedMax.toFixed(2)} kg/wk) with ${Math.round(adherencePercentage)}% adherence. Adding +${delta} kcal/day and recalculating macros for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `14-day weight trend (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk) is below your ${goalSpeed} Build Muscle pace (+${expectedMin.toFixed(2)}–${expectedMax.toFixed(2)} kg/wk) with ${Math.round(adherencePercentage)}% consistency. Adding +${delta} kcal/day to support steady lean gain.`;
       } else if (effectiveRate > expectedMax * 1.45 && (weightAnalysis.hasMultiWeekHistory || effectiveRate > 0.55)) {
         const delta = -100;
         targetCaloriesNext = Math.max(calibratedTdeeKcal + 100, previousRecommendedCalories + delta);
         adjustmentType = 'decreased';
-        adjustmentReason = `Smoothed weight gain (+${effectiveRate.toFixed(2)} kg/wk) is trending faster than ideal for lean muscle development. Trimming by ${Math.abs(targetCaloriesNext - previousRecommendedCalories)} kcal/day to minimize excess fat gain while updating macros for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Weight is climbing faster than ideal (+${effectiveRate.toFixed(2)} kg/wk) for lean muscle gain. Trimming by ${Math.abs(targetCaloriesNext - previousRecommendedCalories)} kcal/day to minimize excess fat gain.`;
       } else {
         targetCaloriesNext = previousRecommendedCalories;
         adjustmentType = 'maintained';
-        adjustmentReason = `Progress is right on target for Build Muscle (trend ${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk). Calories remain unchanged at ${previousRecommendedCalories.toLocaleString()} kcal/day while weight-dependent macros are updated for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Progress is right on target for Build Muscle (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk). Keeping daily calories steady at ${previousRecommendedCalories.toLocaleString()} kcal with macros synced to ${reliableWeightKg.toFixed(1)} kg.`;
       }
     } else if (normalizedGoal === 'fat_gain') {
       const expectedMin = goalSpeed === 'slow' ? 0.15 : goalSpeed === 'aggressive' ? 0.32 : 0.22;
@@ -732,18 +833,18 @@ export function runDeterministicWeeklyAssessment(
         const delta = effectiveRate <= 0.05 ? 150 : 100;
         targetCaloriesNext = previousRecommendedCalories + delta;
         adjustmentType = 'increased';
-        adjustmentReason = `Smoothed gain (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk) is slower than your Healthy Weight Gain pace (+${expectedMin.toFixed(2)}–${expectedMax.toFixed(2)} kg/wk) despite ${Math.round(adherencePercentage)}% adherence. Increasing daily intake by +${delta} kcal/day and updating macros for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `14-day weight gain (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk) is slower than your Healthy Weight Gain pace (+${expectedMin.toFixed(2)}–${expectedMax.toFixed(2)} kg/wk) with ${Math.round(adherencePercentage)}% consistency. Increasing daily intake by +${delta} kcal/day.`;
       } else if (effectiveRate > expectedMax * 1.45 && (weightAnalysis.hasMultiWeekHistory || effectiveRate > 0.7)) {
         targetCaloriesNext = Math.max(calibratedTdeeKcal + 150, previousRecommendedCalories - 100);
         adjustmentType = 'decreased';
-        adjustmentReason = `Sustained weight gain (+${effectiveRate.toFixed(2)} kg/wk) is exceeding your healthy gain cap. Moderating intake by ${Math.abs(targetCaloriesNext - previousRecommendedCalories)} kcal/day while recalculating macros for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Sustained weight gain (+${effectiveRate.toFixed(2)} kg/wk) is outpacing your target gain rate. Moderating intake by ${Math.abs(targetCaloriesNext - previousRecommendedCalories)} kcal/day.`;
       } else {
         targetCaloriesNext = previousRecommendedCalories;
         adjustmentType = 'maintained';
-        adjustmentReason = `Healthy Weight Gain is progressing on track (trend ${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk; measured ${weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg). Calorie target stays at ${previousRecommendedCalories.toLocaleString()} kcal/day while protein, carbs, fat, and hydration are updated for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Healthy Weight Gain is progressing on track (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk; latest ${weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg). Calorie target stays at ${previousRecommendedCalories.toLocaleString()} kcal/day.`;
       }
     } else if (normalizedGoal === 'lose_weight') {
-      const lossRatePct = -trendChangePct; // positive number means weight loss %
+      const lossRatePct = -trendChangePct;
       const multiWeekLossPct =
         multiWeekRate !== null && weightAnalysis.previousTrendWeightKg > 0
           ? (-multiWeekRate / weightAnalysis.previousTrendWeightKg) * 100
@@ -753,16 +854,18 @@ export function runDeterministicWeeklyAssessment(
       const hasConfirmedPlateau =
         lossRatePct < 0.15 &&
         ((multiWeekLossPct !== null && multiWeekLossPct < 0.2) ||
-          (lastApplied !== null && (lastApplied.weeklyWeightChangeKg ?? -0.3) > -0.1));
+          (lastApplied !== null && (lastApplied.weeklyWeightChangeKg ?? -0.3) > -0.1) ||
+          weightAnalysis.totalDaysInHistory >= 13);
 
       if (lossRatePct > maxHealthyLossPct) {
         const delta = lossRatePct > 1.35 ? 150 : 100;
         targetCaloriesNext = Math.min(calibratedTdeeKcal - 150, previousRecommendedCalories + delta);
         adjustmentType = 'increased';
-        adjustmentReason = `Weekly weight loss (${lossRatePct.toFixed(2)}% of body weight/wk) is faster than recommended for lean mass preservation. Increasing calories by +${Math.max(0, targetCaloriesNext - previousRecommendedCalories)} kcal/day and recalculating macros for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Weight loss pace (${lossRatePct.toFixed(2)}% of body weight/wk) is faster than ideal for preserving muscle. Increasing daily intake by +${Math.max(0, targetCaloriesNext - previousRecommendedCalories)} kcal/day.`;
       } else if (hasConfirmedPlateau) {
+        const sexFloor = input.profile.biologicalSex === 'female' ? 1200 : 1500;
         const minSafeCalories = Math.max(
-          1050,
+          sexFloor,
           Math.round(calibratedTdeeKcal * 0.75),
           recalculated.recommendedCalories - 150
         );
@@ -770,20 +873,20 @@ export function runDeterministicWeeklyAssessment(
         if (proposed < previousRecommendedCalories) {
           targetCaloriesNext = proposed;
           adjustmentType = 'decreased';
-          adjustmentReason = `Multi-week trend confirms a genuine plateau (${lossRatePct.toFixed(2)}%/wk) with ${Math.round(adherencePercentage)}% adherence. Applying a conservative -${previousRecommendedCalories - proposed} kcal/day adjustment within safety bounds and updating macros for ${reliableWeightKg.toFixed(1)} kg.`;
+          adjustmentReason = `14-day trend shows a weight-loss plateau (${lossRatePct.toFixed(2)}%/wk) despite ${Math.round(adherencePercentage)}% consistency. Trimming -${previousRecommendedCalories - proposed} kcal/day safely and refreshing macros.`;
         } else {
           targetCaloriesNext = previousRecommendedCalories;
           adjustmentType = 'safety_guarded';
-          adjustmentReason = `Weight loss has slowed, but daily calories are already near your individualized safety floor (${minSafeCalories.toLocaleString()} kcal/day). Keeping calories unchanged and focusing on daily steps, protein, and recovery.`;
+          adjustmentReason = `Weight loss has slowed, and daily calories are already near your safe minimum (${minSafeCalories.toLocaleString()} kcal/day). Keeping calories steady and focusing on daily steps, protein, and sleep.`;
         }
       } else if (lossRatePct < 0.15) {
         targetCaloriesNext = previousRecommendedCalories;
         adjustmentType = 'maintained';
-        adjustmentReason = `Short-term scale movement slowed (${lossRatePct.toFixed(2)}%/wk), but a single 7-day window does not confirm a true plateau. Keeping calories at ${previousRecommendedCalories.toLocaleString()} kcal/day and monitoring next week's trend.`;
+        adjustmentReason = `Short-term scale movement slowed (${lossRatePct.toFixed(2)}%/wk) without a confirmed multi-week plateau. Keeping calories at ${previousRecommendedCalories.toLocaleString()} kcal/day while monitoring trend.`;
       } else {
         targetCaloriesNext = previousRecommendedCalories;
         adjustmentType = 'maintained';
-        adjustmentReason = `Fat loss is progressing cleanly at ${lossRatePct.toFixed(2)}% body weight/week (${trendChangeKg.toFixed(2)} kg trend). Holding calories at ${previousRecommendedCalories.toLocaleString()} kcal/day while updating weight-dependent macros for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Fat loss is progressing cleanly at ${lossRatePct.toFixed(2)}% body weight/week (${trendChangeKg.toFixed(2)} kg/wk trend). Holding calories at ${previousRecommendedCalories.toLocaleString()} kcal/day with macros tuned for ${reliableWeightKg.toFixed(1)} kg.`;
       }
     } else if (normalizedGoal === 'recomposition') {
       const driftFromMaintenance = Math.abs(previousRecommendedCalories - calibratedTdeeKcal);
@@ -791,11 +894,11 @@ export function runDeterministicWeeklyAssessment(
         const direction = calibratedTdeeKcal > previousRecommendedCalories ? 1 : -1;
         targetCaloriesNext = previousRecommendedCalories + direction * 75;
         adjustmentType = direction > 0 ? 'increased' : 'decreased';
-        adjustmentReason = `Re-anchoring recomposition intake slightly (${direction > 0 ? '+' : ''}75 kcal/day) toward your calibrated maintenance (${calibratedTdeeKcal.toLocaleString()} kcal/day) while updating protein & macros for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Nudging recomposition intake (${direction > 0 ? '+' : ''}75 kcal/day) closer to your observed maintenance (${calibratedTdeeKcal.toLocaleString()} kcal/day) while updating macros for ${reliableWeightKg.toFixed(1)} kg.`;
       } else {
         targetCaloriesNext = previousRecommendedCalories;
         adjustmentType = 'maintained';
-        adjustmentReason = `Keeping Body Recomposition calories near maintenance (${previousRecommendedCalories.toLocaleString()} kcal/day) while updating weight-dependent protein and macro targets for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Keeping Body Recomposition calories near maintenance (${previousRecommendedCalories.toLocaleString()} kcal/day) with protein and macros updated for ${reliableWeightKg.toFixed(1)} kg.`;
       }
     } else {
       // maintain_weight
@@ -804,39 +907,38 @@ export function runDeterministicWeeklyAssessment(
         const delta = effectiveRate > 0 ? -100 : 100;
         targetCaloriesNext = previousRecommendedCalories + delta;
         adjustmentType = delta > 0 ? 'increased' : 'decreased';
-        adjustmentReason = `Sustained trend drift (${effectiveRate >= 0 ? '+' : ''}${effectiveRate.toFixed(2)} kg/wk) detected during maintenance. Adjusting by ${delta > 0 ? '+' : ''}${delta} kcal/day toward calibrated maintenance (${calibratedTdeeKcal.toLocaleString()} kcal/day).`;
+        adjustmentReason = `Noticeable weight drift (${effectiveRate >= 0 ? '+' : ''}${effectiveRate.toFixed(2)} kg/wk) detected during maintenance. Adjusting by ${delta > 0 ? '+' : ''}${delta} kcal/day to keep weight steady.`;
       } else {
         targetCaloriesNext = previousRecommendedCalories;
         adjustmentType = 'maintained';
-        adjustmentReason = `Weight trend is stable around maintenance (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk). Calories stay at ${previousRecommendedCalories.toLocaleString()} kcal/day with macros refreshed for ${reliableWeightKg.toFixed(1)} kg.`;
+        adjustmentReason = `Weight is holding steady around maintenance (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk). Calories stay at ${previousRecommendedCalories.toLocaleString()} kcal/day with macros refreshed for ${reliableWeightKg.toFixed(1)} kg.`;
       }
     }
 
     rationaleBullets.push(
-      `Measured weight: ${weightAnalysis.latestMeasuredWeightKg.toFixed(1)} kg · Smoothed EWMA trend: ${weightAnalysis.assessedTrendWeightKg.toFixed(1)} kg (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk).`
+      `7-day avg weight: ${weightAnalysis.previous7dAvgWeightKg.toFixed(1)} → ${weightAnalysis.current7dAvgWeightKg.toFixed(1)} kg · Smoothed trend: ${weightAnalysis.assessedTrendWeightKg.toFixed(1)} kg (${trendChangeKg >= 0 ? '+' : ''}${trendChangeKg.toFixed(2)} kg/wk).`
     );
     rationaleBullets.push(
-      `Maintenance: Formula TDEE ${estimatedTdeeKcal.toLocaleString()} kcal/day · Calibrated TDEE ${calibratedTdeeKcal.toLocaleString()} kcal/day.`
+      `Estimated maintenance: ${calibratedTdeeKcal.toLocaleString()} kcal/day based on your intake and weight trend.`
     );
     rationaleBullets.push(
-      `Logging & adherence: ${foodLoggedDays}/7 food days (${loggingCompletenessPct}%), ${weightLoggedDays}/7 weigh-ins, ${Math.round(adherencePercentage)}% calorie adherence.`
+      `14-day consistency: ${foodLoggedDays}/${ASSESSMENT_CYCLE_DAYS} food days (${loggingCompletenessPct}%), ${weightLoggedDays}/${ASSESSMENT_CYCLE_DAYS} weigh-ins, ${Math.round(adherencePercentage)}% target consistency.`
     );
   }
 
-  // 8. Final Macro Allocation
+  // 8. Final Macro Allocation (strictly synchronized with calorie target)
   let recommendedCalories = previousRecommendedCalories;
   let recommendedProtein = previousRecommendedProtein;
   let recommendedCarbs = previousRecommendedCarbs;
   let recommendedFat = previousRecommendedFat;
   let recommendedFibre = previousRecommendedFibre;
-  let recommendedHydrationMl = estimateHydrationMl(
+  const recommendedHydrationMl = estimateHydrationMl(
     reliableWeightKg,
     input.profile.activityLevel || 'moderate',
     input.profile.workoutFrequencyPerWeek ?? 3
   );
 
   if (confidenceLevel === 'low' && input.goals.calories > 0) {
-    // Strictly preserve existing targets on insufficient data
     recommendedCalories = previousRecommendedCalories;
     recommendedProtein = previousRecommendedProtein;
     recommendedCarbs = previousRecommendedCarbs;
@@ -867,6 +969,12 @@ export function runDeterministicWeeklyAssessment(
   }
 
   const calorieDeltaKcal = recommendedCalories - previousRecommendedCalories;
+  const statusTag = deriveAssessmentStatusTag(
+    adjustmentType,
+    confidenceLevel,
+    calorieDeltaKcal,
+    adherencePercentage
+  );
 
   // Projected weeks remaining at updated calorie delta
   const remainingDiffKg = round2(targetWeightKg - reliableWeightKg);
@@ -885,6 +993,7 @@ export function runDeterministicWeeklyAssessment(
     weekStartDate,
     weekEndDate,
     assessmentWeekNumber,
+    cycleDays: ASSESSMENT_CYCLE_DAYS,
     weightAnalysis,
     foodLoggedDays,
     weightLoggedDays,
@@ -894,6 +1003,7 @@ export function runDeterministicWeeklyAssessment(
     avgDailyProtein,
     avgDailyCarbs,
     avgDailyFat,
+    avgDailyFibre,
     confidenceLevel,
     confidenceReasons,
     estimatedBmr,
@@ -915,6 +1025,7 @@ export function runDeterministicWeeklyAssessment(
     recommendedHydrationMl,
     projectedWeeksToGoal,
     adjustmentType,
+    statusTag,
     adjustmentReason,
     goalCompleted,
     suggestedMaintenanceCalories,
@@ -933,8 +1044,9 @@ export function runDeterministicWeeklyAssessment(
 }
 
 /**
- * Deterministic Due-Check & Period Advancement Evaluator.
- * Prevents duplicate weekly assessments for the same period and handles missed weeks cleanly.
+ * Deterministic 14-Day Due-Check & Cycle Advancement Evaluator.
+ * Prevents duplicate cycle assessments for the same 14-day period, respects adaptive pause
+ * and custom target protection, and advances cleanly after missed cycles.
  */
 export function evaluateWeeklyAssessmentDueStatus(params: {
   profile: UserProfile;
@@ -952,26 +1064,18 @@ export function evaluateWeeklyAssessmentDueStatus(params: {
   todayDateKey?: string;
 }): WeeklyAssessmentDueStatus {
   const today = params.todayDateKey || getTodayDateKey();
-  const weekEndDate = today;
-  const weekStartDate = addDaysToDateKey(today, -6);
 
   const sortedAssessments = [...params.weeklyAssessments].sort((a, b) =>
     b.weekEndDate.localeCompare(a.weekEndDate)
   );
   const latestAssessment = sortedAssessments[0] || null;
 
-  // Check if an assessment already exists covering today's period (or overlapping within 6 days)
-  const existingForCurrentPeriod =
-    sortedAssessments.find(
-      (a) =>
-        (a.weekStartDate === weekStartDate && a.weekEndDate === weekEndDate) ||
-        daysBetweenDateKeys(a.weekEndDate, today) < 7
-    ) || null;
-
-  // Determine anchor date: last assessment's weekEndDate -> profile.lastWeeklyAssessmentAt -> goals.initialCalculatedAt -> earliest log/weight date
+  // Determine anchor date: last assessment's weekEndDate -> profile.cycleAnchorDate -> goals.initialCalculatedAt -> earliest log/weight date
   let anchorDateKey: string | null = null;
   if (latestAssessment) {
     anchorDateKey = latestAssessment.weekEndDate;
+  } else if (params.profile.cycleAnchorDate) {
+    anchorDateKey = params.profile.cycleAnchorDate.slice(0, 10);
   } else if (params.profile.lastWeeklyAssessmentAt) {
     anchorDateKey = params.profile.lastWeeklyAssessmentAt.slice(0, 10);
   } else if (params.goals.initialCalculatedAt) {
@@ -990,16 +1094,40 @@ export function evaluateWeeklyAssessmentDueStatus(params: {
   }
 
   const daysSinceLastAnchor = Math.max(0, daysBetweenDateKeys(anchorDateKey, today));
-  const daysRemaining = Math.max(0, 7 - daysSinceLastAnchor);
-  const nextAssessmentDate = addDaysToDateKey(anchorDateKey, 7);
+  const daysRemaining = Math.max(0, ASSESSMENT_CYCLE_DAYS - daysSinceLastAnchor);
+  const daysCompleted = Math.min(ASSESSMENT_CYCLE_DAYS, daysSinceLastAnchor);
+  const nextAssessmentDate = addDaysToDateKey(anchorDateKey, ASSESSMENT_CYCLE_DAYS);
 
-  const dailySummary = buildDailyNutritionSummaries(params.foodEntries, weekStartDate, weekEndDate);
+  // Current active cycle window:
+  // If we're still within the 14-day window from anchorDateKey, anchor the cycle start nicely;
+  // when due (day >= 14), the assessment window covers the last 14 days ending today.
+  const weekEndDate = daysSinceLastAnchor >= ASSESSMENT_CYCLE_DAYS ? today : nextAssessmentDate;
+  const weekStartDate =
+    daysSinceLastAnchor >= ASSESSMENT_CYCLE_DAYS
+      ? addDaysToDateKey(today, -(ASSESSMENT_CYCLE_DAYS - 1))
+      : anchorDateKey;
+
+  const existingForCurrentPeriod =
+    sortedAssessments.find(
+      (a) =>
+        (a.weekStartDate === addDaysToDateKey(today, -(ASSESSMENT_CYCLE_DAYS - 1)) &&
+          a.weekEndDate === today) ||
+        daysBetweenDateKeys(a.weekEndDate, today) < ASSESSMENT_CYCLE_DAYS
+    ) || null;
+
+  const evalEnd = today;
+  const evalStart =
+    daysSinceLastAnchor < ASSESSMENT_CYCLE_DAYS
+      ? anchorDateKey
+      : addDaysToDateKey(today, -(ASSESSMENT_CYCLE_DAYS - 1));
+
+  const dailySummary = buildDailyNutritionSummaries(params.foodEntries, evalStart, evalEnd);
   const foodLoggedDays = dailySummary.filter((d) => d.calories > 0).length;
 
   const weightAnalysis = analyzeWeightTrend(
     params.weightEntries,
-    weekStartDate,
-    weekEndDate,
+    evalStart,
+    evalEnd,
     params.profile.currentWeightKg || 0,
     latestAssessment?.status === 'applied' ? latestAssessment : null
   );
@@ -1012,11 +1140,10 @@ export function evaluateWeeklyAssessmentDueStatus(params: {
     foodLoggedDays >= MIN_FOOD_DAYS_FOR_TUNING && weightLoggedDays >= MIN_WEIGHT_DAYS_FOR_TUNING;
   const confidenceLevel: AssessmentConfidenceLevel = !hasMinimumData
     ? 'low'
-    : foodLoggedDays >= 6 && weightLoggedDays >= 5
+    : foodLoggedDays >= 11 && weightLoggedDays >= 7
     ? 'high'
     : 'moderate';
 
-  // Check if user has already reached target weight
   const normalizedGoal = normalizeFitnessGoal(params.profile.fitnessGoal);
   const targetWeight = params.profile.targetWeightKg || params.goals.targetWeightKg || 0;
   const latestWeight =
@@ -1037,44 +1164,68 @@ export function evaluateWeeklyAssessmentDueStatus(params: {
           latestWeight >= targetWeight - 0.35))
   );
 
-  const isDueBySchedule = daysSinceLastAnchor >= 7 && !existingForCurrentPeriod;
+  const adaptivePaused = Boolean(params.profile.adaptivePaused);
+  const manualOverrideActive = Boolean(
+    params.profile.manualOverrideActive ||
+      params.goals.manualOverrideActive ||
+      params.goals.preset === 'custom'
+  );
+
+  const isDueBySchedule = daysSinceLastAnchor >= ASSESSMENT_CYCLE_DAYS && !existingForCurrentPeriod;
   const hasPendingExisting = existingForCurrentPeriod?.status === 'pending';
   const wasDismissedForPeriod = existingForCurrentPeriod?.status === 'dismissed';
   const wasAppliedForPeriod = existingForCurrentPeriod?.status === 'applied';
 
-  const isDue = (isDueBySchedule || hasPendingExisting) && !wasDismissedForPeriod && !wasAppliedForPeriod;
+  const isDue =
+    !adaptivePaused &&
+    !manualOverrideActive &&
+    (isDueBySchedule || hasPendingExisting) &&
+    !wasDismissedForPeriod &&
+    !wasAppliedForPeriod;
 
   let statusLabel: WeeklyAssessmentDueStatus['statusLabel'] = 'Assessment in progress';
   let readinessMessage = '';
 
-  if (wasAppliedForPeriod) {
+  if (adaptivePaused) {
+    statusLabel = 'Adaptive paused';
+    readinessMessage =
+      'Automatic 14-day target updates are paused. Resume anytime to receive review recommendations.';
+  } else if (manualOverrideActive) {
+    statusLabel = 'Custom targets active';
+    readinessMessage =
+      'Your custom targets are protected from automatic updates. You can still run a manual 14-day progress review anytime.';
+  } else if (wasAppliedForPeriod) {
     statusLabel = 'Assessment completed';
-    readinessMessage = `Week ${existingForCurrentPeriod.assessmentWeekNumber} assessment applied. Next check-in opens ${addDaysToDateKey(existingForCurrentPeriod.weekEndDate, 7)}.`;
+    readinessMessage = `Review #${existingForCurrentPeriod.assessmentWeekNumber} applied. Next 14-day review opens ${addDaysToDateKey(existingForCurrentPeriod.weekEndDate, ASSESSMENT_CYCLE_DAYS)}.`;
   } else if (wasDismissedForPeriod) {
     statusLabel = 'Assessment in progress';
-    readinessMessage = `Current period check-in dismissed. Next automatic check-in opens ${addDaysToDateKey(existingForCurrentPeriod.weekEndDate, 7)}.`;
+    readinessMessage = `Current 14-day review kept on existing targets. Next review opens ${addDaysToDateKey(existingForCurrentPeriod.weekEndDate, ASSESSMENT_CYCLE_DAYS)}.`;
   } else if (isDue && !hasMinimumData) {
     statusLabel = 'Low data confidence';
-    readinessMessage = `7-day check-in window reached, but needs ${MIN_FOOD_DAYS_FOR_TUNING}+ food days (${foodLoggedDays}/7) and ${MIN_WEIGHT_DAYS_FOR_TUNING}+ weigh-ins (${weightLoggedDays}/7) before automatic calorie tuning.`;
+    readinessMessage = `14 days complete, but at least ${MIN_FOOD_DAYS_FOR_TUNING} food days (${foodLoggedDays}/${ASSESSMENT_CYCLE_DAYS}) and ${MIN_WEIGHT_DAYS_FOR_TUNING} weigh-ins (${weightLoggedDays}/${ASSESSMENT_CYCLE_DAYS}) are needed before suggesting target changes.`;
   } else if (isDue) {
     statusLabel = 'Assessment ready';
     readinessMessage = goalCompleted
-      ? `Target weight reached (${latestWeight?.toFixed(1)} kg)! Review your maintenance transition.`
-      : `7 days complete with ${foodLoggedDays}/7 food logs and ${weightLoggedDays}/7 weigh-ins. Ready to calibrate targets.`;
+      ? `Goal weight reached (${latestWeight?.toFixed(1)} kg)! Review your maintenance targets.`
+      : `14 days complete with ${foodLoggedDays}/${ASSESSMENT_CYCLE_DAYS} food logs and ${weightLoggedDays} weigh-ins. Your 14-day progress review is ready!`;
   } else {
-    statusLabel = hasMinimumData ? 'Assessment in progress' : 'Assessment in progress';
-    readinessMessage = `Day ${Math.min(7, daysSinceLastAnchor + 1)} of 7 — ${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'} until your next scheduled check-in (${nextAssessmentDate}).`;
+    statusLabel = 'Assessment in progress';
+    readinessMessage = `Day ${Math.min(ASSESSMENT_CYCLE_DAYS, daysSinceLastAnchor + 1)} of ${ASSESSMENT_CYCLE_DAYS} — ${daysRemaining} ${daysRemaining === 1 ? 'day' : 'days'} until your next 14-day review (${nextAssessmentDate}).`;
   }
 
   return {
     isDue,
     statusLabel,
     currentWeekNumber,
+    cycleDays: ASSESSMENT_CYCLE_DAYS,
+    daysCompleted,
+    cycleStartDate: evalStart,
+    cycleEndDate: weekEndDate,
     weekStartDate,
-    weekEndDate,
+    weekEndDate: today,
     nextAssessmentDate:
       existingForCurrentPeriod
-        ? addDaysToDateKey(existingForCurrentPeriod.weekEndDate, 7)
+        ? addDaysToDateKey(existingForCurrentPeriod.weekEndDate, ASSESSMENT_CYCLE_DAYS)
         : nextAssessmentDate,
     daysSinceLastAnchor,
     daysRemaining,
@@ -1086,6 +1237,8 @@ export function evaluateWeeklyAssessmentDueStatus(params: {
     latestWeightKg: latestWeight,
     weeklyDeltaKg: params.weightEntries.length >= 2 ? weightAnalysis.weeklyWeightChangeKg : null,
     goalCompleted,
+    adaptivePaused,
+    manualOverrideActive,
     readinessMessage,
   };
 }

@@ -22,9 +22,17 @@ export const WeeklyAssessmentBanner: React.FC<WeeklyAssessmentBannerProps> = ({
 
   const unit = state.settings.weightUnit;
   const hasProfileReady = state.profile.heightCm >= 120 && state.profile.age >= 14;
-  if (!hasProfileReady) return null;
+  if (
+    !hasProfileReady ||
+    state.profile.adaptivePaused ||
+    state.profile.manualOverrideActive ||
+    state.goals.manualOverrideActive ||
+    state.goals.preset === 'custom'
+  ) {
+    return null;
+  }
 
-  // Only show the quiet notification banner when an assessment is due OR goal target is reached
+  // Only show the quiet notification banner when a 14-day review is due OR goal target is reached
   if (!assessmentDueStatus.isDue && !assessmentDueStatus.goalCompleted) {
     return null;
   }
@@ -47,15 +55,17 @@ export const WeeklyAssessmentBanner: React.FC<WeeklyAssessmentBannerProps> = ({
 
   const deltaText =
     assessmentDueStatus.weeklyDeltaKg !== null
-      ? `${assessmentDueStatus.weeklyDeltaKg > 0 ? '+' : ''}${assessmentDueStatus.weeklyDeltaKg.toFixed(1)} kg trend`
-      : 'Baseline week';
+      ? `${assessmentDueStatus.weeklyDeltaKg > 0 ? '+' : ''}${assessmentDueStatus.weeklyDeltaKg.toFixed(1)} kg/wk trend`
+      : 'First 14-day cycle';
 
   const confidenceText =
     assessmentDueStatus.confidenceLevel === 'high'
-      ? 'High confidence'
+      ? 'High data confidence'
       : assessmentDueStatus.confidenceLevel === 'moderate'
-      ? 'Moderate confidence'
-      : 'Low data confidence';
+      ? 'Moderate data confidence'
+      : 'Needs more logs';
+
+  const cycleDays = assessmentDueStatus.cycleDays || 14;
 
   return (
     <div
@@ -71,8 +81,8 @@ export const WeeklyAssessmentBanner: React.FC<WeeklyAssessmentBannerProps> = ({
             )}
             <span className="truncate">
               {assessmentDueStatus.goalCompleted
-                ? 'Goal Weight Reached — Maintenance Ready'
-                : '7-Day AI Assessment Ready'}
+                ? 'Goal Weight Reached — Ready for Maintenance'
+                : 'Your 14-day progress review is ready!'}
             </span>
           </div>
 
@@ -84,7 +94,7 @@ export const WeeklyAssessmentBanner: React.FC<WeeklyAssessmentBannerProps> = ({
             <span className="font-mono-nums tabular-nums">{deltaText}</span>
             <span className="mx-1.5 text-zinc-500">·</span>
             <span className="font-mono-nums tabular-nums">
-              {assessmentDueStatus.foodLoggedDays}/7 food days
+              {assessmentDueStatus.foodLoggedDays}/{cycleDays} food days
             </span>
             <span className="mx-1.5 text-zinc-500">·</span>
             <span
@@ -103,7 +113,7 @@ export const WeeklyAssessmentBanner: React.FC<WeeklyAssessmentBannerProps> = ({
           type="button"
           onClick={handleOpen}
           disabled={weeklyAssessmentModal.loading}
-          className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 rounded-xl bg-[#C8FF00] text-[#090A0C] text-xs sm:text-sm font-bold tracking-tight hover:bg-[#d8ff4d] active:scale-[0.99] transition shrink-0 cursor-pointer disabled:opacity-60"
+          className="inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 rounded-xl bg-[#C8FF00] text-[#090A0C] text-xs sm:text-sm font-bold tracking-tight hover:bg-[#d8ff4d] active:scale-[0.99] transition shrink-0 cursor-pointer disabled:opacity-60 whitespace-nowrap"
         >
           <CalendarCheck2 className="w-4 h-4 shrink-0" />
           <span>
@@ -111,7 +121,7 @@ export const WeeklyAssessmentBanner: React.FC<WeeklyAssessmentBannerProps> = ({
               ? 'Analyzing...'
               : assessmentDueStatus.goalCompleted
               ? 'Review Maintenance'
-              : 'Review Check-In'}
+              : 'Review 14-Day Progress'}
           </span>
           <ChevronRight className="w-4 h-4 shrink-0" />
         </button>

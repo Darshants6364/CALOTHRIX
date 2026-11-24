@@ -54,18 +54,24 @@ export const ProfileSettingsPage: React.FC = () => {
   const isGuest = authMode === 'guest';
 
   const [name, setName] = useState(profile.name);
-  const [age, setAge] = useState(String(profile.age));
+  const [age, setAge] = useState(profile.age >= 14 ? String(profile.age) : '');
   const [biologicalSex, setBiologicalSex] = useState<BiologicalSex>(
     profile.biologicalSex || 'male'
   );
-  const [heightCm, setHeightCm] = useState(String(profile.heightCm));
+  const [heightCm, setHeightCm] = useState(profile.heightCm >= 120 ? String(profile.heightCm) : '');
   const [currentWeight, setCurrentWeight] = useState(
-    String(convertWeightToDisplay(profile.currentWeightKg, settings.weightUnit))
+    profile.currentWeightKg >= 30
+      ? String(convertWeightToDisplay(profile.currentWeightKg, settings.weightUnit))
+      : ''
   );
   const [targetWeight, setTargetWeight] = useState(
-    String(convertWeightToDisplay(profile.targetWeightKg, settings.weightUnit))
+    profile.targetWeightKg >= 30
+      ? String(convertWeightToDisplay(profile.targetWeightKg, settings.weightUnit))
+      : ''
   );
-  const [dailySteps, setDailySteps] = useState(String(profile.dailyAverageSteps || 7000));
+  const [dailySteps, setDailySteps] = useState(
+    profile.dailyAverageSteps > 0 ? String(profile.dailyAverageSteps) : '7000'
+  );
   const [workoutFrequency, setWorkoutFrequency] = useState(
     String(profile.workoutFrequencyPerWeek ?? 3)
   );
@@ -92,16 +98,20 @@ export const ProfileSettingsPage: React.FC = () => {
 
   useEffect(() => {
     setName(profile.name);
-    setAge(String(profile.age));
+    setAge(profile.age >= 14 ? String(profile.age) : '');
     setBiologicalSex(profile.biologicalSex || 'male');
-    setHeightCm(String(profile.heightCm));
+    setHeightCm(profile.heightCm >= 120 ? String(profile.heightCm) : '');
     setCurrentWeight(
-      String(convertWeightToDisplay(profile.currentWeightKg, settings.weightUnit))
+      profile.currentWeightKg >= 30
+        ? String(convertWeightToDisplay(profile.currentWeightKg, settings.weightUnit))
+        : ''
     );
     setTargetWeight(
-      String(convertWeightToDisplay(profile.targetWeightKg, settings.weightUnit))
+      profile.targetWeightKg >= 30
+        ? String(convertWeightToDisplay(profile.targetWeightKg, settings.weightUnit))
+        : ''
     );
-    setDailySteps(String(profile.dailyAverageSteps || 7000));
+    setDailySteps(profile.dailyAverageSteps > 0 ? String(profile.dailyAverageSteps) : '7000');
     setWorkoutFrequency(String(profile.workoutFrequencyPerWeek ?? 3));
     setWorkoutIntensity(profile.workoutIntensity || 'moderate');
     setActivityLevel(profile.activityLevel);

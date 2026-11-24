@@ -17,9 +17,6 @@ import { AccountRole, ENABLE_TRAINER_PORTAL } from './types';
 const FoodLogPage = lazy(() =>
   import('./pages/FoodLogPage').then((m) => ({ default: m.FoodLogPage }))
 );
-const FoodDatabasePage = lazy(() =>
-  import('./pages/FoodDatabasePage').then((m) => ({ default: m.FoodDatabasePage }))
-);
 const ProgressPage = lazy(() =>
   import('./pages/ProgressPage').then((m) => ({ default: m.ProgressPage }))
 );
@@ -115,9 +112,9 @@ const MacroLogRouter: React.FC = () => {
       case 'home':
         return <HomePage />;
       case 'food-log':
-        return <FoodLogPage />;
+        return <FoodLogPage initialSection="diary" />;
       case 'food-database':
-        return <FoodDatabasePage />;
+        return <FoodLogPage initialSection="database" />;
       case 'progress':
         return <ProgressPage />;
       case 'weight':

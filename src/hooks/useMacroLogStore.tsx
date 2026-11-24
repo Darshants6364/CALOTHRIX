@@ -20,9 +20,11 @@ import {
   deleteFoodEntryDb,
   deleteWeightEntryDb,
   extractAuthDetails,
+  fetchTargetHistoryDb,
   fetchWeeklyAssessmentsDb,
   insertCustomFoodDb,
   insertFoodEntryDb,
+  insertTargetHistoryDb,
   insertWeightEntryDb,
   loadUserStateFromSupabase,
   syncLocalStateToSupabase,
@@ -56,6 +58,7 @@ import {
   MealCategory,
   NavTab,
   NutritionGoals,
+  NutritionTargetHistoryRecord,
   SavedMealCombo,
   SavedMealComboItem,
   TargetRecommendation,
@@ -82,6 +85,7 @@ import {
 } from '../utils/nutritionUtils';
 import { saveLastUsedPortion } from '../utils/portionEngine';
 import {
+  ASSESSMENT_CYCLE_DAYS,
   buildDailyNutritionSummaries,
   evaluateWeeklyAssessmentDueStatus,
   runDeterministicWeeklyAssessment,
@@ -95,6 +99,29 @@ const ADMIN_OVERRIDES_STORAGE_KEY = 'calothrix_admin_food_overrides_v1';
 const PENDING_SYNC_KEY = 'calothrix_pending_sync_v1';
 const COACH_MODE_PREF_KEY = 'calothrix_coach_mode_pref_v1';
 const QUESTS_HOME_PREF_KEY = 'calothrix_quests_home_pref_v1';
+const LAST_MEAL_STORAGE_KEY = 'calothrix_last_meal_v1';
+
+const VALID_MEALS: MealCategory[] = ['breakfast', 'lunch', 'evening_snacks', 'dinner', 'other'];
+
+function getLastSelectedMeal(): MealCategory {
+  if (typeof window === 'undefined') return 'breakfast';
+  try {
+    const raw = localStorage.getItem(LAST_MEAL_STORAGE_KEY) as MealCategory | null;
+    if (raw && VALID_MEALS.includes(raw)) return raw;
+  } catch {
+    // Ignore storage read errors
+  }
+  return 'breakfast';
+}
+
+function saveLastSelectedMeal(meal: MealCategory): void {
+  if (typeof window === 'undefined' || !VALID_MEALS.includes(meal)) return;
+  try {
+    localStorage.setItem(LAST_MEAL_STORAGE_KEY, meal);
+  } catch {
+    // Ignore storage quota errors
+  }
+}
 
 const TAB_PATHS: Record<NavTab, string> = {
   home: '/',
@@ -281,7 +308,18 @@ interface MacroLogContextValue {
   toggleFavoriteFood: (foodId: string) => void;
   applyAdminFoodOverride: (food: FoodItem) => void;
   // Goals Actions
-  updateGoals: (goals: Omit<NutritionGoals, 'userId' | 'updatedAt'>) => void;
+  updateGoals: (
+    goals: Omit<NutritionGoals, 'userId' | 'updatedAt'>,
+    meta?: {
+      adjustmentType?: 'initial' | 'manual' | 'adaptive';
+      adjustmentReason?: string;
+      assessmentId?: string | null;
+      manualOverrideActive?: boolean;
+    }
+  ) => void;
+  targetHistory: NutritionTargetHistoryRecord[];
+  toggleAdaptivePaused: (paused: boolean) => void;
+  clearManualOverride: () => void;
   // Weight Actions
   addWeightEntry: (params: { weightKg: number; date: string; notes?: string }) => void;
   updateWeightEntry: (
@@ -504,6 +542,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [activeBurnKcalByDate, setActiveBurnKcalByDate] = useState<Record<string, number>>({});
   const [savedMeals, setSavedMeals] = useState<SavedMealCombo[]>([]);
   const [weeklyAssessments, setWeeklyAssessments] = useState<WeeklyAssessmentRecord[]>([]);
+  const [targetHistory, setTargetHistory] = useState<NutritionTargetHistoryRecord[]>([]);
   const [weeklyAssessmentModal, setWeeklyAssessmentModal] = useState<{
     isOpen: boolean;
     assessment: WeeklyAssessmentRecord | null;
@@ -539,24 +578,24 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return null;
   }, []);
 
-  const [foodModal, setFoodModal] = useState<FoodModalState>({
+  const [foodModal, setFoodModal] = useState<FoodModalState>(() => ({
     isOpen: false,
-    initialMeal: 'breakfast',
+    initialMeal: getLastSelectedMeal(),
     targetDate: getTodayDateKey(),
-  });
+  }));
 
-  const [mealScannerModal, setMealScannerModal] = useState<MealScannerModalState>({
+  const [mealScannerModal, setMealScannerModal] = useState<MealScannerModalState>(() => ({
     isOpen: false,
     initialMode: 'photo',
-    initialMeal: 'lunch',
+    initialMeal: getLastSelectedMeal(),
     targetDate: getTodayDateKey(),
-  });
+  }));
 
-  const [barcodeScannerModal, setBarcodeScannerModal] = useState<BarcodeScannerModalState>({
+  const [barcodeScannerModal, setBarcodeScannerModal] = useState<BarcodeScannerModalState>(() => ({
     isOpen: false,
-    initialMeal: 'lunch',
+    initialMeal: getLastSelectedMeal(),
     targetDate: getTodayDateKey(),
-  });
+  }));
 
   const [weightModal, setWeightModal] = useState<WeightModalState>({
     isOpen: false,
@@ -762,6 +801,16 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setWeeklyAssessments(Array.isArray(parsedAssessments) ? parsedAssessments : []);
     } catch {
       setWeeklyAssessments([]);
+    }
+
+    try {
+      const historyRaw = localStorage.getItem(`calothrix_target_history_${userId}`);
+      const parsedHistory = historyRaw
+        ? (JSON.parse(historyRaw) as NutritionTargetHistoryRecord[])
+        : [];
+      setTargetHistory(Array.isArray(parsedHistory) ? parsedHistory : []);
+    } catch {
+      setTargetHistory([]);
     }
   }, []);
 
@@ -1009,6 +1058,20 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 localStorage.setItem(
                   `calothrix_weekly_assessments_${user.id}`,
                   JSON.stringify(waRes.items)
+                );
+              } catch {
+                // ignore storage quota
+              }
+            }
+          });
+
+          void fetchTargetHistoryDb(user.id).then((thRes) => {
+            if (thRes.ok && thRes.items.length > 0) {
+              setTargetHistory(thRes.items);
+              try {
+                localStorage.setItem(
+                  `calothrix_target_history_${user.id}`,
+                  JSON.stringify(thRes.items)
                 );
               } catch {
                 // ignore storage quota
@@ -1463,9 +1526,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const openAddFoodModal = useCallback(
     (options?: { meal?: MealCategory; foodId?: string; food?: FoodItem; date?: string }) => {
+      const targetMeal = options?.meal ?? getLastSelectedMeal();
+      if (options?.meal) {
+        saveLastSelectedMeal(options.meal);
+      }
       setFoodModal({
         isOpen: true,
-        initialMeal: options?.meal ?? 'breakfast',
+        initialMeal: targetMeal,
         preselectedFoodId: options?.foodId ?? options?.food?.id,
         preselectedFood: options?.food,
         targetDate: options?.date ?? selectedDate,
@@ -1496,10 +1563,14 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const openMealScannerModal = useCallback(
     (options?: { mode?: 'photo' | 'voice' | 'text' | 'label'; meal?: MealCategory; date?: string }) => {
+      const targetMeal = options?.meal ?? getLastSelectedMeal();
+      if (options?.meal) {
+        saveLastSelectedMeal(options.meal);
+      }
       setMealScannerModal({
         isOpen: true,
         initialMode: options?.mode ?? 'photo',
-        initialMeal: options?.meal ?? 'lunch',
+        initialMeal: targetMeal,
         targetDate: options?.date ?? selectedDate,
       });
     },
@@ -1512,9 +1583,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const openBarcodeScannerModal = useCallback(
     (options?: { meal?: MealCategory; date?: string }) => {
+      const targetMeal = options?.meal ?? getLastSelectedMeal();
+      if (options?.meal) {
+        saveLastSelectedMeal(options.meal);
+      }
       setBarcodeScannerModal({
         isOpen: true,
-        initialMeal: options?.meal ?? 'lunch',
+        initialMeal: targetMeal,
         targetDate: options?.date ?? selectedDate,
       });
     },
@@ -1565,6 +1640,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         updatedAt: now,
       }));
 
+      saveLastSelectedMeal(mealType);
       setState((prev) => ({
         ...prev,
         foodEntries: [...newEntries, ...prev.foodEntries],
@@ -1645,6 +1721,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       };
 
       saveLastUsedPortion(food.id, quantityGrams, unitLabel || food.servingName);
+      saveLastSelectedMeal(mealType);
 
       const nextRecents = [
         food.id,
@@ -1700,6 +1777,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       let updatedEntry: FoodLogEntry | null = null;
 
       saveLastUsedPortion(food.id, quantityGrams, unitLabel || food.servingName);
+      saveLastSelectedMeal(mealType);
 
       setState((prev) => ({
         ...prev,
@@ -1958,33 +2036,63 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   }, []);
 
+  const persistTargetHistoryLocal = useCallback(
+    (actorId: string, nextList: NutritionTargetHistoryRecord[]) => {
+      const trimmed = nextList.slice(0, 50);
+      try {
+        localStorage.setItem(`calothrix_target_history_${actorId}`, JSON.stringify(trimmed));
+      } catch {
+        // Ignore storage quota errors
+      }
+      if (authModeRef.current === 'guest') {
+        setState((prev) => ({ ...prev, targetHistory: trimmed }));
+      }
+    },
+    []
+  );
+
   const updateGoals = useCallback(
-    (goals: Omit<NutritionGoals, 'userId' | 'updatedAt'>) => {
+    (
+      goals: Omit<NutritionGoals, 'userId' | 'updatedAt'>,
+      meta?: {
+        adjustmentType?: 'initial' | 'manual' | 'adaptive';
+        adjustmentReason?: string;
+        assessmentId?: string | null;
+        manualOverrideActive?: boolean;
+      }
+    ) => {
       const actorId = getActiveActorId();
       if (!actorId) return;
       const now = new Date().toISOString();
+      const todayKey = getTodayDateKey();
+      const isManual = meta?.manualOverrideActive ?? (meta?.adjustmentType === 'manual' || goals.preset === 'custom');
+
+      let historyRecordToPersist: NutritionTargetHistoryRecord | null = null;
 
       setState((prev) => {
+        const prevGoals = prev.goals;
         const nextGoals: NutritionGoals = {
           ...goals,
           userId: actorId,
           initialCalculatedAt: goals.initialCalculatedAt || prev.goals.initialCalculatedAt || now,
           calculationVersion: goals.calculationVersion || prev.goals.calculationVersion || CALCULATION_VERSION,
           assessmentWeekNumber: goals.assessmentWeekNumber ?? prev.goals.assessmentWeekNumber ?? 0,
+          manualOverrideActive: isManual,
           updatedAt: now,
         };
-        const nextProfile =
-          goals.targetWeightKg !== undefined
-            ? {
-                ...prev.profile,
-                targetWeightKg: goals.targetWeightKg,
-                macroFocus: goals.macroFocus ?? prev.profile.macroFocus,
-                adaptiveTdeeKcal:
-                  goals.adaptiveTdeeKcal !== undefined
-                    ? goals.adaptiveTdeeKcal
-                    : prev.profile.adaptiveTdeeKcal,
-              }
-            : prev.profile;
+        const nextProfile: UserProfile = {
+          ...prev.profile,
+          targetWeightKg:
+            goals.targetWeightKg !== undefined ? goals.targetWeightKg : prev.profile.targetWeightKg,
+          macroFocus: goals.macroFocus ?? prev.profile.macroFocus,
+          adaptiveTdeeKcal:
+            goals.adaptiveTdeeKcal !== undefined
+              ? goals.adaptiveTdeeKcal
+              : prev.profile.adaptiveTdeeKcal,
+          manualOverrideActive: isManual,
+          onboardingCompleted: true,
+          cycleAnchorDate: prev.profile.cycleAnchorDate || todayKey,
+        };
         const nextWeightGoal =
           goals.targetWeightKg !== undefined
             ? {
@@ -1998,10 +2106,52 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               }
             : prev.weightGoal;
 
+        const targetsChanged =
+          prevGoals.calories === 0 ||
+          prevGoals.calories !== nextGoals.calories ||
+          prevGoals.protein !== nextGoals.protein ||
+          prevGoals.carbs !== nextGoals.carbs ||
+          prevGoals.fat !== nextGoals.fat ||
+          prevGoals.fibre !== nextGoals.fibre;
+
+        if (targetsChanged && nextGoals.calories > 0) {
+          const adjType =
+            meta?.adjustmentType ??
+            (prevGoals.calories === 0 ? 'initial' : isManual ? 'manual' : 'initial');
+          const reason =
+            meta?.adjustmentReason ||
+            (adjType === 'initial' && prevGoals.calories === 0
+              ? 'Initial personalized nutrition targets applied.'
+              : isManual
+              ? 'Manual custom calorie and macro targets saved.'
+              : 'Recalculated nutrition targets applied from calculator.');
+          historyRecordToPersist = {
+            id: makeId('th'),
+            userId: actorId,
+            previousCalories: prevGoals.calories > 0 ? prevGoals.calories : null,
+            previousProtein: prevGoals.calories > 0 ? prevGoals.protein : null,
+            previousCarbs: prevGoals.calories > 0 ? prevGoals.carbs : null,
+            previousFat: prevGoals.calories > 0 ? prevGoals.fat : null,
+            previousFibre: prevGoals.calories > 0 ? prevGoals.fibre : null,
+            newCalories: nextGoals.calories,
+            newProtein: nextGoals.protein,
+            newCarbs: nextGoals.carbs,
+            newFat: nextGoals.fat,
+            newFibre: nextGoals.fibre,
+            targetWeightKg: nextGoals.targetWeightKg ?? null,
+            effectiveDate: todayKey,
+            adjustmentReason: reason,
+            assessmentId: meta?.assessmentId ?? null,
+            applied: true,
+            adjustmentType: adjType,
+            createdAt: now,
+          };
+        }
+
         if (authUserRef.current) {
           void upsertNutritionGoals(actorId, nextGoals).then(handleDbResult);
+          void upsertProfileAndSettings(actorId, nextProfile, prev.settings);
           if (goals.targetWeightKg !== undefined) {
-            void upsertProfileAndSettings(actorId, nextProfile, prev.settings);
             void upsertWeightGoal(actorId, nextWeightGoal);
           }
         }
@@ -2013,9 +2163,22 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           weightGoal: nextWeightGoal,
         };
       });
+
+      if (historyRecordToPersist) {
+        const record = historyRecordToPersist as NutritionTargetHistoryRecord;
+        setTargetHistory((prev) => {
+          const next = [record, ...prev].slice(0, 50);
+          persistTargetHistoryLocal(actorId, next);
+          return next;
+        });
+        if (authUserRef.current) {
+          void insertTargetHistoryDb(actorId, record);
+        }
+      }
+
       notify('Nutrition goals saved');
     },
-    [getActiveActorId, handleDbResult, notify]
+    [getActiveActorId, handleDbResult, notify, persistTargetHistoryLocal]
   );
 
   const addWeightEntry = useCallback(
@@ -2571,6 +2734,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
       });
 
+      saveLastSelectedMeal(mealType);
       setState((prev) => ({
         ...prev,
         foodEntries: [...entries, ...prev.foodEntries],
@@ -2638,7 +2802,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   // ============================================================================
-  // 7-DAY AI ADAPTIVE ASSESSMENT ACTIONS & DUE-CHECK
+  // 15-DAY AI ADAPTIVE ASSESSMENT ACTIONS & DUE-CHECK
   // ============================================================================
   const persistWeeklyAssessmentsLocal = useCallback(
     (actorId: string, nextList: WeeklyAssessmentRecord[]) => {
@@ -2654,6 +2818,58 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     },
     []
   );
+
+  const toggleAdaptivePaused = useCallback(
+    (paused: boolean) => {
+      const actorId = getActiveActorId();
+      if (!actorId) return;
+      setState((prev) => {
+        const nextProfile: UserProfile = {
+          ...prev.profile,
+          adaptivePaused: paused,
+        };
+        if (authUserRef.current) {
+          void upsertProfileAndSettings(actorId, nextProfile, prev.settings).then(handleDbResult);
+        }
+        return {
+          ...prev,
+          profile: nextProfile,
+        };
+      });
+      notify(
+        paused
+          ? '14-day adaptive adjustments paused — your active targets stay locked'
+          : '14-day adaptive nutrition tracking resumed',
+        'info'
+      );
+    },
+    [getActiveActorId, handleDbResult, notify]
+  );
+
+  const clearManualOverride = useCallback(() => {
+    const actorId = getActiveActorId();
+    if (!actorId) return;
+    setState((prev) => {
+      const nextProfile: UserProfile = {
+        ...prev.profile,
+        manualOverrideActive: false,
+      };
+      const nextGoals: NutritionGoals = {
+        ...prev.goals,
+        manualOverrideActive: false,
+      };
+      if (authUserRef.current) {
+        void upsertProfileAndSettings(actorId, nextProfile, prev.settings);
+        void upsertNutritionGoals(actorId, nextGoals);
+      }
+      return {
+        ...prev,
+        profile: nextProfile,
+        goals: nextGoals,
+      };
+    });
+    notify('Adaptive target recommendations re-enabled', 'info');
+  }, [getActiveActorId, notify]);
 
   const assessmentDueStatus = useMemo<WeeklyAssessmentDueStatus>(
     () =>
@@ -2689,11 +2905,20 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!actorId) return null;
 
       const cur = stateRef.current;
-      const todayKey = getTodayDateKey();
-      const weekStart = addDaysToDateKey(todayKey, -6);
-      const historyStart = addDaysToDateKey(todayKey, -27);
+      const latestLoggedWeightKg = cur.weightEntries.length > 0 ? cur.weightEntries[0]?.weightKg || 0 : 0;
+      const effectiveCurrentWeightKg =
+        cur.profile.currentWeightKg >= 30 ? cur.profile.currentWeightKg : latestLoggedWeightKg;
 
-      // Idempotent short-circuit if an active assessment already exists for this exact period
+      if (cur.profile.age < 14 || cur.profile.heightCm < 120 || effectiveCurrentWeightKg < 30) {
+        notify('Please complete your body measurements first to run a 14-day progress review.', 'info');
+        return null;
+      }
+
+      const todayKey = getTodayDateKey();
+      const weekStart = addDaysToDateKey(todayKey, -(ASSESSMENT_CYCLE_DAYS - 1));
+      const historyStart = addDaysToDateKey(todayKey, -44);
+
+      // Idempotent short-circuit if an active assessment already exists for this exact 14-day period
       if (!options?.forceRecompute) {
         const existing = weeklyAssessments.find(
           (a) => a.weekStartDate === weekStart && a.weekEndDate === todayKey
@@ -2725,16 +2950,13 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const safeProfile: UserProfile = {
         ...cur.profile,
-        age: cur.profile.age >= 14 ? cur.profile.age : 25,
-        heightCm: cur.profile.heightCm >= 120 ? cur.profile.heightCm : 170,
-        currentWeightKg:
-          cur.profile.currentWeightKg >= 30
-            ? cur.profile.currentWeightKg
-            : recentWeights[0]?.weightKg || 65,
+        currentWeightKg: effectiveCurrentWeightKg,
         targetWeightKg:
           cur.profile.targetWeightKg >= 30
             ? cur.profile.targetWeightKg
-            : cur.goals.targetWeightKg || cur.profile.currentWeightKg || 65,
+            : cur.goals.targetWeightKg && cur.goals.targetWeightKg >= 30
+            ? cur.goals.targetWeightKg
+            : effectiveCurrentWeightKg,
       };
 
       try {
@@ -2788,6 +3010,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             weekStartDate: det.weekStartDate,
             weekEndDate: det.weekEndDate,
             assessmentWeekNumber: det.assessmentWeekNumber,
+            cycleDays: det.cycleDays,
             previousWeightKg: det.weightAnalysis.previousMeasuredWeightKg,
             assessedWeightKg: det.weightAnalysis.latestMeasuredWeightKg,
             previousTrendWeightKg: det.weightAnalysis.previousTrendWeightKg,
@@ -2800,6 +3023,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             avgDailyProtein: det.avgDailyProtein,
             avgDailyCarbs: det.avgDailyCarbs,
             avgDailyFat: det.avgDailyFat,
+            avgDailyFibre: det.avgDailyFibre,
             priorTdeeKcal: det.priorTdeeKcal,
             estimatedTdeeKcal: det.estimatedTdeeKcal,
             calibratedTdeeKcal: det.calibratedTdeeKcal,
@@ -2822,6 +3046,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             adherencePercentage: det.adherencePercentage,
             confidenceLevel: det.confidenceLevel,
             adjustmentType: det.adjustmentType,
+            statusTag: det.statusTag,
             calorieDeltaKcal: det.calorieDeltaKcal,
             adjustmentReason: det.adjustmentReason,
             goalCompleted: det.goalCompleted,
@@ -2861,7 +3086,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
         return finalRecord;
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unable to run weekly assessment.';
+        const message = err instanceof Error ? err.message : 'Unable to run 14-day progress review.';
         if (options?.openModal !== false) {
           setWeeklyAssessmentModal({
             isOpen: true,
@@ -2910,6 +3135,9 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         fitnessGoal: nextFitnessGoal,
         adaptiveTdeeKcal: assessment.calibratedTdeeKcal,
         lastWeeklyAssessmentAt: now,
+        manualOverrideActive: false,
+        onboardingCompleted: true,
+        cycleAnchorDate: assessment.weekEndDate || cur.profile.cycleAnchorDate || getTodayDateKey(),
       };
 
       const nextGoals: NutritionGoals = {
@@ -2929,6 +3157,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         initialCalculatedAt: cur.goals.initialCalculatedAt || now,
         calculationVersion: assessment.calculationVersion || CALCULATION_VERSION,
         estimatedWeeks: assessment.projectedWeeksToGoal ?? cur.goals.estimatedWeeks,
+        manualOverrideActive: false,
         updatedAt: now,
       };
 
@@ -2951,6 +3180,33 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...assessment,
         status: 'applied',
         appliedAt: now,
+      };
+
+      const historyEntry: NutritionTargetHistoryRecord = {
+        id: makeId('th'),
+        userId: actorId,
+        previousCalories:
+          cur.goals.calories > 0 ? cur.goals.calories : assessment.previousRecommendedCalories,
+        previousProtein:
+          cur.goals.calories > 0 ? cur.goals.protein : assessment.previousRecommendedProtein ?? null,
+        previousCarbs:
+          cur.goals.calories > 0 ? cur.goals.carbs : assessment.previousRecommendedCarbs ?? null,
+        previousFat:
+          cur.goals.calories > 0 ? cur.goals.fat : assessment.previousRecommendedFat ?? null,
+        previousFibre:
+          cur.goals.calories > 0 ? cur.goals.fibre : assessment.previousRecommendedFibre ?? null,
+        newCalories: assessment.recommendedCalories,
+        newProtein: assessment.recommendedProtein,
+        newCarbs: assessment.recommendedCarbs,
+        newFat: assessment.recommendedFat,
+        newFibre: assessment.recommendedFibre,
+        targetWeightKg: nextTargetWeight,
+        effectiveDate: getTodayDateKey(),
+        adjustmentReason: assessment.adjustmentReason,
+        assessmentId: appliedRecord.id,
+        applied: true,
+        adjustmentType: 'adaptive',
+        createdAt: now,
       };
 
       setState((prev) => ({
@@ -2980,6 +3236,12 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return next;
       });
 
+      setTargetHistory((prev) => {
+        const next = [historyEntry, ...prev].slice(0, 50);
+        persistTargetHistoryLocal(actorId, next);
+        return next;
+      });
+
       if (assessment.recommendedHydrationMl && assessment.recommendedHydrationMl >= 1500) {
         setDailyWaterGoalMl(assessment.recommendedHydrationMl);
       }
@@ -2989,6 +3251,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         void upsertNutritionGoals(actorId, nextGoals).then(handleDbResult);
         void upsertWeightGoal(actorId, nextWeightGoal);
         void upsertWeeklyAssessmentDb(actorId, appliedRecord);
+        void insertTargetHistoryDb(actorId, historyEntry);
       }
 
       setWeeklyAssessmentModal((prev) => ({
@@ -2997,11 +3260,18 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }));
 
       notify(
-        `Week ${assessment.assessmentWeekNumber} targets applied (${assessment.previousRecommendedCalories.toLocaleString()} → ${assessment.recommendedCalories.toLocaleString()} kcal)`
+        `Cycle ${assessment.assessmentWeekNumber} targets applied (${assessment.previousRecommendedCalories.toLocaleString()} → ${assessment.recommendedCalories.toLocaleString()} kcal)`
       );
       return true;
     },
-    [getActiveActorId, handleDbResult, notify, persistWeeklyAssessmentsLocal, setDailyWaterGoalMl]
+    [
+      getActiveActorId,
+      handleDbResult,
+      notify,
+      persistTargetHistoryLocal,
+      persistWeeklyAssessmentsLocal,
+      setDailyWaterGoalMl,
+    ]
   );
 
   const dismissWeeklyAssessment = useCallback(
@@ -3039,7 +3309,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       setWeeklyAssessmentModal((prev) => ({ ...prev, isOpen: false }));
-      notify('Weekly assessment dismissed for this period', 'info');
+      notify('Current targets kept for this 14-day review cycle', 'info');
     },
     [getActiveActorId, notify, persistWeeklyAssessmentsLocal]
   );
@@ -3118,6 +3388,9 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       toggleFavoriteFood,
       applyAdminFoodOverride,
       updateGoals,
+      targetHistory,
+      toggleAdaptivePaused,
+      clearManualOverride,
       addWeightEntry,
       updateWeightEntry,
       deleteWeightEntry,
@@ -3221,6 +3494,9 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       toggleFavoriteFood,
       applyAdminFoodOverride,
       updateGoals,
+      targetHistory,
+      toggleAdaptivePaused,
+      clearManualOverride,
       addWeightEntry,
       updateWeightEntry,
       deleteWeightEntry,

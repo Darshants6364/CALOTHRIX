@@ -22,11 +22,20 @@ import {
 } from '../src/utils/fitnessCalculator';
 import {
   analyzeWeightTrend,
+  ASSESSMENT_CYCLE_DAYS,
   buildDailyNutritionSummaries,
   evaluateWeeklyAssessmentDueStatus,
   MAX_WEEKLY_TDEE_SHIFT_KCAL,
   runDeterministicWeeklyAssessment,
 } from '../src/utils/weeklyAssessmentEngine';
+import {
+  build14DayCycleDashboardData,
+  buildFourWeekNutritionReports,
+  buildWeeklyNutritionReport,
+  buildWeeklyWeightProgress,
+  formatMondayToSundayLabel,
+  getEffectiveTargetsForDate,
+} from '../src/utils/cycleAnalytics';
 import { validateWeeklyAssessmentAiExplanation } from '../server/mealAiService';
 import { addDaysToDateKey } from '../src/utils/dateUtils';
 import type {
@@ -34,6 +43,7 @@ import type {
   GoalSpeed,
   MacroFocusType,
   NutritionGoals,
+  NutritionTargetHistoryRecord,
   SmartFitnessGoalType,
   UserProfile,
   WeeklyAssessmentAiExplanation,
@@ -181,7 +191,7 @@ runTest('A1: Initial calculation for 50kg -> 70kg fat_gain is scientifically sou
   assert.ok(calc.estimatedWeeks !== null && calc.estimatedWeeks > 20);
 });
 
-runTest('A2: 7-day progression 50kg -> 51kg updates weight-dependent targets without treating +1kg as pure tissue gain', () => {
+runTest('A2: 14-day progression 50kg -> 51kg updates weight-dependent targets without treating +1kg as pure tissue gain', () => {
   const start = '2026-10-01';
   const initialCalc = calculateSmartFitnessTargets({
     age: 24,
@@ -212,19 +222,17 @@ runTest('A2: 7-day progression 50kg -> 51kg updates weight-dependent targets wit
   });
 
   const goals = makeGoalsFromCalc(initialCalc);
-  // Week 1 weigh-ins rising smoothly from 50.0 -> 51.0 (part water/glycogen)
-  const weights = makeWeightSeries(start, [
-    { dayOffset: 0, weightKg: 50.0 },
-    { dayOffset: 1, weightKg: 50.2 },
-    { dayOffset: 2, weightKg: 50.3 },
-    { dayOffset: 3, weightKg: 50.5 },
-    { dayOffset: 4, weightKg: 50.7 },
-    { dayOffset: 5, weightKg: 50.8 },
-    { dayOffset: 6, weightKg: 51.0 },
-  ]);
+  // Cycle 1 weigh-ins across 14 days rising smoothly from 50.0 -> 51.0
+  const weights = makeWeightSeries(
+    start,
+    Array.from({ length: 14 }, (_, i) => ({
+      dayOffset: i,
+      weightKg: Math.round((50.0 + i * (1.0 / 13)) * 100) / 100,
+    }))
+  );
   const nutrition = makeDailyNutrition(
     start,
-    Array.from({ length: 7 }, (_, i) => ({ dayOffset: i, calories: initialCalc.recommendedCalories }))
+    Array.from({ length: 14 }, (_, i) => ({ dayOffset: i, calories: initialCalc.recommendedCalories }))
   );
 
   const assessment = runDeterministicWeeklyAssessment({
@@ -233,28 +241,26 @@ runTest('A2: 7-day progression 50kg -> 51kg updates weight-dependent targets wit
     goals,
     weightEntries: weights,
     dailyNutrition: nutrition,
-    referenceDateKey: addDaysToDateKey(start, 6),
+    referenceDateKey: addDaysToDateKey(start, 13),
     assessmentWeekNumber: 1,
   });
 
-  // Measured vs EWMA trend separation
+  assert.equal(assessment.cycleDays, 14);
   assert.equal(assessment.weightAnalysis.latestMeasuredWeightKg, 51);
   assert.ok(
     assessment.weightAnalysis.assessedTrendWeightKg < 51,
     `EWMA (${assessment.weightAnalysis.assessedTrendWeightKg}) should smooth below raw 51kg jump`
   );
-  // Week 1 stays anchored to formula TDEE (no overreaction to +1kg scale jump = 7700 kcal fallacy)
+  // Cycle 1 stays anchored to formula TDEE
   assert.equal(
     Math.abs(assessment.calibratedTdeeKcal - assessment.estimatedTdeeKcal),
     0,
-    'Week 1 should remain anchored to formula TDEE rather than overreacting to 1-week water/glycogen gain'
+    'Cycle 1 should remain anchored to formula TDEE rather than overreacting to initial water/glycogen gain'
   );
-  // Calorie adjustment must NOT plummet just because scale bumped +1kg in Week 1
   assert.ok(
     Math.abs(assessment.calorieDeltaKcal) <= 100,
-    `Expected bounded delta in Week 1, got ${assessment.calorieDeltaKcal}`
+    `Expected bounded delta in Cycle 1, got ${assessment.calorieDeltaKcal}`
   );
-  // Macro math exactness
   assert.equal(
     assessment.recommendedCalories,
     assessment.recommendedProtein * 4 + assessment.recommendedCarbs * 4 + assessment.recommendedFat * 9
@@ -592,7 +598,7 @@ runTest('E1: Single-day +1.6kg water spike is damped by EWMA and causes zero exc
 // SCENARIO F: Insufficient Data Gate & Distinct Logging vs Adherence
 // ---------------------------------------------------------------------------
 console.log('\nScenario F: Insufficient Data & Logging Completeness vs Adherence');
-runTest('F1: <5 food days & <4 weigh-ins triggers low confidence and preserves existing calorie target', () => {
+runTest('F1: <10 food days & <6 weigh-ins in 15-day cycle triggers low confidence and preserves existing calorie target', () => {
   const start = '2026-10-01';
   const calc = calculateSmartFitnessTargets({
     age: 27,
@@ -608,16 +614,19 @@ runTest('F1: <5 food days & <4 weigh-ins triggers low confidence and preserves e
   });
   const goals = makeGoalsFromCalc(calc, { assessmentWeekNumber: 2 });
 
-  // Only 2 weigh-ins and 3 logged food days (way below gate)
+  // Only 3 weigh-ins and 5 logged food days (below 15-day tuning gate)
   const weights = makeWeightSeries(start, [
     { dayOffset: 0, weightKg: 78.0 },
-    { dayOffset: 6, weightKg: 78.8 },
+    { dayOffset: 7, weightKg: 78.4 },
+    { dayOffset: 14, weightKg: 78.8 },
   ]);
-  // 3 logged days, all right on calorie target -> logging completeness = 43%, calorie adherence = 100%
+  // 5 logged days, all right on calorie target -> logging completeness = 33%, calorie adherence = 100%
   const nutrition = makeDailyNutrition(start, [
     { dayOffset: 0, calories: calc.recommendedCalories },
-    { dayOffset: 2, calories: calc.recommendedCalories },
-    { dayOffset: 5, calories: calc.recommendedCalories },
+    { dayOffset: 3, calories: calc.recommendedCalories },
+    { dayOffset: 6, calories: calc.recommendedCalories },
+    { dayOffset: 10, calories: calc.recommendedCalories },
+    { dayOffset: 13, calories: calc.recommendedCalories },
   ]);
 
   const assessment = runDeterministicWeeklyAssessment({
@@ -632,16 +641,17 @@ runTest('F1: <5 food days & <4 weigh-ins triggers low confidence and preserves e
     goals,
     weightEntries: weights,
     dailyNutrition: nutrition,
-    referenceDateKey: addDaysToDateKey(start, 6),
+    referenceDateKey: addDaysToDateKey(start, 14),
     assessmentWeekNumber: 3,
   });
 
   assert.equal(assessment.confidenceLevel, 'low');
   assert.equal(assessment.adjustmentType, 'insufficient_data');
+  assert.equal(assessment.statusTag, 'insufficient_data');
   assert.equal(assessment.recommendedCalories, goals.calories, 'Must preserve existing calorie targets on insufficient data');
   assert.equal(assessment.calorieDeltaKcal, 0);
-  // Logging completeness (~43%) is distinct from calorie adherence on logged days (100%)
-  assert.ok(assessment.loggingCompletenessPct < 50, `Expected logging completeness <50%, got ${assessment.loggingCompletenessPct}`);
+  // Logging completeness (~33%) is distinct from calorie adherence on logged days (100%)
+  assert.ok(assessment.loggingCompletenessPct < 45, `Expected logging completeness <45%, got ${assessment.loggingCompletenessPct}`);
   assert.ok(assessment.adherencePercentage >= 95, `Expected adherence on logged days >=95%, got ${assessment.adherencePercentage}`);
 });
 
@@ -765,25 +775,23 @@ runTest('H1: Loss goal reached (80 -> 70 kg) stops deficit and recommends mainte
     goalSpeed: 'moderate',
     macroFocus: 'high_protein',
   });
-  const weights = makeWeightSeries(start, [
-    { dayOffset: 0, weightKg: 70.4 },
-    { dayOffset: 1, weightKg: 70.2 },
-    { dayOffset: 2, weightKg: 70.1 },
-    { dayOffset: 3, weightKg: 70.0 },
-    { dayOffset: 4, weightKg: 69.9 },
-    { dayOffset: 5, weightKg: 69.9 },
-    { dayOffset: 6, weightKg: 69.8 },
-  ]);
+  const weights = makeWeightSeries(
+    start,
+    Array.from({ length: 15 }, (_, i) => ({
+      dayOffset: i,
+      weightKg: Math.round((70.8 - i * 0.08) * 100) / 100,
+    }))
+  );
   const nutrition = makeDailyNutrition(
     start,
-    Array.from({ length: 7 }, (_, i) => ({ dayOffset: i, calories: initialCalc.recommendedCalories }))
+    Array.from({ length: 15 }, (_, i) => ({ dayOffset: i, calories: initialCalc.recommendedCalories }))
   );
 
   const assessment = runDeterministicWeeklyAssessment({
     userId: 'u-done-loss',
     profile: makeProfile({
       age: 30,
-      currentWeightKg: 69.8,
+      currentWeightKg: 69.7,
       targetWeightKg: 70.0,
       fitnessGoal: 'lose_weight',
       macroFocus: 'high_protein',
@@ -791,7 +799,7 @@ runTest('H1: Loss goal reached (80 -> 70 kg) stops deficit and recommends mainte
     goals: makeGoalsFromCalc(initialCalc, { assessmentWeekNumber: 4 }),
     weightEntries: weights,
     dailyNutrition: nutrition,
-    referenceDateKey: addDaysToDateKey(start, 6),
+    referenceDateKey: addDaysToDateKey(start, 14),
     assessmentWeekNumber: 5,
   });
 
@@ -818,25 +826,23 @@ runTest('H2: Gain goal reached (50 -> 70 kg) stops surplus and recommends mainte
     goalSpeed: 'moderate',
     macroFocus: 'balanced',
   });
-  const weights = makeWeightSeries(start, [
-    { dayOffset: 0, weightKg: 69.7 },
-    { dayOffset: 1, weightKg: 69.9 },
-    { dayOffset: 2, weightKg: 70.0 },
-    { dayOffset: 3, weightKg: 70.1 },
-    { dayOffset: 4, weightKg: 70.1 },
-    { dayOffset: 5, weightKg: 70.2 },
-    { dayOffset: 6, weightKg: 70.2 },
-  ]);
+  const weights = makeWeightSeries(
+    start,
+    Array.from({ length: 15 }, (_, i) => ({
+      dayOffset: i,
+      weightKg: Math.round((69.3 + i * 0.07) * 100) / 100,
+    }))
+  );
   const nutrition = makeDailyNutrition(
     start,
-    Array.from({ length: 7 }, (_, i) => ({ dayOffset: i, calories: initialCalc.recommendedCalories }))
+    Array.from({ length: 15 }, (_, i) => ({ dayOffset: i, calories: initialCalc.recommendedCalories }))
   );
 
   const assessment = runDeterministicWeeklyAssessment({
     userId: 'u-done-gain',
     profile: makeProfile({
       age: 24,
-      currentWeightKg: 70.2,
+      currentWeightKg: 70.3,
       targetWeightKg: 70.0,
       fitnessGoal: 'fat_gain',
       macroFocus: 'balanced',
@@ -844,7 +850,7 @@ runTest('H2: Gain goal reached (50 -> 70 kg) stops surplus and recommends mainte
     goals: makeGoalsFromCalc(initialCalc, { assessmentWeekNumber: 8 }),
     weightEntries: weights,
     dailyNutrition: nutrition,
-    referenceDateKey: addDaysToDateKey(start, 6),
+    referenceDateKey: addDaysToDateKey(start, 14),
     assessmentWeekNumber: 9,
   });
 
@@ -941,10 +947,11 @@ runTest('I4: AI response validator rejects malformed/empty payloads and falls ba
 });
 
 // ---------------------------------------------------------------------------
-// SCENARIO J: Scheduling, Due-Check, Idempotency & Duplicate Prevention
+// SCENARIO J: 14-Day Scheduling, Due-Check, Idempotency & Pause Protection
 // ---------------------------------------------------------------------------
-console.log('\nScenario J: 7-Day Scheduling, Due-Check & Duplicate Prevention');
-runTest('J1: Due-check respects 7-day cadence, prevents duplicate prompts after applied/dismissed, and advances after missed week', () => {
+console.log('\nScenario J: 14-Day Scheduling, Due-Check & Duplicate Prevention');
+runTest('J1: Due-check respects 14-day cadence, prevents duplicate prompts after applied/dismissed, and respects adaptivePaused', () => {
+  assert.equal(ASSESSMENT_CYCLE_DAYS, 14);
   const profile = makeProfile({
     currentWeightKg: 78,
     targetWeightKg: 72,
@@ -962,14 +969,14 @@ runTest('J1: Due-check respects 7-day cadence, prevents duplicate prompts after 
     goalSpeed: 'moderate',
   });
   const goals = makeGoalsFromCalc(baseCalc, { initialCalculatedAt: '2026-10-01T08:00:00.000Z' });
-  const weights = makeWeightSeries('2026-10-01', [
-    { dayOffset: 0, weightKg: 78 },
-    { dayOffset: 2, weightKg: 77.8 },
-    { dayOffset: 4, weightKg: 77.6 },
-    { dayOffset: 6, weightKg: 77.5 },
-    { dayOffset: 7, weightKg: 77.4 },
-  ]);
-  const foodEntries = Array.from({ length: 8 }, (_, i) => ({
+  const weights = makeWeightSeries(
+    '2026-10-01',
+    Array.from({ length: 15 }, (_, i) => ({
+      dayOffset: i,
+      weightKg: Math.round((78 - i * 0.05) * 100) / 100,
+    }))
+  );
+  const foodEntries = Array.from({ length: 15 }, (_, i) => ({
     date: addDaysToDateKey('2026-10-01', i),
     calories: baseCalc.recommendedCalories,
     protein: baseCalc.proteinGrams,
@@ -978,48 +985,62 @@ runTest('J1: Due-check respects 7-day cadence, prevents duplicate prompts after 
     fibre: baseCalc.fibreGrams,
   }));
 
-  // Day 4 -> NOT yet due (3 days remaining)
-  const day4 = evaluateWeeklyAssessmentDueStatus({
+  // Day 10 -> NOT yet due (4 days remaining in 14-day cadence)
+  const day10 = evaluateWeeklyAssessmentDueStatus({
     profile,
     goals,
     weightEntries: weights,
     foodEntries,
     weeklyAssessments: [],
-    todayDateKey: '2026-10-05',
+    todayDateKey: '2026-10-11',
   });
-  assert.equal(day4.isDue, false);
-  assert.equal(day4.daysRemaining, 3);
+  assert.equal(day10.isDue, false);
+  assert.equal(day10.daysRemaining, 4);
+  assert.equal(day10.cycleDays, 14);
 
-  // Day 8 (7 days since Oct 1) -> DUE
-  const day8 = evaluateWeeklyAssessmentDueStatus({
+  // Day 15 (14 days since Oct 1) -> DUE
+  const day15 = evaluateWeeklyAssessmentDueStatus({
     profile,
     goals,
     weightEntries: weights,
     foodEntries,
     weeklyAssessments: [],
-    todayDateKey: '2026-10-08',
+    todayDateKey: '2026-10-15',
   });
-  assert.equal(day8.isDue, true);
-  assert.equal(day8.daysRemaining, 0);
+  assert.equal(day15.isDue, true);
+  assert.equal(day15.daysRemaining, 0);
 
-  // Once applied or dismissed for Oct 2..Oct 8, same-day & next-day checks must NOT prompt again
+  // Paused -> suppresses due prompt cleanly
+  const day15Paused = evaluateWeeklyAssessmentDueStatus({
+    profile: { ...profile, adaptivePaused: true },
+    goals,
+    weightEntries: weights,
+    foodEntries,
+    weeklyAssessments: [],
+    todayDateKey: '2026-10-15',
+  });
+  assert.equal(day15Paused.isDue, false);
+  assert.equal(day15Paused.statusLabel, 'Adaptive paused');
+
+  // Once applied or dismissed for Oct 2..Oct 15, same-day & next-day checks must NOT prompt again
   const dismissedRecord: WeeklyAssessmentRecord = {
     id: 'wa-1',
     userId: 'u-1',
     assessmentWeekNumber: 1,
+    cycleDays: 14,
     weekStartDate: '2026-10-02',
-    weekEndDate: '2026-10-08',
+    weekEndDate: '2026-10-15',
     previousWeightKg: 78,
-    assessedWeightKg: 77.4,
+    assessedWeightKg: 77.25,
     previousTrendWeightKg: 78,
-    assessedTrendWeightKg: 77.6,
-    weeklyWeightChangeKg: -0.4,
+    assessedTrendWeightKg: 77.4,
+    weeklyWeightChangeKg: -0.35,
     avgDailyCalories: baseCalc.recommendedCalories,
     avgDailyProtein: baseCalc.proteinGrams,
     avgDailyCarbs: baseCalc.carbsGrams,
     avgDailyFat: baseCalc.fatGrams,
-    foodLoggedDays: 7,
-    weightLoggedDays: 4,
+    foodLoggedDays: 14,
+    weightLoggedDays: 14,
     loggingCompletenessPct: 100,
     adherencePercentage: 100,
     priorTdeeKcal: baseCalc.estimatedTdeeKcal,
@@ -1038,7 +1059,7 @@ runTest('J1: Due-check respects 7-day cadence, prevents duplicate prompts after 
     goalCompleted: false,
     aiSummary: {
       headline: 'On track',
-      bodyChangeAnalysis: 'Weight trend shifted -0.4 kg.',
+      bodyChangeAnalysis: 'Weight trend shifted steadily.',
       calorieAdjustmentReason: 'Keeping calories steady.',
       actionableTips: ['Stay consistent.'],
       confidenceExplanation: 'High confidence.',
@@ -1047,34 +1068,34 @@ runTest('J1: Due-check respects 7-day cadence, prevents duplicate prompts after 
     rationaleBullets: ['On track'],
     calculationVersion: CALCULATION_VERSION,
     status: 'dismissed',
-    createdAt: '2026-10-08T10:00:00.000Z',
+    createdAt: '2026-10-15T10:00:00.000Z',
   };
 
-  const day8AfterDismiss = evaluateWeeklyAssessmentDueStatus({
+  const day15AfterDismiss = evaluateWeeklyAssessmentDueStatus({
     profile,
     goals,
     weightEntries: weights,
     foodEntries,
     weeklyAssessments: [dismissedRecord],
-    todayDateKey: '2026-10-08',
+    todayDateKey: '2026-10-15',
   });
-  assert.equal(day8AfterDismiss.isDue, false, 'Dismissed period must suppress repeat prompt');
+  assert.equal(day15AfterDismiss.isDue, false, 'Dismissed period must suppress repeat prompt');
 
-  // Missed week: 14 days later (Oct 22) -> cleanly due again for next window
-  const day22 = evaluateWeeklyAssessmentDueStatus({
+  // Next 14-day cycle due on Oct 29 (14 days after Oct 15)
+  const day29 = evaluateWeeklyAssessmentDueStatus({
     profile,
     goals,
     weightEntries: weights,
     foodEntries,
     weeklyAssessments: [dismissedRecord],
-    todayDateKey: '2026-10-22',
+    todayDateKey: '2026-10-29',
   });
-  assert.equal(day22.isDue, true, 'Missed week should advance cleanly and become due again');
-  assert.equal(day22.weekEndDate, '2026-10-22');
+  assert.equal(day29.isDue, true, 'Next 14-day cycle should become due cleanly');
+  assert.equal(day29.weekEndDate, '2026-10-29');
 
-  // Confirm buildDailyNutritionSummaries fills exact 7 days
-  const daily = buildDailyNutritionSummaries(foodEntries, '2026-10-02', '2026-10-08');
-  assert.equal(daily.length, 7);
+  // Confirm buildDailyNutritionSummaries fills exact 14 days
+  const daily = buildDailyNutritionSummaries(foodEntries, '2026-10-02', '2026-10-15');
+  assert.equal(daily.length, 14);
 });
 
 // ---------------------------------------------------------------------------
@@ -1392,6 +1413,422 @@ runTest('K5: Theoretical 7,700 kcal/kg pace vs adaptive timeline range, exact un
   assert.equal(validateCalculatorInput({ age: 25, heightCm: 170, currentWeightKg: 70, targetWeightKg: 65, workoutFrequencyPerWeek: -1 }).valid, false);
   assert.equal(validateCalculatorInput({ age: 25, heightCm: 170, currentWeightKg: 70, targetWeightKg: 65, avgWorkoutDurationMin: -10 }).valid, false);
   assert.equal(validateCalculatorInput({ age: 25, heightCm: 170, currentWeightKg: 70, targetWeightKg: 65, avgWorkoutDurationMin: 300 }).valid, false);
+});
+
+// ---------------------------------------------------------------------------
+// SCENARIO L: 14-Day Dashboard Analytics, No Fabricated Weigh-Ins & Cycle 2 Comparison
+// ---------------------------------------------------------------------------
+console.log('\nScenario L: 14-Day Cycle Analytics & Structured AI Locking');
+runTest('L1: build14DayCycleDashboardData leaves unlogged dates strictly null and compares Cycle 1 vs Cycle 2', () => {
+  const start = '2026-10-01';
+  const profile = makeProfile({
+    age: 29,
+    heightCm: 176,
+    currentWeightKg: 78,
+    targetWeightKg: 72,
+    fitnessGoal: 'lose_weight',
+    cycleAnchorDate: start,
+    onboardingCompleted: true,
+  });
+  const baseCalc = calculateSmartFitnessTargets({
+    age: 29,
+    biologicalSex: 'male',
+    heightCm: 176,
+    currentWeightKg: 78,
+    targetWeightKg: 72,
+    activityLevel: 'moderate',
+    workoutFrequencyPerWeek: 4,
+    fitnessGoal: 'lose_weight',
+    goalSpeed: 'moderate',
+  });
+  const goals = makeGoalsFromCalc(baseCalc, { initialCalculatedAt: `${start}T08:00:00.000Z` });
+
+  // Cycle 1: Oct 1..14, Cycle 2: Oct 15..28 (sparse weigh-ins — Oct 16, 17 unlogged!)
+  const weights = makeWeightSeries(start, [
+    { dayOffset: 0, weightKg: 78.5 },
+    { dayOffset: 5, weightKg: 78.2 },
+    { dayOffset: 10, weightKg: 77.9 },
+    { dayOffset: 13, weightKg: 77.6 },
+    { dayOffset: 14, weightKg: 77.5 }, // Oct 15 (Cycle 2 day 1)
+    { dayOffset: 17, weightKg: 77.3 }, // Oct 18
+    { dayOffset: 21, weightKg: 77.0 }, // Oct 22
+  ]);
+
+  const foodEntries = Array.from({ length: 24 }, (_, i) => ({
+    id: `f-${i}`,
+    userId: 'test-user-1',
+    date: addDaysToDateKey(start, i),
+    mealType: 'lunch' as const,
+    foodId: 'food-1',
+    foodName: 'Meal',
+    quantityGrams: 300,
+    servingsCount: 1,
+    servingName: '1 bowl',
+    calories: i < 14 ? baseCalc.recommendedCalories + 100 : baseCalc.recommendedCalories,
+    protein: baseCalc.proteinGrams,
+    carbs: baseCalc.carbsGrams,
+    fat: baseCalc.fatGrams,
+    fibre: baseCalc.fibreGrams,
+    createdAt: `${addDaysToDateKey(start, i)}T12:00:00.000Z`,
+    updatedAt: `${addDaysToDateKey(start, i)}T12:00:00.000Z`,
+  }));
+
+  const dueStatus = evaluateWeeklyAssessmentDueStatus({
+    profile,
+    goals,
+    weightEntries: weights,
+    foodEntries: buildDailyNutritionSummaries(foodEntries, start, addDaysToDateKey(start, 27)),
+    weeklyAssessments: [],
+    todayDateKey: addDaysToDateKey(start, 22),
+  });
+
+  const dashboard = build14DayCycleDashboardData({
+    profile,
+    goals,
+    weightGoal: {
+      userId: 'test-user-1',
+      startingWeightKg: 78.5,
+      targetWeightKg: 72,
+      goalDirection: 'loss',
+      updatedAt: `${start}T08:00:00.000Z`,
+    },
+    foodEntries,
+    weightEntries: weights,
+    weeklyAssessments: [],
+    targetHistory: [],
+    dueStatus,
+    todayDateKey: addDaysToDateKey(start, 22),
+  });
+
+  assert.equal(dashboard.weightSeries.length, 14);
+  // Day 17 (Oct 17) has NO weigh-in -> strictly null
+  const oct17Point = dashboard.weightSeries.find((pt) => pt.date === '2026-10-17');
+  assert.ok(oct17Point !== undefined);
+  assert.equal(oct17Point.dailyWeightKg, null, 'Unlogged weigh-in dates must stay strictly null');
+  assert.equal(dashboard.comparison.hasPreviousCycleData, true);
+  assert.equal(dashboard.comparison.rows.length, 7);
+});
+
+runTest('L2: Structured AI output validator locks numeric calories/macros to deterministic engine values', () => {
+  const fallback: WeeklyAssessmentAiExplanation = {
+    headline: 'Cycle 2 check-in complete',
+    bodyChangeAnalysis: 'Weight trend moved steadily.',
+    calorieAdjustmentReason: 'Calibrated targets.',
+    actionableTips: ['Keep consistent morning weigh-ins.'],
+    confidenceExplanation: 'High confidence.',
+    provider: 'deterministic',
+    structured: {
+      status: 'targets_updated',
+      summary: 'Your 15-day trend improved steadily.',
+      weight_change_kg: -0.55,
+      calorie_action: 'decrease',
+      previous_calories: 2400,
+      recommended_calories: 2280,
+      protein_g: 165,
+      carbs_g: 220,
+      fat_g: 70,
+      reason: 'Slight deficit trim for plateau.',
+      confidence: 'high',
+    },
+  };
+
+  // Even if Gemini attempts to hallucinate different numbers in structured JSON, validator locks them
+  const res = validateWeeklyAssessmentAiExplanation(
+    {
+      headline: 'Cycle 2 adaptation ready',
+      bodyChangeAnalysis: 'Your 15-day average dropped nicely and adherence stayed consistent.',
+      calorieAdjustmentReason: 'Trimmed daily target modestly based on observed 15-day rate.',
+      actionableTips: ['Keep protein high at breakfast.', 'Weigh in 4+ mornings per week.'],
+      confidenceExplanation: 'High confidence based on 13 food days and 8 weigh-ins.',
+      structured: {
+        status: 'on_track',
+        summary: 'Strong 15-day adherence with steady progress toward your goal.',
+        weight_change_kg: 99,
+        calorie_action: 'increase',
+        previous_calories: 9999,
+        recommended_calories: 5000,
+        protein_g: 10,
+        carbs_g: 999,
+        fat_g: 10,
+        reason: 'Adjusted slightly for plateau.',
+        confidence: 'low',
+      },
+    },
+    fallback
+  );
+
+  assert.equal(res.valid, true);
+  assert.equal(res.explanation.provider, 'gemini');
+  assert.equal(res.explanation.structured?.recommended_calories, 2280);
+  assert.equal(res.explanation.structured?.previous_calories, 2400);
+  assert.equal(res.explanation.structured?.protein_g, 165);
+  assert.equal(res.explanation.structured?.weight_change_kg, -0.55);
+  assert.equal(res.explanation.structured?.status, 'targets_updated');
+  assert.equal(
+    res.explanation.structured?.summary,
+    'Strong 15-day adherence with steady progress toward your goal.'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// SCENARIO M: Weekly Nutrition Report (Mon-Sun), Historical Targets,
+//             Weight Progress (No Fabrication) & Custom Targets Protection
+// ---------------------------------------------------------------------------
+console.log('\nScenario M: Weekly Reports, Historical Targets & Custom Target Protection');
+
+runTest('M1: Monday–Sunday reporting windows and human-readable week labels', () => {
+  // 2026-11-18 is Wednesday -> Monday Nov 16 to Sunday Nov 22
+  const novReport = buildWeeklyNutritionReport({
+    foodEntries: [],
+    currentGoals: makeGoalsFromCalc(
+      calculateSmartFitnessTargets({
+        age: 26,
+        biologicalSex: 'male',
+        heightCm: 175,
+        currentWeightKg: 70,
+        targetWeightKg: 70,
+        activityLevel: 'moderate',
+        workoutFrequencyPerWeek: 3,
+        fitnessGoal: 'maintain_weight',
+      })
+    ),
+    targetHistory: [],
+    referenceDateKey: '2026-11-18',
+    weekOffset: 0,
+  });
+  assert.equal(novReport.weekStartDate, '2026-11-16');
+  assert.equal(novReport.weekEndDate, '2026-11-22');
+  assert.equal(novReport.weekLabel, 'Nov 16–22');
+
+  // Cross-month week: Nov 30 (Mon) to Dec 6 (Sun)
+  assert.equal(formatMondayToSundayLabel('2026-11-30', '2026-12-06'), 'Nov 30–Dec 6');
+
+  // 4-Week monthly comparison stays anchored to 4-week block
+  const fourWeeks = buildFourWeekNutritionReports({
+    foodEntries: [],
+    currentGoals: makeGoalsFromCalc(
+      calculateSmartFitnessTargets({
+        age: 26,
+        biologicalSex: 'male',
+        heightCm: 175,
+        currentWeightKg: 70,
+        targetWeightKg: 70,
+        activityLevel: 'moderate',
+        workoutFrequencyPerWeek: 3,
+        fitnessGoal: 'maintain_weight',
+      })
+    ),
+    targetHistory: [],
+    referenceDateKey: '2026-11-24',
+    weekOffset: -1,
+  });
+  assert.equal(fourWeeks.length, 4);
+  assert.deepEqual(
+    fourWeeks.map((w) => w.weekLabel),
+    ['Nov 2–8', 'Nov 9–15', 'Nov 16–22', 'Nov 23–29']
+  );
+});
+
+runTest('M2: Weekly nutrition averages count ONLY logged days (missing days never treated as 0)', () => {
+  const goals = makeGoalsFromCalc(
+    calculateSmartFitnessTargets({
+      age: 26,
+      biologicalSex: 'male',
+      heightCm: 175,
+      currentWeightKg: 70,
+      targetWeightKg: 70,
+      activityLevel: 'moderate',
+      workoutFrequencyPerWeek: 3,
+      fitnessGoal: 'maintain_weight',
+    })
+  );
+  // 3 logged days in Nov 16–22 (past week relative to Nov 25)
+  const foodEntries = [
+    { date: '2026-11-16', calories: 2000, protein: 140, carbs: 210, fat: 65, fibre: 28 },
+    { date: '2026-11-18', calories: 2200, protein: 150, carbs: 240, fat: 70, fibre: 32 },
+    { date: '2026-11-20', calories: 2400, protein: 160, carbs: 270, fat: 75, fibre: 30 },
+  ];
+
+  const report = buildWeeklyNutritionReport({
+    foodEntries,
+    currentGoals: goals,
+    targetHistory: [],
+    referenceDateKey: '2026-11-25',
+    weekOffset: -1,
+  });
+
+  assert.equal(report.weekStartDate, '2026-11-16');
+  assert.equal(report.loggedDays, 3);
+  assert.equal(report.isCompleteWeek, false);
+  assert.equal(report.weekStatus, 'incomplete');
+  // Average strictly over 3 logged days: (2000+2200+2400)/3 = 2200, NOT 6600/7 = 943!
+  assert.equal(report.averages.calories, 2200);
+  assert.equal(report.averages.protein, 150);
+  assert.equal(report.averages.carbs, 240);
+  assert.equal(report.averages.fat, 70);
+  assert.equal(report.averages.fibre, 30);
+
+  // Empty week -> null averages and status 'empty'
+  const emptyWeek = buildWeeklyNutritionReport({
+    foodEntries,
+    currentGoals: goals,
+    targetHistory: [],
+    referenceDateKey: '2026-11-25',
+    weekOffset: -2,
+  });
+  assert.equal(emptyWeek.loggedDays, 0);
+  assert.equal(emptyWeek.weekStatus, 'empty');
+  assert.equal(emptyWeek.averages.calories, null);
+});
+
+runTest('M3: Updating current goals never retroactively alters past weekly comparisons', () => {
+  // Current goals changed on Nov 30 to 2600 kcal, but Nov 16–22 was under 2100 kcal target
+  const currentGoals: NutritionGoals = {
+    userId: 'u-hist',
+    preset: 'build_muscle',
+    calories: 2600,
+    protein: 180,
+    carbs: 310,
+    fat: 70,
+    fibre: 36,
+    updatedAt: '2026-11-30T10:00:00.000Z',
+  };
+
+  const targetHistory: NutritionTargetHistoryRecord[] = [
+    {
+      id: 'th-2',
+      userId: 'u-hist',
+      previousCalories: 2100,
+      previousProtein: 150,
+      previousCarbs: 220,
+      previousFat: 65,
+      previousFibre: 30,
+      newCalories: 2600,
+      newProtein: 180,
+      newCarbs: 310,
+      newFat: 70,
+      newFibre: 36,
+      effectiveDate: '2026-11-30',
+      adjustmentReason: 'Increased for muscle gain',
+      applied: true,
+      adjustmentType: 'manual',
+      createdAt: '2026-11-30T10:00:00.000Z',
+    },
+    {
+      id: 'th-1',
+      userId: 'u-hist',
+      previousCalories: null,
+      previousProtein: null,
+      previousCarbs: null,
+      previousFat: null,
+      previousFibre: null,
+      newCalories: 2100,
+      newProtein: 150,
+      newCarbs: 220,
+      newFat: 65,
+      newFibre: 30,
+      effectiveDate: '2026-11-01',
+      adjustmentReason: 'Initial plan',
+      applied: true,
+      adjustmentType: 'initial',
+      createdAt: '2026-11-01T10:00:00.000Z',
+    },
+  ];
+
+  const resolvedNov18 = getEffectiveTargetsForDate('2026-11-18', currentGoals, targetHistory);
+  assert.equal(resolvedNov18.calories, 2100);
+  assert.equal(resolvedNov18.protein, 150);
+  assert.equal(resolvedNov18.source, 'historical');
+
+  const pastWeekReport = buildWeeklyNutritionReport({
+    foodEntries: [
+      { date: '2026-11-16', calories: 2100, protein: 150, carbs: 220, fat: 65, fibre: 30 },
+    ],
+    currentGoals,
+    targetHistory,
+    referenceDateKey: '2026-12-02',
+    weekOffset: -2, // Nov 16–22
+  });
+  assert.equal(pastWeekReport.targets.calories, 2100);
+  assert.equal(pastWeekReport.pctAchieved.calories, 100);
+});
+
+runTest('M4: Weight progress chart keeps missing days null and tracks total/remaining progress accurately', () => {
+  const weights = makeWeightSeries('2026-11-16', [
+    { dayOffset: 0, weightKg: 80.0 },
+    { dayOffset: 3, weightKg: 79.4 },
+    { dayOffset: 6, weightKg: 78.8 },
+  ]);
+
+  const weightProgress = buildWeeklyWeightProgress({
+    weightEntries: weights,
+    profile: makeProfile({ currentWeightKg: 78.8, targetWeightKg: 74, fitnessGoal: 'lose_weight' }),
+    goals: {
+      userId: 'u-w',
+      preset: 'lose_weight',
+      calories: 2100,
+      protein: 160,
+      carbs: 200,
+      fat: 70,
+      fibre: 30,
+      targetWeightKg: 74,
+      updatedAt: '2026-11-16T08:00:00.000Z',
+    },
+    weightGoal: {
+      userId: 'u-w',
+      startingWeightKg: 80.0,
+      targetWeightKg: 74.0,
+      goalDirection: 'loss',
+      updatedAt: '2026-11-16T08:00:00.000Z',
+    },
+    referenceDateKey: '2026-11-22',
+    weekOffset: 0,
+    windowWeeks: 1,
+  });
+
+  assert.equal(weightProgress.series.length, 7);
+  assert.equal(weightProgress.loggedDaysInWindow, 3);
+  assert.equal(weightProgress.series[1].dailyWeightKg, null);
+  assert.equal(weightProgress.series[1].smoothedWeightKg, null);
+  assert.equal(weightProgress.startingWeightKg, 80.0);
+  assert.equal(weightProgress.currentWeightKg, 78.8);
+  assert.equal(weightProgress.totalWeightChangeKg, -1.2);
+  assert.equal(weightProgress.remainingToTargetKg, -4.8);
+  assert.equal(weightProgress.progressPct, 20);
+});
+
+runTest('M5: Custom targets protect user plan from automatic 14-day overwrite prompts', () => {
+  const profile = makeProfile({
+    currentWeightKg: 75,
+    targetWeightKg: 72,
+    fitnessGoal: 'lose_weight',
+    manualOverrideActive: true,
+  });
+  const customGoals: NutritionGoals = {
+    userId: 'u-custom',
+    preset: 'custom',
+    calories: 2350,
+    protein: 175,
+    carbs: 250,
+    fat: 70,
+    fibre: 32,
+    targetWeightKg: 72,
+    manualOverrideActive: true,
+    initialCalculatedAt: '2026-10-01T08:00:00.000Z',
+    updatedAt: '2026-10-01T08:00:00.000Z',
+  };
+
+  const dueStatus = evaluateWeeklyAssessmentDueStatus({
+    profile,
+    goals: customGoals,
+    weightEntries: makeWeightSeries('2026-10-01', [{ dayOffset: 0, weightKg: 75 }]),
+    foodEntries: [],
+    weeklyAssessments: [],
+    todayDateKey: '2026-10-20',
+  });
+
+  assert.equal(dueStatus.isDue, false);
+  assert.equal(dueStatus.statusLabel, 'Custom targets active');
 });
 
 console.log(`\n=== Summary: ${passed} passed, ${failed} failed ===\n`);

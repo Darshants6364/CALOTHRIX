@@ -809,6 +809,33 @@ export function validateWeeklyAssessmentAiExplanation(
     .map((t) => t.trim().slice(0, 260))
     .slice(0, 3);
 
+  const nestedStructured =
+    obj.structured && typeof obj.structured === 'object'
+      ? (obj.structured as Record<string, unknown>)
+      : null;
+
+  const rawSummaryCandidate =
+    typeof obj.summary === 'string' && obj.summary.trim().length >= 16
+      ? obj.summary.trim()
+      : typeof nestedStructured?.summary === 'string' && nestedStructured.summary.trim().length >= 16
+        ? nestedStructured.summary.trim()
+        : '';
+
+  const rawReasonCandidate =
+    typeof obj.reason === 'string' && obj.reason.trim().length >= 12
+      ? obj.reason.trim()
+      : typeof nestedStructured?.reason === 'string' && nestedStructured.reason.trim().length >= 12
+        ? nestedStructured.reason.trim()
+        : '';
+
+  const summaryText = rawSummaryCandidate
+    ? rawSummaryCandidate.slice(0, 400)
+    : fallback.structured?.summary || bodyChangeAnalysis.slice(0, 320);
+
+  const reasonText = rawReasonCandidate
+    ? rawReasonCandidate.slice(0, 320)
+    : fallback.structured?.reason || calorieAdjustmentReason.slice(0, 320);
+
   const valid =
     headline.length >= 10 &&
     headline.length <= 180 &&
@@ -821,6 +848,15 @@ export function validateWeeklyAssessmentAiExplanation(
     return { valid: false, explanation: fallback };
   }
 
+  // Strictly lock all numeric & classification fields to deterministic engine outputs
+  const structured = fallback.structured
+    ? {
+        ...fallback.structured,
+        summary: summaryText,
+        reason: reasonText,
+      }
+    : undefined;
+
   return {
     valid: true,
     explanation: {
@@ -830,12 +866,13 @@ export function validateWeeklyAssessmentAiExplanation(
       actionableTips,
       confidenceExplanation: confidenceExplanation.slice(0, 450),
       provider: 'gemini',
+      ...(structured ? { structured } : {}),
     },
   };
 }
 
 /**
- * Uses Gemini strictly to EXPLAIN deterministic 7-day assessment outputs.
+ * Uses Gemini strictly to EXPLAIN deterministic 14-day progress review outputs.
  * Never invents, overrides, or modifies numerical nutrition targets.
  * Automatically falls back to the deterministic explanation on timeout, error, or invalid schema.
  */
@@ -858,34 +895,50 @@ export async function generateWeeklyAssessmentExplanation(params: {
     const responseSchema = {
       type: Type.OBJECT,
       properties: {
+        status: {
+          type: Type.STRING,
+          description: 'Status tag matching facts: on_track, needs_attention, targets_updated, or insufficient_data.',
+        },
+        summary: {
+          type: Type.STRING,
+          description:
+            '1 to 3 concise plain-English sentences summarizing 14-day weight trend, food intake vs target, and recommendation.',
+        },
+        reason: {
+          type: Type.STRING,
+          description: 'Short 1-sentence plain-English reason for the calorie/macro decision.',
+        },
         headline: {
           type: Type.STRING,
           description:
-            'Concise 1-line check-in headline reflecting the exact week number, weight, and action taken.',
+            'Concise 1-line check-in headline reflecting the 14-day review cycle, weight, and action taken.',
         },
         bodyChangeAnalysis: {
           type: Type.STRING,
           description:
-            '2-3 sentences distinguishing measured weight from EWMA smoothed trend weight and noting water/glycogen variance without claiming exact muscle/fat gained.',
+            '2-3 plain-English sentences comparing recent scale weight against overall 14-day trend weight while noting normal day-to-day water shifts.',
         },
         calorieAdjustmentReason: {
           type: Type.STRING,
           description:
-            '2-3 sentences clearly explaining why calories changed or stayed unchanged and how weight-dependent macros updated.',
+            '2-3 plain-English sentences clearly explaining why calories and macros changed or stayed unchanged.',
         },
         actionableTips: {
           type: Type.ARRAY,
           items: { type: Type.STRING },
           description:
-            '2 to 3 practical next-week tips including Indian food options alongside international choices matching user diet.',
+            '2 to 3 practical tips for the next 14-day cycle including Indian food options alongside international choices matching user diet.',
         },
         confidenceExplanation: {
           type: Type.STRING,
           description:
-            '1-2 sentences explaining the data confidence rating based on food days, weigh-in count, and calorie adherence.',
+            '1-2 plain-English sentences explaining how reliable the 14-day review is based on logged food days and weigh-ins.',
         },
       },
       required: [
+        'status',
+        'summary',
+        'reason',
         'headline',
         'bodyChangeAnalysis',
         'calorieAdjustmentReason',
@@ -895,8 +948,10 @@ export async function generateWeeklyAssessmentExplanation(params: {
     };
 
     const facts = {
-      weekNumber: assessment.assessmentWeekNumber,
+      cycleNumber: assessment.assessmentWeekNumber,
+      cycleDays: assessment.cycleDays,
       period: `${assessment.weekStartDate} to ${assessment.weekEndDate}`,
+      statusTag: assessment.statusTag,
       goal: goalLabel,
       goalSpeed: assessment.goalSpeed,
       dietaryPreference,
@@ -904,15 +959,20 @@ export async function generateWeeklyAssessmentExplanation(params: {
       latestMeasuredWeightKg: assessment.weightAnalysis.latestMeasuredWeightKg,
       previousMeasuredWeightKg: assessment.weightAnalysis.previousMeasuredWeightKg,
       current7dAvgWeightKg: assessment.weightAnalysis.current7dAvgWeightKg,
+      previous7dAvgWeightKg: assessment.weightAnalysis.previous7dAvgWeightKg,
       assessedTrendWeightKg: assessment.weightAnalysis.assessedTrendWeightKg,
       previousTrendWeightKg: assessment.weightAnalysis.previousTrendWeightKg,
-      weeklyTrendChangeKg: assessment.weightAnalysis.weeklyWeightChangeKg,
+      cycleTrendChangeKg: assessment.weightAnalysis.cycleWeightChangeKg,
+      weeklyTrendRateKg: assessment.weightAnalysis.weeklyWeightChangeKg,
       foodLoggedDays: assessment.foodLoggedDays,
       weightLoggedDays: assessment.weightLoggedDays,
       loggingCompletenessPct: assessment.loggingCompletenessPct,
       calorieAdherencePct: assessment.adherencePercentage,
       avgDailyCalories: assessment.avgDailyCalories,
       avgDailyProtein: assessment.avgDailyProtein,
+      avgDailyCarbs: assessment.avgDailyCarbs,
+      avgDailyFat: assessment.avgDailyFat,
+      avgDailyFibre: assessment.avgDailyFibre,
       confidenceLevel: assessment.confidenceLevel,
       formulaTdeeKcal: assessment.estimatedTdeeKcal,
       priorTdeeKcal: assessment.priorTdeeKcal,
@@ -937,11 +997,12 @@ export async function generateWeeklyAssessmentExplanation(params: {
         contents: {
           parts: [
             {
-              text: `Explain this deterministic 7-day nutrition check-in clearly for the user. STRICT RULES:
+              text: `Explain this deterministic 14-day nutrition progress review clearly in plain English for everyday users (avoid technical jargon like BMR, EWMA, or PAL). STRICT RULES:
 1. NEVER change, override, or invent any numeric targets—quote ONLY the exact figures in the JSON facts below.
-2. Clearly distinguish measured scale weight from smoothed trend weight; never make unsupported claims about exact grams of muscle or fat gained/lost.
-3. Give 2-3 practical next-week tips incorporating realistic Indian food options (e.g., paneer, dal, curd, eggs, chicken, roti, oats, ragi, idli, sprouts) alongside international options, strictly respecting dietaryPreference (${dietaryPreference}) and restrictions (${foodRestrictions.join(', ') || 'none'}).
-4. When confidenceLevel is "low", explicitly explain what logging is needed and reassure the user that targets were kept unchanged.
+2. Explain weight progress smoothly using the 14-day trend alongside recent scale readings; never make unsupported claims about exact grams of muscle or fat gained/lost.
+3. Keep "summary" crisp (1-3 short sentences) and "reason" to 1 short sentence for the UI card.
+4. Give 2-3 practical tips for the next 14-day cycle incorporating realistic Indian food options (e.g., paneer, dal, curd, eggs, chicken, roti, oats, ragi, idli, sprouts) alongside international options, strictly respecting dietaryPreference (${dietaryPreference}) and restrictions (${foodRestrictions.join(', ') || 'none'}).
+5. When confidenceLevel is "low", clearly explain what extra logs are needed and reassure the user that targets were kept unchanged.
 
 DETERMINISTIC ASSESSMENT FACTS:
 ${JSON.stringify(facts)}`,
@@ -950,14 +1011,14 @@ ${JSON.stringify(facts)}`,
         },
         config: {
           systemInstruction:
-            'You are CALOTHRIX Evidence-Based Nutrition Explainer. You ONLY interpret and explain verified deterministic nutrition numbers. You never invent or alter targets.',
+            'You are CALOTHRIX Nutrition Explainer. You ONLY interpret and explain verified deterministic 14-day progress numbers in clear, everyday language. You never invent or alter targets.',
           thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
           responseMimeType: 'application/json',
           responseSchema,
         },
       }),
       10000,
-      'Weekly assessment AI explanation timed out.'
+      '14-day progress review AI explanation timed out.'
     );
 
     const text = (response.text || '').trim();

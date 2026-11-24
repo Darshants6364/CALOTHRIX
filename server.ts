@@ -44,6 +44,7 @@ import {
   type AnalyzeMealInputMode,
   type MealPrepStyle,
 } from './server/mealAiService.ts';
+import { start15DayAssessmentScheduler } from './server/assessmentScheduler.ts';
 import {
   getAdminAiInsightsDashboard,
   recordAiTrainingEvent,
@@ -238,8 +239,8 @@ async function startServer() {
     }
   });
 
-  // 7-Day AI Adaptive Assessment Endpoint (Deterministic Engine + Gemini Explanation + Idempotent Supabase Persistence)
-  app.post('/api/assessments/weekly', async (req, res) => {
+  // 14-Day AI Adaptive Assessment Endpoint (Deterministic Engine + Gemini Explanation + Idempotent Supabase Persistence)
+  const handleAdaptiveCycleAssessment = async (req: express.Request, res: express.Response) => {
     try {
       const body = (req.body || {}) as {
         profile?: Partial<UserProfile>;
@@ -521,6 +522,7 @@ async function startServer() {
         weekStartDate: deterministic.weekStartDate,
         weekEndDate: deterministic.weekEndDate,
         assessmentWeekNumber: deterministic.assessmentWeekNumber,
+        cycleDays: deterministic.cycleDays,
         previousWeightKg: deterministic.weightAnalysis.previousMeasuredWeightKg,
         assessedWeightKg: deterministic.weightAnalysis.latestMeasuredWeightKg,
         previousTrendWeightKg: deterministic.weightAnalysis.previousTrendWeightKg,
@@ -533,6 +535,7 @@ async function startServer() {
         avgDailyProtein: deterministic.avgDailyProtein,
         avgDailyCarbs: deterministic.avgDailyCarbs,
         avgDailyFat: deterministic.avgDailyFat,
+        avgDailyFibre: deterministic.avgDailyFibre,
         priorTdeeKcal: deterministic.priorTdeeKcal,
         estimatedTdeeKcal: deterministic.estimatedTdeeKcal,
         calibratedTdeeKcal: deterministic.calibratedTdeeKcal,
@@ -555,6 +558,7 @@ async function startServer() {
         adherencePercentage: deterministic.adherencePercentage,
         confidenceLevel: deterministic.confidenceLevel,
         adjustmentType: deterministic.adjustmentType,
+        statusTag: deterministic.statusTag,
         calorieDeltaKcal: deterministic.calorieDeltaKcal,
         adjustmentReason: deterministic.adjustmentReason,
         goalCompleted: deterministic.goalCompleted,
@@ -570,47 +574,66 @@ async function startServer() {
       let persistedToSupabase = false;
       if (authenticatedUserId && userScopedSupabase) {
         try {
-          const { data: upserted, error: upsertErr } = await userScopedSupabase
+          const baseUpsertPayload = {
+            user_id: authenticatedUserId,
+            week_start_date: assessmentRecord.weekStartDate,
+            week_end_date: assessmentRecord.weekEndDate,
+            assessment_week_number: assessmentRecord.assessmentWeekNumber,
+            previous_weight_kg: assessmentRecord.previousWeightKg,
+            assessed_weight_kg: assessmentRecord.assessedWeightKg,
+            previous_trend_weight_kg: assessmentRecord.previousTrendWeightKg,
+            assessed_trend_weight_kg: assessmentRecord.assessedTrendWeightKg,
+            avg_daily_calories: assessmentRecord.avgDailyCalories,
+            avg_daily_protein: assessmentRecord.avgDailyProtein,
+            prior_tdee_kcal: assessmentRecord.priorTdeeKcal,
+            calibrated_tdee_kcal: assessmentRecord.calibratedTdeeKcal,
+            previous_recommended_calories: assessmentRecord.previousRecommendedCalories,
+            recommended_calories: assessmentRecord.recommendedCalories,
+            recommended_protein: assessmentRecord.recommendedProtein,
+            recommended_carbs: assessmentRecord.recommendedCarbs,
+            recommended_fat: assessmentRecord.recommendedFat,
+            recommended_fibre: assessmentRecord.recommendedFibre,
+            recommended_hydration_ml: assessmentRecord.recommendedHydrationMl ?? null,
+            food_logged_days: assessmentRecord.foodLoggedDays,
+            weight_logged_days: assessmentRecord.weightLoggedDays,
+            adherence_percentage: assessmentRecord.adherencePercentage,
+            confidence_level: assessmentRecord.confidenceLevel,
+            adjustment_type: assessmentRecord.adjustmentType,
+            adjustment_reason: assessmentRecord.adjustmentReason,
+            goal_completed: assessmentRecord.goalCompleted,
+            suggested_maintenance_calories: assessmentRecord.suggestedMaintenanceCalories ?? null,
+            ai_summary: assessmentRecord.aiSummary,
+            rationale_bullets: assessmentRecord.rationaleBullets,
+            calculation_version: assessmentRecord.calculationVersion,
+            status: 'pending',
+            updated_at: nowIso,
+          };
+
+          const extendedUpsertPayload = {
+            ...baseUpsertPayload,
+            cycle_days: assessmentRecord.cycleDays ?? 14,
+            assessment_status_tag: assessmentRecord.statusTag ?? null,
+            structured_ai_output: assessmentRecord.aiSummary.structured ?? null,
+            avg_daily_carbs: assessmentRecord.avgDailyCarbs ?? 0,
+            avg_daily_fat: assessmentRecord.avgDailyFat ?? 0,
+            avg_daily_fibre: assessmentRecord.avgDailyFibre ?? 0,
+          };
+
+          let { data: upserted, error: upsertErr } = await userScopedSupabase
             .from('weekly_assessments')
-            .upsert(
-              {
-                user_id: authenticatedUserId,
-                week_start_date: assessmentRecord.weekStartDate,
-                week_end_date: assessmentRecord.weekEndDate,
-                assessment_week_number: assessmentRecord.assessmentWeekNumber,
-                previous_weight_kg: assessmentRecord.previousWeightKg,
-                assessed_weight_kg: assessmentRecord.assessedWeightKg,
-                previous_trend_weight_kg: assessmentRecord.previousTrendWeightKg,
-                assessed_trend_weight_kg: assessmentRecord.assessedTrendWeightKg,
-                avg_daily_calories: assessmentRecord.avgDailyCalories,
-                avg_daily_protein: assessmentRecord.avgDailyProtein,
-                prior_tdee_kcal: assessmentRecord.priorTdeeKcal,
-                calibrated_tdee_kcal: assessmentRecord.calibratedTdeeKcal,
-                previous_recommended_calories: assessmentRecord.previousRecommendedCalories,
-                recommended_calories: assessmentRecord.recommendedCalories,
-                recommended_protein: assessmentRecord.recommendedProtein,
-                recommended_carbs: assessmentRecord.recommendedCarbs,
-                recommended_fat: assessmentRecord.recommendedFat,
-                recommended_fibre: assessmentRecord.recommendedFibre,
-                recommended_hydration_ml: assessmentRecord.recommendedHydrationMl ?? null,
-                food_logged_days: assessmentRecord.foodLoggedDays,
-                weight_logged_days: assessmentRecord.weightLoggedDays,
-                adherence_percentage: assessmentRecord.adherencePercentage,
-                confidence_level: assessmentRecord.confidenceLevel,
-                adjustment_type: assessmentRecord.adjustmentType,
-                adjustment_reason: assessmentRecord.adjustmentReason,
-                goal_completed: assessmentRecord.goalCompleted,
-                suggested_maintenance_calories: assessmentRecord.suggestedMaintenanceCalories ?? null,
-                ai_summary: assessmentRecord.aiSummary,
-                rationale_bullets: assessmentRecord.rationaleBullets,
-                calculation_version: assessmentRecord.calculationVersion,
-                status: 'pending',
-                updated_at: nowIso,
-              } as never,
-              { onConflict: 'user_id,week_start_date,week_end_date' }
-            )
+            .upsert(extendedUpsertPayload as never, { onConflict: 'user_id,week_start_date,week_end_date' })
             .select('id, created_at')
             .maybeSingle();
+
+          if (upsertErr) {
+            const fallbackRes = await userScopedSupabase
+              .from('weekly_assessments')
+              .upsert(baseUpsertPayload as never, { onConflict: 'user_id,week_start_date,week_end_date' })
+              .select('id, created_at')
+              .maybeSingle();
+            upserted = fallbackRes.data;
+            upsertErr = fallbackRes.error;
+          }
 
           if (!upsertErr && upserted) {
             const uRow = upserted as Record<string, unknown>;
@@ -630,10 +653,13 @@ async function startServer() {
       });
     } catch (err) {
       return res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to run 7-day adaptive assessment.',
+        error: err instanceof Error ? err.message : 'Failed to run 14-day progress review.',
       });
     }
-  });
+  };
+
+  app.post('/api/assessments/weekly', handleAdaptiveCycleAssessment);
+  app.post('/api/assessments/cycle', handleAdaptiveCycleAssessment);
 
   // External Food Database Status & Attribution
   app.get('/api/foods/status', (_req, res) => {
@@ -1507,6 +1533,8 @@ async function startServer() {
     console.log(`CALOTHRIX server running on http://0.0.0.0:${PORT}`);
   });
 
+  const assessmentScheduler = start15DayAssessmentScheduler();
+
   let viteServer: Awaited<ReturnType<typeof import('vite')['createServer']>> | null = null;
 
   if (process.env.NODE_ENV !== 'production') {
@@ -1515,6 +1543,7 @@ async function startServer() {
       const vite = await createViteServer({
         server: {
           middlewareMode: true,
+          allowedHosts: true,
           hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer },
         },
         appType: 'spa',
@@ -1549,6 +1578,7 @@ async function startServer() {
   }
 
   const shutdown = async () => {
+    assessmentScheduler.stop();
     try {
       if (viteServer) {
         await viteServer.close();

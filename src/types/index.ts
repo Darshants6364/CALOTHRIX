@@ -404,6 +404,7 @@ export interface NutritionGoals {
   bmi?: number;
   goalSpeed?: GoalSpeed;
   estimatedWeeks?: number | null;
+  manualOverrideActive?: boolean;
   updatedAt: string;
 }
 
@@ -477,6 +478,10 @@ export interface UserProfile {
   isPregnantOrBreastfeeding?: boolean;
   adaptiveTdeeKcal?: number | null;
   lastWeeklyAssessmentAt?: string | null;
+  adaptivePaused?: boolean;
+  manualOverrideActive?: boolean;
+  cycleAnchorDate?: string | null;
+  onboardingCompleted?: boolean;
   dietaryPreference: DietaryPreference;
   foodRestrictions: FoodRestriction[];
   accountRole: AccountRole;
@@ -496,6 +501,28 @@ export interface AuthSessionPlaceholder {
   userId: string;
 }
 
+export interface NutritionTargetHistoryRecord {
+  id: string;
+  userId: string;
+  previousCalories: number | null;
+  previousProtein: number | null;
+  previousCarbs: number | null;
+  previousFat: number | null;
+  previousFibre: number | null;
+  newCalories: number;
+  newProtein: number;
+  newCarbs: number;
+  newFat: number;
+  newFibre: number;
+  targetWeightKg?: number | null;
+  effectiveDate: string;
+  adjustmentReason: string;
+  assessmentId?: string | null;
+  applied: boolean;
+  adjustmentType: 'initial' | 'manual' | 'adaptive';
+  createdAt: string;
+}
+
 export interface MacroLogPersistedState {
   version: number;
   isDemoData: boolean;
@@ -509,6 +536,7 @@ export interface MacroLogPersistedState {
   foodEntries: FoodLogEntry[];
   weightEntries: WeightEntry[];
   weeklyAssessments?: WeeklyAssessmentRecord[];
+  targetHistory?: NutritionTargetHistoryRecord[];
 }
 
 export type NavTab =
@@ -979,7 +1007,7 @@ export interface AiPerformanceInsightsResponse {
 }
 
 // ============================================================================
-// SMART CALORIE TRACKER & 7-DAY AI ADAPTIVE ASSESSMENT TYPES
+// SMART CALORIE TRACKER & 14-DAY AI ADAPTIVE ASSESSMENT TYPES
 // ============================================================================
 
 export type AssessmentConfidenceLevel = 'high' | 'moderate' | 'low';
@@ -992,6 +1020,26 @@ export type WeeklyAdjustmentType =
   | 'goal_completed_maintenance'
   | 'safety_guarded';
 
+export type AdaptiveAssessmentStatusTag =
+  | 'on_track'
+  | 'needs_attention'
+  | 'targets_updated'
+  | 'insufficient_data';
+
+export interface AdaptiveAiStructuredOutput {
+  status: AdaptiveAssessmentStatusTag;
+  summary: string;
+  weight_change_kg: number;
+  calorie_action: 'increase' | 'decrease' | 'maintain' | 'preserve';
+  previous_calories: number;
+  recommended_calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  reason: string;
+  confidence: AssessmentConfidenceLevel;
+}
+
 export interface WeeklyAssessmentAiExplanation {
   headline: string;
   bodyChangeAnalysis: string;
@@ -999,6 +1047,7 @@ export interface WeeklyAssessmentAiExplanation {
   actionableTips: string[];
   confidenceExplanation: string;
   provider?: 'gemini' | 'deterministic';
+  structured?: AdaptiveAiStructuredOutput;
 }
 
 export interface DailyNutritionSummary {
@@ -1014,9 +1063,10 @@ export interface DailyNutritionSummary {
 export interface WeeklyAssessmentRecord {
   id: string;
   userId: string;
-  weekStartDate: string; // YYYY-MM-DD
-  weekEndDate: string; // YYYY-MM-DD
-  assessmentWeekNumber: number;
+  weekStartDate: string; // YYYY-MM-DD (14-day cycle start)
+  weekEndDate: string; // YYYY-MM-DD (14-day cycle end)
+  assessmentWeekNumber: number; // Cycle number (1, 2, 3...)
+  cycleDays?: number;
   previousWeightKg: number;
   assessedWeightKg: number;
   previousTrendWeightKg: number;
@@ -1029,6 +1079,7 @@ export interface WeeklyAssessmentRecord {
   avgDailyProtein: number;
   avgDailyCarbs?: number;
   avgDailyFat?: number;
+  avgDailyFibre?: number;
   priorTdeeKcal: number;
   estimatedTdeeKcal?: number;
   calibratedTdeeKcal: number;
@@ -1051,6 +1102,7 @@ export interface WeeklyAssessmentRecord {
   adherencePercentage: number;
   confidenceLevel: AssessmentConfidenceLevel;
   adjustmentType: WeeklyAdjustmentType;
+  statusTag?: AdaptiveAssessmentStatusTag;
   calorieDeltaKcal?: number;
   adjustmentReason: string;
   goalCompleted: boolean;
@@ -1065,8 +1117,18 @@ export interface WeeklyAssessmentRecord {
 
 export interface WeeklyAssessmentDueStatus {
   isDue: boolean;
-  statusLabel: 'Assessment in progress' | 'Assessment ready' | 'Low data confidence' | 'Assessment completed';
+  statusLabel:
+    | 'Assessment in progress'
+    | 'Assessment ready'
+    | 'Low data confidence'
+    | 'Assessment completed'
+    | 'Adaptive paused'
+    | 'Custom targets active';
   currentWeekNumber: number;
+  cycleDays: number;
+  daysCompleted: number;
+  cycleStartDate: string;
+  cycleEndDate: string;
   weekStartDate: string;
   weekEndDate: string;
   nextAssessmentDate: string;
@@ -1080,6 +1142,8 @@ export interface WeeklyAssessmentDueStatus {
   latestWeightKg: number | null;
   weeklyDeltaKg: number | null;
   goalCompleted: boolean;
+  adaptivePaused?: boolean;
+  manualOverrideActive?: boolean;
   readinessMessage: string;
 }
 

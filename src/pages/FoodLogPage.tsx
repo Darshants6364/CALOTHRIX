@@ -1,21 +1,18 @@
-import React, { Suspense, lazy, memo, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, lazy, memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Barcode,
-  Bookmark,
   BookmarkPlus,
-  BookOpen,
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Download,
-  Heart,
   History,
-  Mic,
   MoreHorizontal,
   Pencil,
   Plus,
   Sparkles,
   Trash2,
-  Utensils,
   X,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -24,14 +21,78 @@ import { openShareStudio } from '../components/MacroShareModal';
 import { QuickAiLogBar } from '../components/QuickAiLogBar';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { FoodLogEntry, MealCategory, MEAL_CATEGORIES } from '../types';
-import { formatReadableDate, formatShortDate } from '../utils/dateUtils';
+import { addDaysToDateKey, formatReadableDate, formatShortDate } from '../utils/dateUtils';
 import { formatFoodQuantity, getMealBreakdown, round1 } from '../utils/nutritionUtils';
 
 const FoodDatabasePage = lazy(() =>
   import('./FoodDatabasePage').then((m) => ({ default: m.FoodDatabasePage }))
 );
 
-type FoodLogSubTab = 'diary' | 'database' | 'favorites' | 'custom' | 'saved-meals';
+export type FoodLogSection = 'diary' | 'database';
+
+export interface FoodLogPageProps {
+  initialSection?: FoodLogSection;
+}
+
+const PRIMARY_MEALS = MEAL_CATEGORIES.filter((m) => m.id !== 'other');
+
+interface ProgressMetricRowProps {
+  label: string;
+  consumed: number;
+  target: number;
+  unit: string;
+  barClassName: string;
+  valueClassName?: string;
+}
+
+const ProgressMetricRow: React.FC<ProgressMetricRowProps> = ({
+  label,
+  consumed,
+  target,
+  unit,
+  barClassName,
+  valueClassName = 'text-slate-900 dark:text-slate-100',
+}) => {
+  const safeTarget = Math.max(0, target);
+  const ratio = safeTarget > 0 ? (consumed / safeTarget) * 100 : 0;
+  const clampedWidth = Math.min(100, Math.max(0, ratio));
+  const isOver = safeTarget > 0 && consumed > safeTarget;
+  const diff = Math.round((safeTarget - consumed) * 10) / 10;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="font-semibold text-slate-700 dark:text-slate-300">{label}</span>
+        <div className="flex items-baseline gap-2 tabular-nums">
+          <span className={`font-bold font-mono-nums ${isOver ? 'text-rose-600 dark:text-rose-400' : valueClassName}`}>
+            {consumed.toLocaleString()}
+            {unit}
+          </span>
+          <span className="text-slate-400 font-mono-nums">
+            / {safeTarget > 0 ? `${safeTarget.toLocaleString()}${unit}` : '—'}
+          </span>
+          {safeTarget > 0 && (
+            <span
+              className={`text-[11px] font-medium ${
+                isOver ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'
+              }`}
+            >
+              {isOver ? `Over ${Math.abs(diff)}${unit}` : `${diff}${unit} left`}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="h-2 w-full rounded-full bg-stone-200/80 dark:bg-white/10 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-300 ${
+            isOver ? 'bg-rose-500' : barClassName
+          }`}
+          style={{ width: `${clampedWidth}%` }}
+        />
+      </div>
+    </div>
+  );
+};
 
 interface FoodLogEntryRowProps {
   entry: FoodLogEntry;
@@ -71,8 +132,13 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
       setEditingQty(false);
     };
 
+    const servingDisplay =
+      entry.unitLabel && entry.unitLabel !== `${entry.quantityGrams} g`
+        ? `${entry.unitLabel} (${formatFoodQuantity(entry.quantityGrams, foodUnit)})`
+        : formatFoodQuantity(entry.quantityGrams, foodUnit);
+
     return (
-      <div className="px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 hover:bg-stone-50/60 dark:hover:bg-white/[0.02] transition-colors">
+      <div className="px-4 sm:px-5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 hover:bg-stone-50/60 dark:hover:bg-white/[0.02] transition-colors">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -105,7 +171,7 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
                   type="button"
                   onClick={commitQty}
                   aria-label="Save quantity"
-                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-emerald-600 dark:text-[#C8FF00] hover:bg-black/5 dark:hover:bg-white/10"
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#4E6800] dark:text-[#C8FF00] hover:bg-black/5 dark:hover:bg-white/10"
                 >
                   <Check className="w-4 h-4" />
                 </button>
@@ -131,11 +197,11 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
                 title="Tap to edit quantity"
                 className="text-xs text-slate-500 dark:text-slate-400 hover:text-[#4E6800] dark:hover:text-[#C8FF00] underline decoration-dotted underline-offset-2 font-mono-nums py-0.5"
               >
-                {formatFoodQuantity(entry.quantityGrams, foodUnit)}
+                {servingDisplay}
               </button>
             )}
           </div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums">
+          <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums">
             <span>P {entry.protein}g</span>
             <span aria-hidden="true">·</span>
             <span>C {entry.carbs}g</span>
@@ -151,7 +217,7 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
             {entry.calories} kcal
           </span>
 
-          <div className="flex items-center gap-1 relative">
+          <div className="flex items-center gap-0.5 relative">
             <button
               type="button"
               onClick={() => onEdit(entry)}
@@ -237,7 +303,7 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
 
 FoodLogEntryRow.displayName = 'FoodLogEntryRow';
 
-export const FoodLogPage: React.FC = () => {
+export const FoodLogPage: React.FC<FoodLogPageProps> = ({ initialSection = 'diary' }) => {
   const {
     state,
     selectedDate,
@@ -255,34 +321,56 @@ export const FoodLogPage: React.FC = () => {
     copyMealFromPreviousDay,
     savedMeals,
     saveMealCombo,
-    deleteSavedMealCombo,
     logSavedMealCombo,
-    toggleFavoriteFood,
-    deleteCustomFood,
     notify,
     allFoods,
+    setActiveTab,
   } = useMacroLogStore();
 
-  const [subTab, setSubTab] = useState<FoodLogSubTab>('diary');
+  const [subTab, setSubTab] = useState<FoodLogSection>(initialSection);
+  const [collapsedMeals, setCollapsedMeals] = useState<Record<string, boolean>>({});
   const [pendingDelete, setPendingDelete] = useState<FoodLogEntry | null>(null);
   const [savingComboMeal, setSavingComboMeal] = useState<MealCategory | null>(null);
   const [comboNameInput, setComboNameInput] = useState('');
-  const [comboTargetMeal, setComboTargetMeal] = useState<MealCategory>('lunch');
+
+  useEffect(() => {
+    setSubTab(initialSection);
+  }, [initialSection]);
 
   const foodById = useMemo(() => new Map(allFoods.map((f) => [f.id, f])), [allFoods]);
-
-  const favoriteFoods = useMemo(
-    () =>
-      state.favoriteFoodIds
-        .map((id) => foodById.get(id))
-        .filter((f): f is NonNullable<typeof f> => Boolean(f)),
-    [foodById, state.favoriteFoodIds]
-  );
 
   const mealBreakdown = useMemo(
     () => getMealBreakdown(selectedDateEntries),
     [selectedDateEntries]
   );
+
+  const yesterdayKey = useMemo(() => addDaysToDateKey(selectedDate, -1), [selectedDate]);
+  const yesterdayMealCounts = useMemo(() => {
+    const counts: Record<MealCategory, number> = {
+      breakfast: 0,
+      lunch: 0,
+      evening_snacks: 0,
+      dinner: 0,
+      other: 0,
+    };
+    for (const entry of state.foodEntries) {
+      if (entry.date === yesterdayKey && counts[entry.mealType] !== undefined) {
+        counts[entry.mealType] += 1;
+      }
+    }
+    return counts;
+  }, [state.foodEntries, yesterdayKey]);
+
+  const visibleMeals = useMemo(() => {
+    if (mealBreakdown.other.items.length > 0) {
+      return MEAL_CATEGORIES;
+    }
+    return PRIMARY_MEALS;
+  }, [mealBreakdown.other.items.length]);
+
+  const toggleMealCollapsed = (mealId: MealCategory) => {
+    setCollapsedMeals((prev) => ({ ...prev, [mealId]: !prev[mealId] }));
+  };
 
   const handleMealChange = useCallback(
     (entry: FoodLogEntry, nextMeal: MealCategory) => {
@@ -337,16 +425,17 @@ export const FoodLogPage: React.FC = () => {
     [state.settings.foodUnit]
   );
 
-  const subTabs: { id: FoodLogSubTab; label: string; count?: number }[] = [
-    { id: 'diary', label: 'Daily Log' },
-    { id: 'database', label: 'Food Database' },
-    { id: 'favorites', label: 'Favorites', count: favoriteFoods.length },
-    { id: 'custom', label: 'Custom Foods', count: state.customFoods.length },
-    { id: 'saved-meals', label: 'Saved Meals', count: savedMeals.length },
-  ];
+  const handleSwitchSection = (next: FoodLogSection) => {
+    setSubTab(next);
+    if (next === 'database') {
+      setActiveTab('food-database');
+    } else {
+      setActiveTab('food-log');
+    }
+  };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header */}
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -358,431 +447,174 @@ export const FoodLogPage: React.FC = () => {
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
-            className="min-h-[44px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>AI Logger</span>
-          </button>
+        {subTab === 'diary' && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
+              aria-label="Open AI Logger"
+              className="min-h-[44px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+            >
+              <Sparkles className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+              <span>AI Logger</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => openBarcodeScannerModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
-          >
-            <Barcode className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Barcode</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => openBarcodeScannerModal({ date: selectedDate })}
+              aria-label="Scan Barcode"
+              className="min-h-[44px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+            >
+              <Barcode className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+              <span className="hidden sm:inline">Barcode</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => openAddFoodModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Add Food</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => openAddFoodModal({ date: selectedDate })}
+              className="min-h-[44px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Food</span>
+            </button>
+          </div>
+        )}
       </section>
 
-      {/* Integrated Food Log Sub-Navigation: Diary | Food Database | Favorites | Custom Foods | Saved Meals */}
+      {/* Simplified 2-Section Navigation: Daily Log | Food Database */}
       <nav
         aria-label="Food Log sections"
-        className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1"
+        className="grid grid-cols-2 p-1 rounded-2xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 max-w-sm"
       >
-        {subTabs.map((tab) => {
-          const active = subTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setSubTab(tab.id)}
-              className={`min-h-[40px] px-3.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors inline-flex items-center gap-1.5 shrink-0 ${
-                active
-                  ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black'
-                  : 'bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300 hover:border-[#4E6800] dark:hover:border-[#C8FF00]'
-              }`}
-            >
-              <span>{tab.label}</span>
-              {typeof tab.count === 'number' && tab.count > 0 && (
-                <span
-                  className={`text-[10px] font-mono-nums ${
-                    active ? 'opacity-80' : 'text-slate-400'
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        <button
+          type="button"
+          onClick={() => handleSwitchSection('diary')}
+          className={`min-h-[40px] px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${
+            subTab === 'diary'
+              ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          Daily Log
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSwitchSection('database')}
+          className={`min-h-[40px] px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${
+            subTab === 'database'
+              ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          Food Database
+        </button>
       </nav>
 
-      {/* SUB-TAB: FOOD DATABASE */}
-      {subTab === 'database' && (
+      {subTab === 'database' ? (
         <Suspense
           fallback={
             <div className="h-48 rounded-2xl bg-black/5 dark:bg-white/5 animate-pulse" />
           }
         >
-          <FoodDatabasePage />
+          <FoodDatabasePage embedded />
         </Suspense>
-      )}
-
-      {/* SUB-TAB: FAVORITES */}
-      {subTab === 'favorites' && (
-        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-black/8 dark:border-white/10 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                Favorite Foods
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Tap any food to log it for {formatShortDate(selectedDate)}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSubTab('database')}
-              className="min-h-[38px] px-3 rounded-xl border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              Browse Database
-            </button>
-          </div>
-          {favoriteFoods.length === 0 ? (
-            <div className="p-8 text-center">
-              <Heart className="w-7 h-7 text-slate-400 mx-auto" />
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                No favorites saved yet
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Star your frequent meals in Food Database or Add Food for one-tap logging.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-black/6 dark:divide-white/8">
-              {favoriteFoods.map((food) => (
-                <div
-                  key={food.id}
-                  className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      {food.name}
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
-                      {food.servingName} ({food.servingWeightGrams}g) · {food.calories} kcal · P {food.protein}g · C {food.carbs}g · F {food.fat}g
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openAddFoodModal({ food, date: selectedDate })}
-                      className="min-h-[40px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Log
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleFavoriteFood(food.id)}
-                      aria-label={`Remove ${food.name} from favorites`}
-                      className="min-h-[40px] min-w-[40px] rounded-xl text-rose-500 hover:bg-rose-500/10 flex items-center justify-center"
-                    >
-                      <Heart className="w-4 h-4 fill-current" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* SUB-TAB: CUSTOM FOODS */}
-      {subTab === 'custom' && (
-        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-black/8 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                My Custom Foods
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Homemade recipes and personal foods synced to your account
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSubTab('database')}
-              className="min-h-[40px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Create Custom Food
-            </button>
-          </div>
-          {state.customFoods.length === 0 ? (
-            <div className="p-8 text-center">
-              <Utensils className="w-7 h-7 text-slate-400 mx-auto" />
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                No custom foods yet
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Add homemade dishes or packaged items in Food Database to reuse anytime.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-black/6 dark:divide-white/8">
-              {state.customFoods.map((food) => (
-                <div
-                  key={food.id}
-                  className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      {food.name}
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
-                      {food.servingName} ({food.servingWeightGrams}g) · {food.calories} kcal · P {food.protein}g · C {food.carbs}g · F {food.fat}g
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openAddFoodModal({ food, date: selectedDate })}
-                      className="min-h-[40px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Log
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteCustomFood(food.id)}
-                      aria-label={`Delete custom food ${food.name}`}
-                      className="min-h-[40px] min-w-[40px] rounded-xl text-slate-500 hover:text-red-500 hover:bg-red-500/10 flex items-center justify-center"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* SUB-TAB: SAVED MEALS */}
-      {subTab === 'saved-meals' && (
-        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-black/8 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                Saved Meal Combos
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Log multi-item meals in one tap · Synced across devices
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <label htmlFor="saved-meal-target" className="text-xs text-slate-500 dark:text-slate-400">
-                Log into:
-              </label>
-              <select
-                id="saved-meal-target"
-                value={comboTargetMeal}
-                onChange={(e) => setComboTargetMeal(e.target.value as MealCategory)}
-                className="h-10 px-3 rounded-xl border border-black/10 dark:border-white/12 bg-[#F4F3EF] dark:bg-[#090A0C] text-xs font-semibold text-slate-800 dark:text-slate-100"
-              >
-                {MEAL_CATEGORIES.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.shortLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {savedMeals.length === 0 ? (
-            <div className="p-8 text-center">
-              <Bookmark className="w-7 h-7 text-slate-400 mx-auto" />
-              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                No saved meals yet
-              </p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Log 2 or more items in any meal on Daily Log and tap &ldquo;Save as Meal&rdquo; to create a reusable combo.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-black/6 dark:divide-white/8">
-              {savedMeals.map((combo) => (
-                <div
-                  key={combo.id}
-                  className="px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      {combo.name}
-                    </div>
-                    <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
-                      {combo.items.length} items · {combo.totalCalories} kcal · P {combo.totalProtein}g · C {combo.totalCarbs}g · F {combo.totalFat}g
-                    </div>
-                    <div className="mt-0.5 text-xs text-slate-400 truncate">
-                      {combo.items.map((i) => i.foodName).join(', ')}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        logSavedMealCombo(combo, comboTargetMeal, selectedDate);
-                        setSubTab('diary');
-                      }}
-                      className="min-h-[42px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Log Meal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteSavedMealCombo(combo.id)}
-                      aria-label={`Delete saved meal ${combo.name}`}
-                      className="min-h-[42px] min-w-[42px] rounded-xl text-slate-500 hover:text-red-500 hover:bg-red-500/10 flex items-center justify-center"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* SUB-TAB: DAILY DIARY */}
-      {subTab === 'diary' && (
+      ) : (
         <>
+          {/* Date Navigation + Compact Weekly Date Selector */}
           <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} />
 
-          {/* Full-Day Nutritional Totals Bar */}
-          <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5">
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Calories</div>
-                <div className="mt-0.5 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
-                  {selectedDateTotals.calories.toLocaleString()}{' '}
-                  <span className="text-xs font-normal text-slate-400">/ {state.goals.calories}</span>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Protein</div>
-                <div className="mt-0.5 text-lg font-bold font-mono-nums text-[#4E6800] dark:text-[#C8FF00]">
-                  {selectedDateTotals.protein}g{' '}
-                  <span className="text-xs font-normal text-slate-400">/ {state.goals.protein}g</span>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Carbs</div>
-                <div className="mt-0.5 text-lg font-bold font-mono-nums text-amber-700 dark:text-amber-400">
-                  {selectedDateTotals.carbs}g{' '}
-                  <span className="text-xs font-normal text-slate-400">/ {state.goals.carbs}g</span>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Fat</div>
-                <div className="mt-0.5 text-lg font-bold font-mono-nums text-indigo-700 dark:text-indigo-400">
-                  {selectedDateTotals.fat}g{' '}
-                  <span className="text-xs font-normal text-slate-400">/ {state.goals.fat}g</span>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Fibre</div>
-                <div className="mt-0.5 text-lg font-bold font-mono-nums text-teal-700 dark:text-teal-400">
-                  {selectedDateTotals.fibre}g{' '}
-                  <span className="text-xs font-normal text-slate-400">/ {state.goals.fibre}g</span>
-                </div>
-              </div>
+          {/* Daily Nutrition Dashboard: Compact Horizontal Progress Bars */}
+          <section
+            aria-label="Daily nutrition progress"
+            className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 space-y-3"
+          >
+            <ProgressMetricRow
+              label="Calories"
+              consumed={selectedDateTotals.calories}
+              target={state.goals.calories}
+              unit=" kcal"
+              barClassName="bg-[#4E6800] dark:bg-[#C8FF00]"
+              valueClassName="text-[#4E6800] dark:text-[#C8FF00]"
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <ProgressMetricRow
+                label="Protein"
+                consumed={selectedDateTotals.protein}
+                target={state.goals.protein}
+                unit="g"
+                barClassName="bg-[#4E6800] dark:bg-[#C8FF00]"
+              />
+              <ProgressMetricRow
+                label="Carbs"
+                consumed={selectedDateTotals.carbs}
+                target={state.goals.carbs}
+                unit="g"
+                barClassName="bg-amber-500 dark:bg-amber-400"
+              />
+              <ProgressMetricRow
+                label="Fat"
+                consumed={selectedDateTotals.fat}
+                target={state.goals.fat}
+                unit="g"
+                barClassName="bg-indigo-500 dark:bg-indigo-400"
+              />
+              <ProgressMetricRow
+                label="Fibre"
+                consumed={selectedDateTotals.fibre}
+                target={state.goals.fibre}
+                unit="g"
+                barClassName="bg-teal-500 dark:bg-teal-400"
+              />
             </div>
           </section>
 
-          {/* Instant 1-line Natural Language Quick Log */}
+          {/* Compact 1-Line Natural Language Quick Log */}
           <QuickAiLogBar targetDate={selectedDate} />
 
-          {/* Empty Day Notice */}
-          {selectedDateEntries.length === 0 && (
-            <section className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-7 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#14161C] text-slate-500 dark:text-slate-300 flex items-center justify-center mx-auto">
-                <Utensils className="w-6 h-6" />
-              </div>
-              <h2 className="mt-3 text-base font-semibold text-slate-900 dark:text-slate-100">
-                No food logged for {formatReadableDate(selectedDate)}
-              </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                Search Indian &amp; global foods, scan a photo or barcode, or describe what you ate.
-              </p>
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => openAddFoodModal({ date: selectedDate })}
-                  className="min-h-[44px] px-5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold inline-flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Log First Meal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openMealScannerModal({ mode: 'voice', date: selectedDate })}
-                  className="min-h-[44px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-sm font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-2"
-                >
-                  <Mic className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-                  Voice or Photo
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* Meal Sections */}
-          <div className="space-y-4">
-            {MEAL_CATEGORIES.map((meal) => {
+          {/* Collapsible Meal Sections (Breakfast, Lunch, Snacks, Dinner) */}
+          <div className="space-y-3">
+            {visibleMeals.map((meal) => {
               const { items, totals } = mealBreakdown[meal.id];
+              const isCollapsed = Boolean(collapsedMeals[meal.id]);
+              const yesterdayCount = yesterdayMealCounts[meal.id] || 0;
 
               return (
                 <section
                   key={meal.id}
-                  className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl"
+                  className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden"
                 >
-                  <div className="px-4 sm:px-5 py-4 border-b border-stone-100 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                        {meal.label}
-                      </h2>
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                        {totals.calories} kcal · P {totals.protein}g · C {totals.carbs}g · F {totals.fat}g · Fibre {totals.fibre}g
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      {savedMeals.length > 0 && (
-                        <select
-                          aria-label={`Log saved meal to ${meal.shortLabel}`}
-                          value=""
-                          onChange={(e) => {
-                            const found = savedMeals.find((c) => c.id === e.target.value);
-                            if (found) logSavedMealCombo(found, meal.id, selectedDate);
-                          }}
-                          className="h-[40px] px-2.5 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50 dark:bg-[#090A0C] text-xs font-medium text-slate-700 dark:text-slate-200"
-                        >
-                          <option value="">+ Saved Meal</option>
-                          {savedMeals.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name} ({c.totalCalories} kcal)
-                            </option>
-                          ))}
-                        </select>
+                  <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleMealCollapsed(meal.id)}
+                      aria-expanded={!isCollapsed}
+                      className="flex-1 min-w-0 flex items-center gap-2.5 text-left min-h-[44px]"
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                       )}
+                      <div className="min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                            {meal.shortLabel}
+                          </h2>
+                          {items.length > 0 && (
+                            <span className="text-xs text-slate-400 tabular-nums">
+                              ({items.length})
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums truncate">
+                          {items.length > 0
+                            ? `${totals.calories} kcal · P ${totals.protein}g · C ${totals.carbs}g · F ${totals.fat}g`
+                            : '0 kcal logged'}
+                        </p>
+                      </div>
+                    </button>
 
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {items.length >= 2 && (
                         <button
                           type="button"
@@ -790,100 +622,136 @@ export const FoodLogPage: React.FC = () => {
                             setSavingComboMeal(meal.id);
                             setComboNameInput(`${meal.shortLabel} Combo`);
                           }}
-                          className="min-h-[40px] px-3 rounded-xl border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-[#4E6800] dark:hover:border-[#C8FF00] inline-flex items-center gap-1.5 whitespace-nowrap"
+                          title="Save meal as reusable combo"
+                          className="min-h-[40px] px-2.5 rounded-xl border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-[#4E6800] dark:hover:border-[#C8FF00] inline-flex items-center gap-1 whitespace-nowrap"
                         >
                           <BookmarkPlus className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
-                          Save Meal
+                          <span className="hidden sm:inline">Save Meal</span>
                         </button>
                       )}
 
                       <button
                         type="button"
                         onClick={() => openAddFoodModal({ meal: meal.id, date: selectedDate })}
-                        className="min-h-[40px] px-3.5 rounded-xl bg-stone-100 dark:bg-[#14161C] border border-black/8 dark:border-white/12 text-xs font-bold text-slate-800 dark:text-slate-100 hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center gap-1.5 whitespace-nowrap"
+                        className="min-h-[40px] px-3.5 rounded-xl bg-stone-100 dark:bg-[#181B22] border border-black/8 dark:border-white/12 text-xs font-bold text-slate-900 dark:text-[#C8FF00] hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center gap-1 whitespace-nowrap"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        Add
+                        <span>Add Food</span>
                       </button>
                     </div>
                   </div>
 
-                  {savingComboMeal === meal.id && (
-                    <div className="px-4 sm:px-5 py-3 bg-[#C8FF00]/10 border-b border-[#C8FF00]/25 flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={comboNameInput}
-                        onChange={(e) => setComboNameInput(e.target.value)}
-                        placeholder="Combo name (e.g., High-Protein Breakfast)"
-                        className="flex-1 min-w-[200px] h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          saveMealCombo(
-                            comboNameInput,
-                            meal.id,
-                            items.map((it) => ({
-                              foodId: it.foodId,
-                              foodName: it.foodName,
-                              quantityGrams: it.quantityGrams,
-                              unitLabel: it.unitLabel || it.servingName,
-                              calories: it.calories,
-                              protein: it.protein,
-                              carbs: it.carbs,
-                              fat: it.fat,
-                              fibre: it.fibre,
-                            }))
-                          );
-                          setSavingComboMeal(null);
-                        }}
-                        className="h-10 px-4 rounded-xl bg-[#C8FF00] text-black text-xs font-bold"
-                      >
-                        Save Combo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSavingComboMeal(null)}
-                        className="h-10 px-3 text-xs font-medium text-slate-500"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
+                  {!isCollapsed && (
+                    <div className="border-t border-stone-100 dark:border-white/8">
+                      {savingComboMeal === meal.id && (
+                        <div className="px-4 sm:px-5 py-3 bg-[#C8FF00]/10 border-b border-[#C8FF00]/25 flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={comboNameInput}
+                            onChange={(e) => setComboNameInput(e.target.value)}
+                            placeholder="Combo name (e.g., High-Protein Breakfast)"
+                            className="flex-1 min-w-[200px] h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              saveMealCombo(
+                                comboNameInput,
+                                meal.id,
+                                items.map((it) => ({
+                                  foodId: it.foodId,
+                                  foodName: it.foodName,
+                                  quantityGrams: it.quantityGrams,
+                                  unitLabel: it.unitLabel || it.servingName,
+                                  calories: it.calories,
+                                  protein: it.protein,
+                                  carbs: it.carbs,
+                                  fat: it.fat,
+                                  fibre: it.fibre,
+                                }))
+                              );
+                              setSavingComboMeal(null);
+                            }}
+                            className="h-10 px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold"
+                          >
+                            Save Combo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSavingComboMeal(null)}
+                            className="h-10 px-3 text-xs font-medium text-slate-500"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
 
-                  {items.length === 0 ? (
-                    <div className="px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      <span>Nothing logged under {meal.label} yet.</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const count = copyMealFromPreviousDay(meal.id, selectedDate);
-                          if (count === 0) {
-                            notify(`No ${meal.shortLabel.toLowerCase()} entries found from yesterday`, 'info');
-                          }
-                        }}
-                        className="min-h-[36px] px-3 rounded-lg border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-[#4E6800] dark:hover:border-[#C8FF00] inline-flex items-center gap-1.5"
-                      >
-                        <History className="w-3.5 h-3.5" />
-                        Copy yesterday
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-stone-100 dark:divide-white/10">
-                      {items.map((entry) => (
-                        <FoodLogEntryRow
-                          key={entry.id}
-                          entry={entry}
-                          mealShortLabel={meal.shortLabel}
-                          foodUnit={state.settings.foodUnit}
-                          onMealChange={handleMealChange}
-                          onQuickQuantityChange={quickUpdateFoodEntryQuantity}
-                          onDownloadSticker={openFoodItemSticker}
-                          onEdit={openEditFoodModal}
-                          onDuplicate={handleDuplicate}
-                          onDelete={setPendingDelete}
-                        />
-                      ))}
+                      {items.length === 0 ? (
+                        <div className="px-4 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                          <button
+                            type="button"
+                            onClick={() => openAddFoodModal({ meal: meal.id, date: selectedDate })}
+                            className="min-h-[36px] text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-[#4E6800] dark:hover:text-[#C8FF00] inline-flex items-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add food to {meal.shortLabel.toLowerCase()}</span>
+                          </button>
+
+                          <div className="flex items-center gap-2">
+                            {savedMeals.length > 0 && (
+                              <select
+                                aria-label={`Log saved meal to ${meal.shortLabel}`}
+                                value=""
+                                onChange={(e) => {
+                                  const found = savedMeals.find((c) => c.id === e.target.value);
+                                  if (found) logSavedMealCombo(found, meal.id, selectedDate);
+                                }}
+                                className="h-[34px] px-2 rounded-lg border border-black/10 dark:border-white/12 bg-stone-50 dark:bg-[#090A0C] text-xs font-medium text-slate-700 dark:text-slate-300"
+                              >
+                                <option value="">+ Saved Meal</option>
+                                {savedMeals.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.name} ({c.totalCalories} kcal)
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            {yesterdayCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const count = copyMealFromPreviousDay(meal.id, selectedDate);
+                                  if (count === 0) {
+                                    notify(`No ${meal.shortLabel.toLowerCase()} entries found from yesterday`, 'info');
+                                  }
+                                }}
+                                className="min-h-[34px] px-2.5 rounded-lg border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-[#4E6800] dark:hover:border-[#C8FF00] inline-flex items-center gap-1"
+                              >
+                                <History className="w-3.5 h-3.5" />
+                                <span>Copy yesterday ({yesterdayCount})</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-stone-100 dark:divide-white/8">
+                          {items.map((entry) => (
+                            <FoodLogEntryRow
+                              key={entry.id}
+                              entry={entry}
+                              mealShortLabel={meal.shortLabel}
+                              foodUnit={state.settings.foodUnit}
+                              onMealChange={handleMealChange}
+                              onQuickQuantityChange={quickUpdateFoodEntryQuantity}
+                              onDownloadSticker={openFoodItemSticker}
+                              onEdit={openEditFoodModal}
+                              onDuplicate={handleDuplicate}
+                              onDelete={setPendingDelete}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </section>

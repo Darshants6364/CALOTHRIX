@@ -6,11 +6,12 @@ import {
   ChevronUp,
   ExternalLink,
   Globe,
+  Heart,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Sparkles,
-  Star,
   Trash2,
   X,
 } from 'lucide-react';
@@ -39,7 +40,12 @@ type DietaryFilterOption = 'all' | 'vegetarian' | 'vegan' | 'eggetarian' | 'non_
 
 const DIETARY_FILTER_STORAGE_KEY = 'calothrix_db_dietary_filter';
 
-const CATEGORY_FILTERS: string[] = ['All', 'Favorites', 'Recent'];
+const CATEGORY_FILTERS: { id: string; label: string }[] = [
+  { id: 'All', label: 'All Foods' },
+  { id: 'Recent', label: 'Recent' },
+  { id: 'Favorites', label: 'Favorites' },
+  { id: 'Custom', label: 'My Foods' },
+];
 
 const SEMANTIC_EXAMPLES = [
   'High protein Indian breakfast',
@@ -242,10 +248,10 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
             <button
               type="button"
               onClick={() => onToggleFavorite(food.id)}
-              aria-label={isFav ? `Unfavorite ${food.name}` : `Favorite ${food.name}`}
-              className="min-h-[44px] min-w-[44px] -ml-1.5 flex items-center justify-center rounded-xl text-slate-400 hover:bg-stone-100 dark:hover:bg-slate-800 shrink-0"
+              aria-label={isFav ? `Remove ${food.name} from favorites` : `Save ${food.name} to favorites`}
+              className="min-h-[44px] min-w-[44px] -ml-1.5 flex items-center justify-center rounded-xl text-slate-400 hover:bg-stone-100 dark:hover:bg-white/10 shrink-0"
             >
-              <Star className={`w-4 h-4 ${isFav ? 'text-amber-500 fill-amber-500' : ''}`} />
+              <Heart className={`w-4 h-4 ${isFav ? 'text-rose-500 fill-rose-500' : ''}`} />
             </button>
 
             <div className="min-w-0 flex-1">
@@ -358,10 +364,10 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
               <button
                 type="button"
                 onClick={() => onQuickAdd(food)}
-                className="min-h-[40px] px-3.5 rounded-xl bg-lime-100 dark:bg-lime-950/70 text-lime-800 dark:text-lime-300 text-xs font-semibold hover:bg-lime-200/80 dark:hover:bg-lime-900/70 transition-colors inline-flex items-center gap-1 whitespace-nowrap"
+                className="min-h-[40px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold hover:opacity-90 transition-opacity inline-flex items-center gap-1 whitespace-nowrap"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Quick Add
+                Quick Log
               </button>
             </div>
           </div>
@@ -527,7 +533,11 @@ const FoodDatabaseRow: React.FC<FoodDatabaseRowProps> = React.memo(
 );
 FoodDatabaseRow.displayName = 'FoodDatabaseRow';
 
-export const FoodDatabasePage: React.FC = () => {
+export interface FoodDatabasePageProps {
+  embedded?: boolean;
+}
+
+export const FoodDatabasePage: React.FC<FoodDatabasePageProps> = ({ embedded = false }) => {
   const {
     state,
     allFoods,
@@ -568,10 +578,13 @@ export const FoodDatabasePage: React.FC = () => {
   const [remoteFoods, setRemoteFoods] = useState<FoodItem[]>([]);
   const [remoteLoading, setRemoteLoading] = useState(false);
   const [remoteNote, setRemoteNote] = useState<string>('');
+  const [remoteError, setRemoteError] = useState<string>('');
+  const [retryCount, setRetryCount] = useState(0);
   const [regionalSuggestion, setRegionalSuggestion] = useState<RegionalSearchSuggestion | null>(null);
   const [resultGroupFilter, setResultGroupFilter] = useState<'all' | FoodResultGroup>('all');
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [visibleCount, setVisibleCount] = useState(DATABASE_PAGE_SIZE);
+  const [searchGroupLimit, setSearchGroupLimit] = useState(25);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const [customModalOpen, setCustomModalOpen] = useState(false);
@@ -593,20 +606,23 @@ export const FoodDatabasePage: React.FC = () => {
     if (!trimmed) {
       setRemoteFoods([]);
       setRemoteNote('');
+      setRemoteError('');
       setRegionalSuggestion(null);
       setRemoteLoading(false);
       return;
     }
 
-    if (selectedCategory === 'Favorites' || selectedCategory === 'Recent') {
+    if (selectedCategory !== 'All') {
       setRemoteFoods([]);
       setRegionalSuggestion(null);
+      setRemoteError('');
       setRemoteLoading(false);
       return;
     }
 
     let cancelled = false;
     setRemoteLoading(true);
+    setRemoteError('');
 
     const timer = setTimeout(async () => {
       try {
@@ -616,6 +632,7 @@ export const FoodDatabasePage: React.FC = () => {
             setRemoteFoods(res.items.filter(isFoodNutritionallyUsable));
             setRegionalSuggestion(null);
             setRemoteNote('Smart AI matches');
+            setRemoteError('');
           }
           return;
         }
@@ -626,6 +643,7 @@ export const FoodDatabasePage: React.FC = () => {
             setRemoteFoods(bc.item && isFoodNutritionallyUsable(bc.item) ? [bc.item] : []);
             setRegionalSuggestion(null);
             setRemoteNote(bc.item ? `Barcode match (${trimmed})` : bc.error || '');
+            setRemoteError('');
           }
           return;
         }
@@ -635,6 +653,7 @@ export const FoodDatabasePage: React.FC = () => {
             setRemoteFoods([]);
             setRegionalSuggestion(null);
             setRemoteNote('');
+            setRemoteError('');
           }
           return;
         }
@@ -648,12 +667,14 @@ export const FoodDatabasePage: React.FC = () => {
           setRemoteFoods(res.items.filter(isFoodNutritionallyUsable));
           setRegionalSuggestion(res.regionalSuggestion || null);
           setRemoteNote('');
+          setRemoteError('');
         }
       } catch {
         if (!cancelled) {
           setRemoteFoods([]);
           setRegionalSuggestion(null);
           setRemoteNote('');
+          setRemoteError('Live global search could not reach the server. Showing local matches.');
         }
       } finally {
         if (!cancelled) setRemoteLoading(false);
@@ -664,7 +685,7 @@ export const FoodDatabasePage: React.FC = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, selectedCategory, semanticMode]);
+  }, [query, retryCount, selectedCategory, semanticMode]);
 
   const favoriteSet = useMemo(
     () => new Set(state.favoriteFoodIds),
@@ -708,11 +729,7 @@ export const FoodDatabasePage: React.FC = () => {
       const seen = new Set(validRemote.map((f) => f.id));
       const localMatches = filteredLocalFoods.filter((f) => !seen.has(f.id));
       base = [...validRemote, ...localMatches];
-    } else if (
-      trimmedDeferred &&
-      selectedCategory !== 'Favorites' &&
-      selectedCategory !== 'Recent'
-    ) {
+    } else if (trimmedDeferred && selectedCategory === 'All') {
       const seen = new Set(filteredLocalFoods.map((f) => f.id));
       base = [...filteredLocalFoods, ...validRemote.filter((r) => !seen.has(r.id))];
     } else {
@@ -750,6 +767,7 @@ export const FoodDatabasePage: React.FC = () => {
   // Reset pagination & group filter when search criteria change
   useEffect(() => {
     setVisibleCount(DATABASE_PAGE_SIZE);
+    setSearchGroupLimit(25);
     setResultGroupFilter('all');
   }, [deferredQuery, selectedCategory, dietaryFilter, semanticMode]);
 
@@ -798,33 +816,34 @@ export const FoodDatabasePage: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-5">
+      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
+          {!embedded && (
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+              Food Database
+            </h1>
+          )}
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {activeFoods.filter((f) => !f.isCustom).length.toLocaleString()} verified items · {state.customFoods.length} private custom foods · Live global search
+            {activeFoods.filter((f) => !f.isCustom).length.toLocaleString()} verified foods · {state.customFoods.length} custom foods
           </p>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            Global Food Database
-          </h1>
         </div>
 
-        <div className="flex flex-nowrap sm:flex-wrap items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => openBarcodeScannerModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+            className="min-h-[40px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs font-semibold hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <Barcode className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Scan</span>
-            <span className="hidden sm:inline">Barcode</span>
+            <span>Barcode</span>
           </button>
 
           <button
             type="button"
             onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
             title="Log with Photo, Voice, Description, or Label OCR"
-            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+            className="min-h-[40px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs font-semibold hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <Sparkles className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
             <span>AI Logger</span>
@@ -836,10 +855,10 @@ export const FoodDatabasePage: React.FC = () => {
               setEditingFood(undefined);
               setCustomModalOpen(true);
             }}
-            className="min-h-[44px] px-3.5 sm:px-5 py-2 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+            className="min-h-[40px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
-            <span>Custom Food</span>
+            <span>Create Custom Food</span>
           </button>
         </div>
       </section>
@@ -849,7 +868,7 @@ export const FoodDatabasePage: React.FC = () => {
         <div className="sticky top-[calc(52px+env(safe-area-inset-top))] lg:static z-20 bg-[#F4F3EF]/98 dark:bg-[#090A0C]/98 py-1.5 -mx-4 px-4 sm:mx-0 sm:px-0 sm:py-0 sm:bg-transparent flex flex-row items-center gap-2">
           <div className="relative flex-1 min-w-0">
             {semanticMode ? (
-              <Sparkles className="w-4 h-4 text-lime-600 dark:text-lime-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Sparkles className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             ) : (
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             )}
@@ -861,10 +880,20 @@ export const FoodDatabasePage: React.FC = () => {
               placeholder={
                 semanticMode
                   ? 'Describe meal (e.g., High protein Indian breakfast)...'
-                  : 'Search food, regional dish, brand, or barcode...'
+                  : 'Search food, regional Indian dish, brand, or barcode...'
               }
-              className="w-full h-11 sm:h-12 pl-10 pr-3.5 rounded-2xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-base sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-lime-500"
+              className="w-full h-11 sm:h-12 pl-10 pr-10 rounded-2xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] text-base sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
             />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <button
@@ -938,23 +967,23 @@ export const FoodDatabasePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Category Tabs (All, Favorites, Recent) + Non-Empty Search Group Filter */}
+        {/* Category Tabs (All Foods, Recent, Favorites, My Foods) + Non-Empty Search Group Filter */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             {CATEGORY_FILTERS.map((cat) => {
-              const active = selectedCategory === cat;
+              const active = selectedCategory === cat.id;
               return (
                 <button
-                  key={cat}
+                  key={cat.id}
                   type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`min-h-[36px] px-3.5 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 border transition-colors ${
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`min-h-[38px] px-3.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 border transition-colors ${
                     active
-                      ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black border-[#111317] dark:border-[#C8FF00] font-semibold'
-                      : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-slate-800'
+                      ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black border-[#111317] dark:border-[#C8FF00]'
+                      : 'bg-white dark:bg-[#111317] border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300 hover:bg-stone-50 dark:hover:bg-white/5'
                   }`}
                 >
-                  {cat}
+                  {cat.label}
                 </button>
               );
             })}
@@ -1006,14 +1035,44 @@ export const FoodDatabasePage: React.FC = () => {
         </section>
       )}
 
+      {remoteError && (
+        <section className="rounded-2xl border border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/20 px-4 py-3 text-xs flex flex-wrap items-center justify-between gap-2 text-amber-800 dark:text-amber-300">
+          <span>{remoteError}</span>
+          <button
+            type="button"
+            onClick={() => setRetryCount((c) => c + 1)}
+            className="inline-flex items-center gap-1 font-semibold underline"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Retry
+          </button>
+        </section>
+      )}
+
       {/* Food List */}
-      {displayedFoods.length === 0 && !remoteLoading ? (
+      {remoteLoading && displayedFoods.length === 0 ? (
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-6 space-y-3 animate-pulse">
+          <div className="h-12 rounded-xl bg-black/5 dark:bg-white/5" />
+          <div className="h-12 rounded-xl bg-black/5 dark:bg-white/5" />
+          <div className="h-12 rounded-xl bg-black/5 dark:bg-white/5" />
+        </section>
+      ) : displayedFoods.length === 0 && !remoteLoading ? (
         <section className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-8 text-center">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            No foods match this filter
+            {selectedCategory === 'Custom'
+              ? 'No personal custom foods yet'
+              : selectedCategory === 'Favorites'
+              ? 'No favorite foods yet'
+              : selectedCategory === 'Recent'
+              ? 'No recently logged foods yet'
+              : 'No foods match this filter'}
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Try switching your dietary preference, searching another keyword, or creating a custom food.
+            {selectedCategory === 'Custom'
+              ? 'Create homemade recipes or scan a nutrition label to save your own foods.'
+              : selectedCategory === 'Favorites'
+              ? 'Tap the heart icon on any food in All Foods to pin it here.'
+              : 'Try switching your dietary preference, searching another keyword, or creating a custom food.'}
           </p>
           <button
             type="button"
@@ -1021,54 +1080,68 @@ export const FoodDatabasePage: React.FC = () => {
               setEditingFood(undefined);
               setCustomModalOpen(true);
             }}
-            className="mt-4 min-h-[42px] px-4 rounded-xl bg-slate-900 dark:bg-lime-500 text-white dark:text-slate-950 text-xs font-semibold inline-flex items-center gap-1.5"
+            className="mt-4 min-h-[42px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
-            Add Custom Food
+            Create Custom Food
           </button>
         </section>
       ) : isActiveSearch && nonEmptySearchGroups.length > 0 ? (
         <div className="space-y-4">
-          {nonEmptySearchGroups.map((group) => (
-            <section
-              key={group.key}
-              className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden"
-            >
-              <div className="px-4 sm:px-5 py-2.5 bg-stone-50/90 dark:bg-[#090A0C]/80 border-b border-black/8 dark:border-white/10 flex items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100">
-                    {group.label}
-                  </h2>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {group.description}
-                  </p>
+          {nonEmptySearchGroups.map((group) => {
+            const visibleGroupItems = group.items.slice(0, searchGroupLimit);
+            return (
+              <section
+                key={group.key}
+                className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden"
+              >
+                <div className="px-4 sm:px-5 py-2.5 bg-stone-50/90 dark:bg-[#090A0C]/80 border-b border-black/8 dark:border-white/10 flex items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-100">
+                      {group.label}
+                    </h2>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {group.description}
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-mono-nums font-semibold text-slate-500 dark:text-slate-400">
+                    {group.items.length} {group.items.length === 1 ? 'match' : 'matches'}
+                  </span>
                 </div>
-                <span className="text-[11px] font-mono-nums font-semibold text-slate-500 dark:text-slate-400">
-                  {group.items.length} {group.items.length === 1 ? 'match' : 'matches'}
-                </span>
-              </div>
-              <div className="divide-y divide-stone-100 dark:divide-slate-800/80">
-                {group.items.slice(0, 25).map((food) => {
-                  const siblings = getRelatedFamilyVariants(food, familyMap);
-                  return (
-                    <FoodDatabaseRow
-                      key={food.id}
-                      food={food}
-                      familyVariants={siblings}
-                      isFav={favoriteSet.has(food.id)}
-                      isExpanded={Boolean(expandedIds[food.id])}
-                      onToggleFavorite={toggleFavoriteFood}
-                      onToggleExpand={toggleExpand}
-                      onSaveExternal={saveExternalFoodToMyFoods}
-                      onEditCustom={handleEditCustomFood}
-                      onDeleteCustom={handleDeleteCustomFood}
-                      onQuickAdd={handleQuickAddFood}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                <div className="divide-y divide-stone-100 dark:divide-slate-800/80">
+                  {visibleGroupItems.map((food) => {
+                    const siblings = getRelatedFamilyVariants(food, familyMap);
+                    return (
+                      <FoodDatabaseRow
+                        key={food.id}
+                        food={food}
+                        familyVariants={siblings}
+                        isFav={favoriteSet.has(food.id)}
+                        isExpanded={Boolean(expandedIds[food.id])}
+                        onToggleFavorite={toggleFavoriteFood}
+                        onToggleExpand={toggleExpand}
+                        onSaveExternal={saveExternalFoodToMyFoods}
+                        onEditCustom={handleEditCustomFood}
+                        onDeleteCustom={handleDeleteCustomFood}
+                        onQuickAdd={handleQuickAddFood}
+                      />
+                    );
+                  })}
+                </div>
+                {group.items.length > searchGroupLimit && (
+                  <div className="px-4 py-3 flex justify-center border-t border-black/6 dark:border-white/8 bg-stone-50/40 dark:bg-white/[0.02]">
+                    <button
+                      type="button"
+                      onClick={() => setSearchGroupLimit((prev) => prev + 25)}
+                      className="min-h-[38px] px-4 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors"
+                    >
+                      Show more ({group.items.length - searchGroupLimit} remaining)
+                    </button>
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       ) : (
         <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl divide-y divide-stone-100 dark:divide-slate-800/80 overflow-hidden">
