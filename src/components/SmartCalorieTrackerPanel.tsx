@@ -11,7 +11,6 @@ import {
   Droplets,
   Dumbbell,
   Flame,
-  Info,
   RefreshCw,
   Scale,
   ShieldAlert,
@@ -32,7 +31,6 @@ import {
   ACTIVITY_MULTIPLIERS,
   buildWhatIfGoalComparisons,
   calculateSmartFitnessTargets,
-  CALCULATION_VERSION,
   ClimateLevel,
   getGoalDirectionForStrategy,
   GOAL_SPEED_CONFIG,
@@ -182,7 +180,6 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
   const [climateLevel, setClimateLevel] = useState<ClimateLevel>('temperate');
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [showWhatIf, setShowWhatIf] = useState<boolean>(false);
-  const [showTransparency, setShowTransparency] = useState<boolean>(false);
   const [justApplied, setJustApplied] = useState<boolean>(false);
 
   // Sync draft state whenever saved profile/goals/latestWeight/unit changes externally
@@ -1801,57 +1798,6 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                   </button>
                 );
               })}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Calculation Methodology Transparency */}
-      {!hideLegacyAssessmentSection && calculation && (
-        <section className="rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111317] overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setShowTransparency((v) => !v)}
-            className="w-full min-h-[48px] px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-zinc-50 dark:hover:bg-white/[0.02] cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-zinc-600 dark:text-[#C8FF00] shrink-0" />
-              <div>
-                <div className="text-xs font-bold uppercase tracking-[0.08em] text-zinc-700 dark:text-zinc-200">
-                  Calculation Methodology
-                </div>
-                <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Engine {state.goals.calculationVersion || CALCULATION_VERSION}
-                </div>
-              </div>
-            </div>
-            {showTransparency ? (
-              <ChevronUp className="w-4 h-4 text-zinc-500 shrink-0" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />
-            )}
-          </button>
-
-          {showTransparency && (
-            <div className="border-t border-zinc-200 dark:border-white/10 p-4">
-              <dl className="space-y-2 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                {[
-                  { label: 'BMR', text: calculation.calculationBreakdown.bmr },
-                  { label: 'Activity Multiplier', text: calculation.calculationBreakdown.activity },
-                  { label: 'Maintenance TDEE', text: calculation.calculationBreakdown.tdee },
-                  { label: 'Calorie Strategy', text: calculation.calculationBreakdown.calorieStrategy },
-                  { label: 'Macros (4/4/9)', text: calculation.calculationBreakdown.macros },
-                  { label: 'Fibre & Hydration', text: calculation.calculationBreakdown.fibreAndHydration },
-                  { label: 'Estimated Timeline', text: calculation.calculationBreakdown.timeline },
-                ].map((item) => (
-                  <div key={item.label} className="grid grid-cols-1 sm:grid-cols-12 gap-0.5 sm:gap-2">
-                    <dt className="sm:col-span-3 font-semibold text-zinc-800 dark:text-zinc-100">
-                      {item.label}
-                    </dt>
-                    <dd className="sm:col-span-9">{item.text}</dd>
-                  </div>
-                ))}
-              </dl>
             </div>
           )}
         </section>
