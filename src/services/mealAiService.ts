@@ -24,7 +24,7 @@ export async function analyzeMealViaApi(params: {
   prepStyle?: MealPrepStyle;
 }): Promise<MealAiAnalysisResult> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 28000);
+  const timeoutId = window.setTimeout(() => controller.abort(), 45000);
 
   try {
     const res = await fetchWithFreshAuth('/api/ai/analyze-meal', {
@@ -46,7 +46,7 @@ export async function analyzeMealViaApi(params: {
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new Error(
-        'Analysis timed out after 28 seconds. Please check your connection and try again.'
+        'Analysis timed out after 45 seconds. Please check your connection and try again.'
       );
     }
     throw err;

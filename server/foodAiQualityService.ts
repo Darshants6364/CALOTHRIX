@@ -1,6 +1,12 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import type { FoodItem, RegionalSearchSuggestion } from '../src/types/index.ts';
 import { isFoodNutritionallyUsable } from '../src/utils/nutritionUtils.ts';
+import {
+  callGroqChatJson,
+  GROQ_TEXT_MODELS,
+  isGroqConfigured,
+  parseLooseJsonObject,
+} from './groqClient.ts';
 
 const GEMINI_FAST_MODEL = 'gemini-3.1-flash-lite';
 const GEMINI_HEADERS = { 'User-Agent': 'aistudio-build' };
@@ -48,8 +54,9 @@ export async function resolveRegionalFoodQueryWithGemini(
     return regionalQueryCache.get(cacheKey) ?? null;
   }
 
+  const groqActive = isGroqConfigured();
   const ai = getGeminiClient();
-  if (!ai) return null;
+  if (!groqActive && !ai) return null;
 
   // Compact list of canonical candidate names + IDs from existing verified catalog
   const sampleCandidates = searchableCatalog
@@ -58,42 +65,68 @@ export async function resolveRegionalFoodQueryWithGemini(
     .map((f) => `${f.id}|${f.name}`)
     .join('\n');
 
-  try {
-    geminiFallbackSearchCalls++;
-    const response = await ai.models.generateContent({
-      model: GEMINI_FAST_MODEL,
-      contents: `A user searched an Indian nutrition database for: "${q}".
+  const promptText = `A user searched an Indian nutrition database for: "${q}".
 Normal database search found 0 direct matches.
 Identify the intended real food (handling Kannada, Hindi, Tamil, Telugu, Marathi, regional names, transliterations, or spelling errors) and suggest ONLY matching food IDs from the provided existing catalog list below. If none genuinely match, return empty matchedFoodIds. Never invent IDs.
 
 Existing Catalog (id|name):
-${sampleCandidates}`,
-      config: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            detectedFood: { type: Type.STRING },
-            canonicalEnglishName: { type: Type.STRING },
-            matchedFoodIds: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            reasoning: { type: Type.STRING },
-          },
-          required: ['detectedFood', 'canonicalEnglishName', 'matchedFoodIds'],
-        },
-      },
-    });
+${sampleCandidates}`;
 
-    const text = response.text;
-    if (!text) {
+  try {
+    geminiFallbackSearchCalls++;
+    let parsed: Partial<RegionalSearchSuggestion> | null = null;
+
+    if (groqActive) {
+      try {
+        const raw = await callGroqChatJson({
+          models: GROQ_TEXT_MODELS,
+          systemInstruction:
+            'Return strictly valid JSON: {"detectedFood":"string","canonicalEnglishName":"string","matchedFoodIds":["id1"],"reasoning":"string"}.',
+          userContent: promptText,
+          timeoutMs: 10000,
+          temperature: 0.1,
+        });
+        parsed = parseLooseJsonObject(raw) as Partial<RegionalSearchSuggestion>;
+      } catch (err) {
+        if (!ai) throw err;
+      }
+    }
+
+    if (!parsed && ai) {
+      const response = await ai.models.generateContent({
+        model: GEMINI_FAST_MODEL,
+        contents: promptText,
+        config: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              detectedFood: { type: Type.STRING },
+              canonicalEnglishName: { type: Type.STRING },
+              matchedFoodIds: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              reasoning: { type: Type.STRING },
+            },
+            required: ['detectedFood', 'canonicalEnglishName', 'matchedFoodIds'],
+          },
+        },
+      });
+
+      const text = response.text;
+      if (!text) {
+        regionalQueryCache.set(cacheKey, null);
+        return null;
+      }
+      parsed = JSON.parse(text) as Partial<RegionalSearchSuggestion>;
+    }
+
+    if (!parsed) {
       regionalQueryCache.set(cacheKey, null);
       return null;
     }
-
-    const parsed = JSON.parse(text) as Partial<RegionalSearchSuggestion>;
     const validIdSet = new Set(searchableCatalog.map((f) => f.id));
     const validMatchedIds = (parsed.matchedFoodIds || [])
       .filter((id) => typeof id === 'string' && validIdSet.has(id))
@@ -159,12 +192,13 @@ export async function completePendingFoodWithGemini(
     };
   }
 
+  const groqActive = isGroqConfigured();
   const ai = getGeminiClient();
-  if (!ai) {
+  if (!groqActive && !ai) {
     return {
       foodId: food.id,
       status: 'error',
-      reason: 'Server GEMINI_API_KEY is not configured.',
+      reason: 'Server GROQ_API_KEY or GEMINI_API_KEY is not configured.',
     };
   }
 
@@ -178,10 +212,7 @@ export async function completePendingFoodWithGemini(
     )
     .join('\n');
 
-  try {
-    const response = await ai.models.generateContent({
-      model: GEMINI_FAST_MODEL,
-      contents: `You are a clinical nutritionist & Indian food composition specialist.
+  const completionPrompt = `You are a clinical nutritionist & Indian food composition specialist.
 Complete ONLY the missing per-100g core macronutrients (calories kcal, protein g, carbs g, fat g, fibre g) for this food record.
 Rules:
 1. Do NOT invent values if the food is ambiguous or lacks sufficient detail — set sufficientConfidence=false in that case.
@@ -199,64 +230,98 @@ Food Record:
 - Missing fields: ${missingFields.join(', ') || 'none explicitly flagged'}
 
 Nearby Verified Reference Foods:
-${referenceHints}`,
-      config: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            sufficientConfidence: { type: Type.BOOLEAN },
-            confidenceScore: { type: Type.NUMBER },
-            qualityStatus: { type: Type.STRING },
-            caloriesPer100g: { type: Type.NUMBER },
-            proteinPer100g: { type: Type.NUMBER },
-            carbsPer100g: { type: Type.NUMBER },
-            fatPer100g: { type: Type.NUMBER },
-            fibrePer100g: { type: Type.NUMBER },
-            calculationMethod: { type: Type.STRING },
-            sourceReferenceFoods: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            reasoning: { type: Type.STRING },
-          },
-          required: [
-            'sufficientConfidence',
-            'confidenceScore',
-            'caloriesPer100g',
-            'proteinPer100g',
-            'carbsPer100g',
-            'fatPer100g',
-            'fibrePer100g',
-            'calculationMethod',
-          ],
-        },
-      },
-    });
+${referenceHints}`;
 
-    const text = response.text;
-    if (!text) {
+  interface PendingFoodCompletionPayload {
+    sufficientConfidence: boolean;
+    confidenceScore: number;
+    qualityStatus?: string;
+    caloriesPer100g: number;
+    proteinPer100g: number;
+    carbsPer100g: number;
+    fatPer100g: number;
+    fibrePer100g: number;
+    calculationMethod: string;
+    sourceReferenceFoods?: string[];
+    reasoning?: string;
+  }
+
+  try {
+    let parsed: PendingFoodCompletionPayload | null = null;
+
+    if (groqActive) {
+      try {
+        const raw = await callGroqChatJson({
+          models: GROQ_TEXT_MODELS,
+          systemInstruction:
+            'Return strictly valid JSON: {"sufficientConfidence":boolean,"confidenceScore":number,"qualityStatus":"string","caloriesPer100g":number,"proteinPer100g":number,"carbsPer100g":number,"fatPer100g":number,"fibrePer100g":number,"calculationMethod":"string","sourceReferenceFoods":["string"],"reasoning":"string"}.',
+          userContent: completionPrompt,
+          timeoutMs: 14000,
+          temperature: 0.1,
+        });
+        parsed = parseLooseJsonObject(raw) as unknown as PendingFoodCompletionPayload;
+      } catch (err) {
+        if (!ai) throw err;
+      }
+    }
+
+    if (!parsed && ai) {
+      const response = await ai.models.generateContent({
+        model: GEMINI_FAST_MODEL,
+        contents: completionPrompt,
+        config: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              sufficientConfidence: { type: Type.BOOLEAN },
+              confidenceScore: { type: Type.NUMBER },
+              qualityStatus: { type: Type.STRING },
+              caloriesPer100g: { type: Type.NUMBER },
+              proteinPer100g: { type: Type.NUMBER },
+              carbsPer100g: { type: Type.NUMBER },
+              fatPer100g: { type: Type.NUMBER },
+              fibrePer100g: { type: Type.NUMBER },
+              calculationMethod: { type: Type.STRING },
+              sourceReferenceFoods: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              reasoning: { type: Type.STRING },
+            },
+            required: [
+              'sufficientConfidence',
+              'confidenceScore',
+              'caloriesPer100g',
+              'proteinPer100g',
+              'carbsPer100g',
+              'fatPer100g',
+              'fibrePer100g',
+              'calculationMethod',
+            ],
+          },
+        },
+      });
+
+      const text = response.text;
+      if (!text) {
+        return {
+          foodId: food.id,
+          status: 'kept_pending_insufficient_data',
+          reason: 'Empty response from AI; kept in pending_validation.',
+        };
+      }
+      parsed = JSON.parse(text) as PendingFoodCompletionPayload;
+    }
+
+    if (!parsed) {
       return {
         foodId: food.id,
         status: 'kept_pending_insufficient_data',
-        reason: 'Empty response from Gemini; kept in pending_validation.',
+        reason: 'Empty response from AI; kept in pending_validation.',
       };
     }
-
-    const parsed = JSON.parse(text) as {
-      sufficientConfidence: boolean;
-      confidenceScore: number;
-      qualityStatus?: string;
-      caloriesPer100g: number;
-      proteinPer100g: number;
-      carbsPer100g: number;
-      fatPer100g: number;
-      fibrePer100g: number;
-      calculationMethod: string;
-      sourceReferenceFoods?: string[];
-      reasoning?: string;
-    };
 
     if (!parsed.sufficientConfidence || parsed.confidenceScore < 0.72) {
       return {
