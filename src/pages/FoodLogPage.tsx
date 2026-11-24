@@ -219,6 +219,7 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
               <span className="inline-flex items-center gap-1">
                 <input
                   type="number"
+                  inputMode="decimal"
                   min="1"
                   max="10000"
                   step="any"

@@ -84,7 +84,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     .toUpperCase();
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] transition-colors duration-200 overflow-x-clip">
+    <div className="min-h-[100dvh] flex flex-col lg:flex-row bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] transition-colors duration-200 overflow-x-clip">
       {/* Desktop Sidebar (256px) */}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:left-0 bg-white dark:bg-[#111317] border-r border-black/10 dark:border-white/10 z-30">
         <div className="px-6 pt-6 pb-5 border-b border-black/8 dark:border-white/10">
@@ -293,7 +293,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 lg:pl-64 pb-[calc(5.25rem+env(safe-area-inset-bottom))] lg:pb-10 min-w-0">
+      <main className="mobile-main-content flex-1 lg:pl-64 pb-[calc(5.25rem+env(safe-area-inset-bottom))] lg:pb-10 min-w-0">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
           <SchemaSetupBanner />
 
@@ -331,7 +331,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       {/* Mobile Bottom Tab Bar — strictly Home | Log | Weight | Progress | Goals */}
       <nav
         aria-label="Mobile navigation"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#111317]/95 backdrop-blur-md border-t border-black/10 dark:border-white/10 pb-[env(safe-area-inset-bottom)] px-1"
+        className="mobile-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#111317]/95 backdrop-blur-md border-t border-black/10 dark:border-white/10 pb-[env(safe-area-inset-bottom)] px-1"
       >
         <div className="h-[62px] grid grid-cols-5 items-center">
           {PRIMARY_NAV_ITEMS.map((item) => {

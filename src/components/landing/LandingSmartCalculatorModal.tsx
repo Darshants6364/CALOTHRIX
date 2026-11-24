@@ -153,12 +153,12 @@ export const LandingSmartCalculatorModal: React.FC<LandingSmartCalculatorModalPr
       role="dialog"
       aria-modal="true"
       aria-labelledby="smart-calculator-modal-title"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-sm"
+      className="mobile-modal-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-5xl max-h-[94svh] sm:max-h-[90svh] overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#090A0C] text-[#F4F3EF] shadow-2xl">
+      <div className="mobile-modal-sheet relative w-full max-w-5xl max-h-[94svh] sm:max-h-[90svh] overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-2xl border border-white/15 bg-[#090A0C] text-[#F4F3EF] shadow-2xl">
         {/* Sticky Modal Header */}
         <div className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 bg-[#090A0C]/95 backdrop-blur-md border-b border-white/10">
           <div className="min-w-0">

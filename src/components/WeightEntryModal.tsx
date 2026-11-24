@@ -62,15 +62,18 @@ export const WeightEntryModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs sm:p-4"
+      className="mobile-modal-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={editing ? 'Edit weight entry' : 'Log body weight'}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeWeightModal();
+      }}
     >
-      <div className="w-full sm:max-w-md bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
-        <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3" />
+      <div className="mobile-modal-sheet w-full sm:max-w-md max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden overscroll-contain">
+        <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-3 shrink-0" />
 
-        <div className="flex items-center justify-between px-5 py-4 border-b border-black/10 dark:border-white/12">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-black/10 dark:border-white/12 shrink-0">
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
             {editing ? 'Edit Weight Entry' : 'Log Body Weight'}
           </h2>
@@ -84,7 +87,7 @@ export const WeightEntryModal: React.FC = () => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           {error && (
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-xs font-medium">
               {error}
@@ -97,8 +100,8 @@ export const WeightEntryModal: React.FC = () => {
             </label>
             <input
               type="number"
+              inputMode="decimal"
               step="0.05"
-              autoFocus
               value={weightValue}
               onChange={(e) => setWeightValue(e.target.value)}
               placeholder={unit === 'kg' ? '62.95' : '138.8'}

@@ -868,7 +868,7 @@ export const HomePage: React.FC = () => {
       {/* Button-Triggered Smart Calorie Calculator Modal */}
       {calculatorModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4"
+          className="mobile-modal-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="home-smart-calculator-modal-title"
@@ -878,7 +878,7 @@ export const HomePage: React.FC = () => {
         >
           <div
             ref={calculatorDialogRef}
-            className="relative w-full max-w-5xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#F5F6F8] dark:bg-[#0B0C0F] border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden"
+            className="mobile-modal-sheet relative w-full max-w-5xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#F5F6F8] dark:bg-[#0B0C0F] border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden"
           >
             <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 border-b border-black/10 dark:border-white/10 bg-white/95 dark:bg-[#111317]/95 backdrop-blur-md">
               <div className="flex items-center gap-2.5 min-w-0">

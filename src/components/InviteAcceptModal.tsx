@@ -86,8 +86,8 @@ export const InviteAcceptModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 p-6 space-y-5 shadow-xl">
+    <div className="mobile-modal-backdrop fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="mobile-modal-sheet w-full max-w-lg max-h-[92dvh] overflow-y-auto overscroll-contain rounded-2xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 p-6 space-y-5 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-lime-100 dark:bg-lime-950 text-lime-700 dark:text-lime-400 flex items-center justify-center">

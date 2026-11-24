@@ -26,12 +26,12 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55"
+      className="mobile-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/55"
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 p-6 shadow-xl">
+      <div className="mobile-modal-sheet w-full max-w-md rounded-2xl bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 p-6 shadow-xl overflow-y-auto overscroll-contain">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div

@@ -147,7 +147,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
   const isTrainerPortal = portalRole === 'trainer';
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] px-4 py-6 sm:px-6 selection:bg-[#C8FF00] selection:text-black">
+    <div className="min-h-[100dvh] flex flex-col justify-between bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] px-4 py-6 sm:px-6 selection:bg-[#C8FF00] selection:text-black">
       {/* Top Bar */}
       <div className="max-w-5xl w-full mx-auto flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">

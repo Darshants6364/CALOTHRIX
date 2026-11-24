@@ -1161,7 +1161,7 @@ const MealAiScannerModalContent: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 sm:p-4"
+      className="mobile-modal-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="AI Photo and Voice Meal Analyzer"
@@ -1171,7 +1171,7 @@ const MealAiScannerModalContent: React.FC = () => {
     >
       <div
         ref={modalContainerRef}
-        className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden overscroll-contain pb-[env(safe-area-inset-bottom)] sm:pb-0"
+        className="mobile-modal-sheet w-full sm:max-w-2xl max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden overscroll-contain pb-[env(safe-area-inset-bottom)] sm:pb-0"
       >
         <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-2.5 shrink-0" />
 

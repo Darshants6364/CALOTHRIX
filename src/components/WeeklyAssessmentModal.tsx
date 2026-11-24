@@ -65,12 +65,12 @@ export const WeeklyAssessmentModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
+      className="mobile-modal-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Your 14-Day Progress Review"
     >
-      <div className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#F4F3EF] dark:bg-[#090A0C] border border-zinc-200 dark:border-white/10 shadow-2xl overflow-hidden">
+      <div className="mobile-modal-sheet w-full sm:max-w-2xl max-h-[92dvh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#F4F3EF] dark:bg-[#090A0C] border border-zinc-200 dark:border-white/10 shadow-2xl overflow-hidden">
         {/* Sticky Header */}
         <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111317] shrink-0">
           <div className="min-w-0">

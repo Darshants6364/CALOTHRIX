@@ -524,7 +524,7 @@ export const MacroShareModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm sm:p-4"
+      className="mobile-modal-backdrop fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Transparent Story Sticker Chooser"
@@ -535,7 +535,7 @@ export const MacroShareModal: React.FC = () => {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col bg-[#F4F3EF] dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] rounded-t-3xl sm:rounded-2xl border border-black/15 dark:border-white/15 shadow-2xl overflow-hidden"
+        className="mobile-modal-sheet w-full sm:max-w-lg max-h-[92dvh] flex flex-col bg-[#F4F3EF] dark:bg-[#111317] text-[#111317] dark:text-[#F3F4F6] rounded-t-3xl sm:rounded-2xl border border-black/15 dark:border-white/15 shadow-2xl overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-2.5 px-4 py-3 border-b border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] shrink-0">

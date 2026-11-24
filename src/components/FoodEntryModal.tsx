@@ -913,7 +913,7 @@ const FoodEntryModalContent: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 sm:p-4"
+      className="mobile-modal-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={editing ? 'Edit food entry' : 'Add food to log'}
@@ -923,7 +923,7 @@ const FoodEntryModalContent: React.FC = () => {
     >
       <div
         ref={modalContainerRef}
-        className="w-full max-h-[92dvh] sm:h-auto sm:max-w-xl sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border-t sm:border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden overscroll-contain"
+        className="mobile-modal-sheet w-full max-h-[92dvh] sm:h-auto sm:max-w-xl sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border-t sm:border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden overscroll-contain"
       >
         {/* Mobile Bottom-Sheet Drag Indicator */}
         <div className="sm:hidden flex justify-center pt-2.5 pb-1 shrink-0 bg-white dark:bg-[#111317]">

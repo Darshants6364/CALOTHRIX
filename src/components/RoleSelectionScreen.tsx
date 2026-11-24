@@ -48,7 +48,7 @@ export const RoleSelectionScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] flex flex-col justify-between px-4 py-6 sm:px-6 selection:bg-[#C8FF00] selection:text-black">
+    <div className="min-h-[100dvh] bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] flex flex-col justify-between px-4 py-6 sm:px-6 selection:bg-[#C8FF00] selection:text-black">
       <div className="max-w-4xl w-full mx-auto flex items-center justify-between">
         <CalothrixLogo size="md" />
         <button

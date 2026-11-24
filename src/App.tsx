@@ -9,6 +9,7 @@ import { RoleSelectionScreen } from './components/RoleSelectionScreen';
 import { ToastContainer } from './components/ToastContainer';
 import { WeightEntryModal } from './components/WeightEntryModal';
 import { MacroLogProvider, useMacroLogStore } from './hooks/useMacroLogStore';
+import { useMobileViewportSync } from './hooks/useMobileViewport';
 import { HomePage } from './pages/HomePage';
 import { LandingPage } from './pages/LandingPage';
 import { AccountRole, ENABLE_TRAINER_PORTAL } from './types';
@@ -171,7 +172,7 @@ const AppShell: React.FC = () => {
 
   if (authMode === 'loading') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F3EF] dark:bg-[#090A0C] gap-4">
+      <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-[#F4F3EF] dark:bg-[#090A0C] gap-4">
         <CalothrixLogo size="md" />
         <p className="text-xs text-[#52555E] dark:text-[#9A9CA3]">Loading your workspace...</p>
       </div>
@@ -247,6 +248,7 @@ const AppShell: React.FC = () => {
 };
 
 export default function App() {
+  useMobileViewportSync();
   return (
     <MacroLogProvider>
       <AppShell />
