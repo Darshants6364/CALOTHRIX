@@ -36,6 +36,77 @@ export interface FoodLogPageProps {
 
 const PRIMARY_MEALS = MEAL_CATEGORIES.filter((m) => m.id !== 'other');
 
+interface AiMealBatch {
+  id: string;
+  sourceName: string;
+  items: FoodLogEntry[];
+  totals: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fibre: number;
+  };
+}
+
+function isAiEntrySource(sourceName?: string): boolean {
+  if (!sourceName) return false;
+  const lower = sourceName.toLowerCase();
+  return (
+    lower.startsWith('ai ') ||
+    lower.includes('quick log ai') ||
+    lower.includes('meal scan') ||
+    lower.includes('photo scan') ||
+    lower.includes('meal describe') ||
+    lower.includes('voice log') ||
+    lower.includes('label ocr')
+  );
+}
+
+function getCombinedAiBatches(entries: FoodLogEntry[]): AiMealBatch[] {
+  const aiEntries = entries.filter((entry) => isAiEntrySource(entry.sourceName));
+  if (aiEntries.length < 2) return [];
+
+  const sorted = [...aiEntries].sort((a, b) => {
+    const ta = Date.parse(a.createdAt || '') || 0;
+    const tb = Date.parse(b.createdAt || '') || 0;
+    return ta - tb;
+  });
+
+  const groups: { sourceName: string; anchorMs: number; items: FoodLogEntry[] }[] = [];
+
+  for (const entry of sorted) {
+    const sourceName = entry.sourceName || 'AI Meal Log';
+    const entryMs = Date.parse(entry.createdAt || '') || 0;
+    const lastGroup = groups[groups.length - 1];
+
+    if (
+      lastGroup &&
+      lastGroup.sourceName === sourceName &&
+      Math.abs(entryMs - lastGroup.anchorMs) <= 15_000
+    ) {
+      lastGroup.items.push(entry);
+    } else {
+      groups.push({ sourceName, anchorMs: entryMs, items: [entry] });
+    }
+  }
+
+  return groups
+    .filter((group) => group.items.length >= 2)
+    .map((group, idx) => ({
+      id: `${group.sourceName}-${group.anchorMs}-${idx}`,
+      sourceName: group.sourceName,
+      items: group.items,
+      totals: {
+        calories: Math.round(group.items.reduce((sum, item) => sum + (item.calories || 0), 0)),
+        protein: round1(group.items.reduce((sum, item) => sum + (item.protein || 0), 0)),
+        carbs: round1(group.items.reduce((sum, item) => sum + (item.carbs || 0), 0)),
+        fat: round1(group.items.reduce((sum, item) => sum + (item.fat || 0), 0)),
+        fibre: round1(group.items.reduce((sum, item) => sum + (item.fibre || 0), 0)),
+      },
+    }));
+}
+
 interface ProgressMetricRowProps {
   label: string;
   consumed: number;
@@ -209,10 +280,16 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
             <span>F {entry.fat}g</span>
             <span aria-hidden="true">·</span>
             <span>Fibre {entry.fibre}g</span>
+            {entry.sourceName && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="text-slate-500 dark:text-slate-400">{entry.sourceName}</span>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between sm:justify-end gap-1.5 shrink-0">
+        <div className="flex items-center justify-between sm:justify-end gap-1 shrink-0">
           <span className="text-sm font-bold text-slate-900 dark:text-slate-100 font-mono-nums mr-1">
             {entry.calories} kcal
           </span>
@@ -220,10 +297,20 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
           <div className="flex items-center gap-0.5 relative">
             <button
               type="button"
+              onClick={() => onDownloadSticker(entry, mealShortLabel)}
+              title={`Download ${entry.foodName} PNG sticker`}
+              aria-label={`Download ${entry.foodName} PNG sticker`}
+              className="min-h-[44px] min-w-[40px] sm:min-w-[44px] flex items-center justify-center rounded-xl text-[#4E6800] dark:text-[#C8FF00] hover:bg-[#C8FF00]/15 transition-colors cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
               onClick={() => onEdit(entry)}
               title="Edit entry"
               aria-label={`Edit ${entry.foodName}`}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
+              className="min-h-[44px] min-w-[40px] sm:min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
             >
               <Pencil className="w-4 h-4" />
             </button>
@@ -233,7 +320,7 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
               onClick={() => onDelete(entry)}
               title="Delete entry"
               aria-label={`Delete ${entry.foodName}`}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+              className="min-h-[44px] min-w-[40px] sm:min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -243,7 +330,7 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
               onClick={() => setMenuOpen((v) => !v)}
               aria-label={`More actions for ${entry.foodName}`}
               aria-expanded={menuOpen}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
+              className="min-h-[44px] min-w-[40px] sm:min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
@@ -425,6 +512,52 @@ export const FoodLogPage: React.FC<FoodLogPageProps> = ({ initialSection = 'diar
     [state.settings.foodUnit]
   );
 
+  const openMealMacrosSticker = useCallback(
+    (
+      mealLabel: string,
+      itemCount: number,
+      totals: { calories: number; protein: number; carbs: number; fat: number; fibre: number }
+    ) => {
+      openShareStudio({
+        mode: 'food',
+        foodPayload: {
+          title: mealLabel,
+          subtitle: `${itemCount} ${itemCount === 1 ? 'item' : 'items'} · ${formatShortDate(selectedDate)}`,
+          calories: Math.round(totals.calories),
+          protein: round1(totals.protein),
+          carbs: round1(totals.carbs),
+          fat: round1(totals.fat),
+          fibre: round1(totals.fibre),
+          dateLabel: formatShortDate(selectedDate),
+        },
+      });
+    },
+    [selectedDate]
+  );
+
+  const openAiBatchSticker = useCallback(
+    (mealLabel: string, batch: AiMealBatch) => {
+      const combinedTitle =
+        batch.items.length <= 2
+          ? batch.items.map((item) => item.foodName).join(' + ')
+          : `${batch.items[0].foodName} + ${batch.items.length - 1} more`;
+      openShareStudio({
+        mode: 'food',
+        foodPayload: {
+          title: combinedTitle,
+          subtitle: `${mealLabel} · ${batch.sourceName} · ${batch.items.length} items`,
+          calories: batch.totals.calories,
+          protein: batch.totals.protein,
+          carbs: batch.totals.carbs,
+          fat: batch.totals.fat,
+          fibre: batch.totals.fibre,
+          dateLabel: formatShortDate(selectedDate),
+        },
+      });
+    },
+    [selectedDate]
+  );
+
   const handleSwitchSection = (next: FoodLogSection) => {
     setSubTab(next);
     if (next === 'database') {
@@ -575,6 +708,7 @@ export const FoodLogPage: React.FC<FoodLogPageProps> = ({ initialSection = 'diar
           <div className="space-y-3">
             {visibleMeals.map((meal) => {
               const { items, totals } = mealBreakdown[meal.id];
+              const aiBatches = getCombinedAiBatches(items);
               const isCollapsed = Boolean(collapsedMeals[meal.id]);
               const yesterdayCount = yesterdayMealCounts[meal.id] || 0;
 
@@ -615,6 +749,19 @@ export const FoodLogPage: React.FC<FoodLogPageProps> = ({ initialSection = 'diar
                     </button>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {items.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => openMealMacrosSticker(meal.shortLabel, items.length, totals)}
+                          title={`Download ${meal.shortLabel} macros as transparent Story PNG`}
+                          aria-label={`Download ${meal.shortLabel} macros PNG`}
+                          className="min-h-[40px] min-w-[40px] px-2.5 rounded-xl border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-[#4E6800] dark:hover:border-[#C8FF00] inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
+                          <span className="hidden sm:inline">Story PNG</span>
+                        </button>
+                      )}
+
                       {items.length >= 2 && (
                         <button
                           type="button"
@@ -735,22 +882,67 @@ export const FoodLogPage: React.FC<FoodLogPageProps> = ({ initialSection = 'diar
                           </div>
                         </div>
                       ) : (
-                        <div className="divide-y divide-stone-100 dark:divide-white/8">
-                          {items.map((entry) => (
-                            <FoodLogEntryRow
-                              key={entry.id}
-                              entry={entry}
-                              mealShortLabel={meal.shortLabel}
-                              foodUnit={state.settings.foodUnit}
-                              onMealChange={handleMealChange}
-                              onQuickQuantityChange={quickUpdateFoodEntryQuantity}
-                              onDownloadSticker={openFoodItemSticker}
-                              onEdit={openEditFoodModal}
-                              onDuplicate={handleDuplicate}
-                              onDelete={setPendingDelete}
-                            />
-                          ))}
-                        </div>
+                        <>
+                          <div className="divide-y divide-stone-100 dark:divide-white/8">
+                            {items.map((entry) => (
+                              <FoodLogEntryRow
+                                key={entry.id}
+                                entry={entry}
+                                mealShortLabel={meal.shortLabel}
+                                foodUnit={state.settings.foodUnit}
+                                onMealChange={handleMealChange}
+                                onQuickQuantityChange={quickUpdateFoodEntryQuantity}
+                                onDownloadSticker={openFoodItemSticker}
+                                onEdit={openEditFoodModal}
+                                onDuplicate={handleDuplicate}
+                                onDelete={setPendingDelete}
+                              />
+                            ))}
+                          </div>
+
+                          {aiBatches.length > 0 && (
+                            <div className="p-3 sm:p-4 border-t border-stone-100 dark:border-white/8 space-y-2.5">
+                              {aiBatches.map((batch) => {
+                                const combinedNames = batch.items
+                                  .map((item) => item.foodName)
+                                  .join(' · ');
+                                return (
+                                  <div
+                                    key={batch.id}
+                                    className="rounded-xl border border-[#4E6800]/25 dark:border-[#C8FF00]/30 bg-[#C8FF00]/12 dark:bg-[#C8FF00]/[0.07] px-3.5 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#4E6800] dark:text-[#C8FF00]">
+                                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                        <span>
+                                          {batch.sourceName} · {batch.items.length} items
+                                        </span>
+                                      </div>
+                                      <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                        {combinedNames}
+                                      </p>
+                                      <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300 tabular-nums font-mono-nums">
+                                        {batch.totals.calories} kcal · P {batch.totals.protein}g · C{' '}
+                                        {batch.totals.carbs}g · F {batch.totals.fat}g
+                                        {batch.totals.fibre > 0 ? ` · Fibre ${batch.totals.fibre}g` : ''}
+                                      </p>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => openAiBatchSticker(meal.shortLabel, batch)}
+                                      aria-label={`Download combined ${batch.sourceName} macros PNG`}
+                                      className="min-h-[40px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-[#090A0C] text-xs font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                                    >
+                                      <Download className="w-3.5 h-3.5 shrink-0" />
+                                      <span>Full Macros PNG</span>
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   )}

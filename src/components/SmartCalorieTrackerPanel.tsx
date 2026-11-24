@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Calculator,
   Check,
   ChevronDown,
   ChevronUp,
@@ -11,10 +12,11 @@ import {
   Dumbbell,
   Flame,
   Info,
+  RefreshCw,
   Scale,
   ShieldAlert,
-  Sparkles,
   Target,
+  TrendingUp,
 } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import type {
@@ -513,7 +515,7 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
         <div className="rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111317] p-4 sm:p-5">
           <div className="flex items-center justify-between gap-2 mb-3">
             <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#4E6800] dark:text-[#C8FF00]">
-              Calorex Adaptive Setup · Step {onboardingStep + 1} of {ONBOARDING_STEPS.length}
+              Nutrition Plan Setup · Step {onboardingStep + 1} of {ONBOARDING_STEPS.length}
             </span>
             <span className="text-xs font-mono-nums tabular-nums text-zinc-500 dark:text-zinc-400">
               {Math.round(((onboardingStep + 1) / ONBOARDING_STEPS.length) * 100)}%
@@ -546,47 +548,55 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
         {/* Step Content */}
         <section className="rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#111317] p-5 sm:p-7 space-y-5">
           {onboardingStep === 0 && (
-            <div className="space-y-5 max-w-2xl">
-              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#4E6800] dark:text-[#C8FF00]">
-                <Sparkles className="w-4 h-4" />
-                <span>Welcome to Calorex</span>
+            <div className="space-y-6 max-w-2xl">
+              <div className="space-y-2.5">
+                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-white text-balance">
+                  Let&apos;s build your nutrition plan.
+                </h2>
+                <p className="text-base sm:text-lg font-medium text-zinc-800 dark:text-zinc-200">
+                  Your body. Your goals. Your targets.
+                </p>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  Set up your personal profile to calculate daily calorie, protein, carbohydrate,
+                  fat, fibre, and hydration targets tailored to your measurements and lifestyle.
+                </p>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-white">
-                Set up your personalized nutrition targets
-              </h2>
-              <p className="text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
-                We start with a clean slate — no guessed body measurements. Enter your stats once to
-                calculate science-backed daily calories, protein, carbs, fat, fibre, and hydration,
-                then Calorex monitors your food logs and weight trends over 14-day adaptive cycles.
-              </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div className="border-t border-zinc-200 dark:border-white/10 pt-5 space-y-5">
                 {[
                   {
-                    title: 'Science-Backed Baseline',
-                    desc: 'Mifflin-St Jeor BMR and calibrated non-overlapping activity estimation.',
+                    icon: Calculator,
+                    title: 'Science-backed targets',
+                    desc: 'Personalized daily nutrition recommendations calculated from your body measurements, activity level, and goals.',
                   },
                   {
-                    title: '14-Day Adaptive AI',
-                    desc: 'Evaluates your weight trend & food logs every 14 days.',
+                    icon: TrendingUp,
+                    title: 'Track your progress',
+                    desc: 'Monitor your daily food intake, weight trends, and consistency over time.',
                   },
                   {
-                    title: 'You Stay in Control',
-                    desc: 'Targets only update when you review and accept recommendations.',
+                    icon: RefreshCw,
+                    title: 'Adaptive nutrition',
+                    desc: 'Review and adjust your targets through 14-day progress cycles—updates only apply when you confirm them.',
                   },
-                ].map((item) => (
-                  <div
-                    key={item.title}
-                    className="rounded-xl border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-[#090A0C] p-3.5 space-y-1"
-                  >
-                    <div className="text-xs font-bold text-zinc-950 dark:text-white">
-                      {item.title}
+                ].map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.title} className="flex items-start gap-3.5">
+                      <div className="mt-0.5 w-8 h-8 rounded-lg bg-[#4E6800]/10 dark:bg-[#C8FF00]/10 flex items-center justify-center shrink-0">
+                        <Icon className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-zinc-950 dark:text-white leading-snug">
+                          {item.title}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed mt-0.5">
+                          {item.desc}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-snug">
-                      {item.desc}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -598,7 +608,7 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                   Your Body Measurements
                 </h2>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  All fields start blank so your calculations reflect your actual metrics.
+                  Fields start empty so your daily targets are calculated strictly from your own measurements.
                 </p>
               </div>
 
@@ -697,7 +707,7 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                   Activity Level &amp; Training Habits
                 </h2>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Calorex blends your lifestyle tier (65%) with steps and weekly workouts (35%) without double-counting.
+                  We combine your daily lifestyle tier (65%) with steps and weekly workouts (35%) so activity is never double-counted.
                 </p>
               </div>
 
@@ -788,14 +798,14 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:underline cursor-pointer"
               >
                 {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                {showAdvanced ? 'Hide optional body-fat & hydration settings' : 'Optional: Body-fat %, hydration & safety'}
+                {showAdvanced ? 'Hide optional body-fat & safety settings' : 'Optional: Body-fat % & safety guidance'}
               </button>
 
               {showAdvanced && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-zinc-200 dark:border-white/10">
                   <label className="block space-y-1">
                     <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                      Body-Fat % (Optional · enables Katch-McArdle for 18+)
+                      Body-Fat % (Optional · refines BMR for 18+)
                     </span>
                     <input
                       type="number"
@@ -832,7 +842,7 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                   Choose Your Fitness Goal
                 </h2>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Determines your evidence-based calorie surplus, deficit, or maintenance strategy.
+                  Sets whether your daily calorie plan targets fat loss, muscle gain, recomposition, or maintenance.
                 </p>
               </div>
 
@@ -855,7 +865,13 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                         <span className="text-sm font-bold">{meta.label}</span>
                         {selected && <Check className="w-4 h-4 text-white dark:text-[#C8FF00]" />}
                       </div>
-                      <p className="text-xs text-zinc-400 mt-0.5 leading-snug">{meta.summary}</p>
+                      <p
+                        className={`text-xs mt-0.5 leading-snug ${
+                          selected ? 'text-zinc-300' : 'text-zinc-600 dark:text-zinc-400'
+                        }`}
+                      >
+                        {meta.summary}
+                      </p>
                     </button>
                   );
                 })}
@@ -911,7 +927,7 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                   Select Macro Preference
                 </h2>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Shapes your daily protein, carbohydrate, and fat balance independently of your goal.
+                  Choose how your daily calories are split across protein, carbohydrates, and fat.
                 </p>
               </div>
 
@@ -934,7 +950,13 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                         <span className="text-sm font-bold">{meta.shortLabel}</span>
                         {selected && <Check className="w-4 h-4 text-white dark:text-[#C8FF00]" />}
                       </div>
-                      <p className="text-xs text-zinc-400 mt-1 leading-snug">{meta.description}</p>
+                      <p
+                        className={`text-xs mt-1 leading-snug ${
+                          selected ? 'text-zinc-300' : 'text-zinc-600 dark:text-zinc-400'
+                        }`}
+                      >
+                        {meta.description}
+                      </p>
                     </button>
                   );
                 })}
@@ -947,7 +969,7 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#4E6800] dark:text-[#C8FF00]">
-                    Personalized Daily Plan Ready
+                    Your Personalized Daily Plan
                   </div>
                   <div className="mt-1 flex items-baseline gap-2">
                     <span className="text-4xl font-extrabold font-mono-nums tabular-nums text-zinc-950 dark:text-[#C8FF00]">
@@ -961,6 +983,9 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                     BMR {calculation.bmr.toLocaleString()} kcal · Maintenance TDEE{' '}
                     {calculation.estimatedTdeeKcal.toLocaleString()} kcal ·{' '}
                     {SMART_FITNESS_GOAL_META[calculation.normalizedGoal].label}
+                    {calculation.estimatedWeeksRange
+                      ? ` · Est. ~${calculation.estimatedWeeksRange.min}–${calculation.estimatedWeeksRange.max} wks`
+                      : ''}
                   </p>
                 </div>
                 <div className="text-left sm:text-right font-mono-nums tabular-nums">
@@ -983,13 +1008,11 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
                   { label: 'Protein', val: `${calculation.proteinGrams}g`, sub: `${calculation.proteinPct}%` },
                   { label: 'Carbs', val: `${calculation.carbsGrams}g`, sub: `${calculation.carbsPct}%` },
                   { label: 'Fat', val: `${calculation.fatGrams}g`, sub: `${calculation.fatPct}%` },
-                  { label: 'Fibre', val: `~${calculation.fibreGrams}g`, sub: 'Daily est.' },
+                  { label: 'Fibre', val: `~${calculation.fibreGrams}g`, sub: 'Daily target' },
                   {
                     label: 'Hydration',
                     val: `${(calculation.recommendedWaterMl / 1000).toFixed(2).replace(/\.?0+$/, '')} L`,
-                    sub: calculation.estimatedWeeksRange
-                      ? `~${calculation.estimatedWeeksRange.min}–${calculation.estimatedWeeksRange.max} wks`
-                      : 'Steady',
+                    sub: 'Daily water',
                   },
                 ].map((m) => (
                   <div
@@ -1008,8 +1031,8 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
               </div>
 
               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                Setting this goal starts your first <strong>14-day adaptive cycle</strong>. You
-                can edit measurements, switch goals, or adjust targets anytime.
+                Saving these targets starts your first <strong>14-day progress cycle</strong>. You
+                can edit your measurements, switch goals, or adjust targets anytime.
               </p>
             </div>
           )}

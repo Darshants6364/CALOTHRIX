@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AlertTriangle,
   Check,
   Download,
   LogOut,
@@ -8,7 +7,6 @@ import {
   Moon,
   ShieldCheck,
   Sun,
-  Trash2,
   Users,
 } from 'lucide-react';
 import { ClientCoachingSection } from '../components/ClientCoachingSection';
@@ -44,7 +42,6 @@ export const ProfileSettingsPage: React.FC = () => {
     updateSettings,
     exportData,
     signOut,
-    deleteAccount,
     exitGuestModeToAuth,
     selectAccountRole,
     setActiveTab,
@@ -89,12 +86,6 @@ export const ProfileSettingsPage: React.FC = () => {
   const [foodRestrictions, setFoodRestrictions] = useState<FoodRestriction[]>(
     profile.foodRestrictions || []
   );
-
-  // Two-step Account Deletion state
-  const [deleteStepOpen, setDeleteStepOpen] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState('');
-  const [deletingAccount, setDeletingAccount] = useState(false);
-  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     setName(profile.name);
@@ -166,21 +157,6 @@ export const ProfileSettingsPage: React.FC = () => {
       dietaryPreference,
       foodRestrictions,
     });
-  };
-
-  const handleConfirmDeleteAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setDeleteError('');
-    if (deleteConfirmText.trim() !== 'DELETE') {
-      setDeleteError('Please type DELETE in all caps to confirm.');
-      return;
-    }
-    setDeletingAccount(true);
-    const res = await deleteAccount(deleteConfirmText);
-    setDeletingAccount(false);
-    if (!res.ok) {
-      setDeleteError(res.error || 'Could not delete account.');
-    }
   };
 
   const displayAvatar = profile.avatarUrl || authDetails?.avatarUrl;
@@ -683,72 +659,6 @@ export const ProfileSettingsPage: React.FC = () => {
             Export JSON
           </button>
         </div>
-      </section>
-
-      {/* Danger Zone: Self-Service Account & Data Deletion */}
-      <section className="bg-white dark:bg-[#111317] border border-red-500/25 rounded-2xl p-5 sm:p-6 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-red-600 dark:text-red-400 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              {isGuest ? 'Erase Local Guest Data' : 'Delete Account & Erase Data'}
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {isGuest
-                ? 'Permanently clear all guest meals, weight entries, saved combos, and goals stored on this browser.'
-                : 'Permanently delete your profile, food diary, custom foods, weight history, hydration logs, and saved meals. This cannot be undone.'}
-            </p>
-          </div>
-          {!deleteStepOpen && (
-            <button
-              type="button"
-              onClick={() => setDeleteStepOpen(true)}
-              className="min-h-[42px] px-4 rounded-xl border border-red-500/35 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-500/10 inline-flex items-center gap-1.5 shrink-0"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              {isGuest ? 'Erase Data' : 'Delete Account'}
-            </button>
-          )}
-        </div>
-
-        {deleteStepOpen && (
-          <form onSubmit={handleConfirmDeleteAccount} className="space-y-3 pt-2 border-t border-red-500/15">
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-              Type <span className="font-mono font-bold text-red-600 dark:text-red-400">DELETE</span> below to permanently erase your data:
-            </label>
-            <input
-              type="text"
-              value={deleteConfirmText}
-              onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder="Type DELETE"
-              autoComplete="off"
-              className="w-full max-w-xs h-11 px-3.5 rounded-xl border border-red-500/40 bg-stone-50 dark:bg-[#090A0C] text-sm font-mono text-slate-900 dark:text-white"
-            />
-            {deleteError && (
-              <p className="text-xs font-medium text-red-600 dark:text-red-400">{deleteError}</p>
-            )}
-            <div className="flex flex-wrap items-center gap-2.5">
-              <button
-                type="submit"
-                disabled={deletingAccount || deleteConfirmText.trim() !== 'DELETE'}
-                className="min-h-[44px] px-5 rounded-xl bg-red-600 text-white text-xs font-bold disabled:opacity-45 hover:bg-red-700 transition-colors"
-              >
-                {deletingAccount ? 'Deleting...' : 'Permanently Delete'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteStepOpen(false);
-                  setDeleteConfirmText('');
-                  setDeleteError('');
-                }}
-                className="min-h-[44px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-600 dark:text-slate-300"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
       </section>
     </div>
   );

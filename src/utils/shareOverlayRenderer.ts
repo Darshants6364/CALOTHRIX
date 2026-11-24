@@ -791,6 +791,19 @@ function formatGrams(v: number): string {
   return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}g`;
 }
 
+function getFoodStickerDimensions(template: FoodStickerTemplateId): { width: number; height: number } {
+  switch (template) {
+    case 'circle-row':
+      return { width: 1080, height: 480 };
+    case 'single-line':
+      return { width: 1080, height: 420 };
+    case 'classic-circles':
+      return { width: 880, height: 900 };
+    case 'vertical-rail':
+      return { width: 460, height: 1180 };
+  }
+}
+
 function drawFoodStickerOverlay(
   ctx: CanvasRenderingContext2D,
   template: FoodStickerTemplateId,
@@ -805,90 +818,93 @@ function drawFoodStickerOverlay(
 
   if (template === 'circle-row' || template === 'single-line') {
     if (template === 'circle-row') {
-      // Exact handwritten 4-circle horizontal row: [Cal] [Protein] [Carbs] [Fat]
+      // Exact 4-circle horizontal row: [Cal] [Protein] [Carbs] [Fat]
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       const circles = [
-        { top: 'C', val: calStr, bottom: 'KCAL', x: -366, primary: true },
-        { top: 'P', val: proStr, bottom: 'PROTEIN', x: -122, primary: false },
-        { top: 'C', val: carbStr, bottom: 'CARBS', x: 122, primary: false },
-        { top: 'F', val: fatStr, bottom: 'FAT', x: 366, primary: false },
+        { top: 'C', val: calStr, bottom: 'KCAL', x: -375, primary: true },
+        { top: 'P', val: proStr, bottom: 'PROTEIN', x: -125, primary: false },
+        { top: 'C', val: carbStr, bottom: 'CARBS', x: 125, primary: false },
+        { top: 'F', val: fatStr, bottom: 'FAT', x: 375, primary: false },
       ];
-      const radius = 108;
+      const radius = 112;
+      const cy = -24;
 
       for (const c of circles) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(c.x, 0, radius, 0, Math.PI * 2);
+        ctx.arc(c.x, cy, radius, 0, Math.PI * 2);
         ctx.strokeStyle = c.primary ? accentColor : textColor;
-        ctx.lineWidth = c.primary ? 5 : 4;
+        ctx.lineWidth = c.primary ? 5.5 : 4.2;
         ctx.stroke();
         ctx.restore();
 
-        // Short letter/label at top inside circle
         ctx.save();
         ctx.fillStyle = c.primary ? accentColor : textColor;
-        ctx.globalAlpha *= 0.85;
-        ctx.font = '700 20px "JetBrains Mono", monospace';
-        ctx.fillText(c.top, c.x, -54);
+        ctx.globalAlpha *= 0.88;
+        ctx.font = '700 21px "JetBrains Mono", monospace';
+        ctx.fillText(c.top, c.x, cy - 56);
         ctx.restore();
 
-        // Main numeric value
         ctx.fillStyle = c.primary ? accentColor : textColor;
-        ctx.font = calStr.length >= 4 && c.primary ? '900 46px "Archivo", sans-serif' : '900 50px "Archivo", sans-serif';
-        ctx.fillText(c.val, c.x, 2);
+        ctx.font =
+          c.val.length >= 5
+            ? '900 42px "Archivo", sans-serif'
+            : c.val.length >= 4
+            ? '900 48px "Archivo", sans-serif'
+            : '900 52px "Archivo", sans-serif';
+        ctx.fillText(c.val, c.x, cy + 2);
 
-        // Unit / macro word at bottom inside circle
         ctx.save();
         ctx.fillStyle = textColor;
-        ctx.globalAlpha *= 0.82;
-        ctx.font = '700 18px "JetBrains Mono", monospace';
-        ctx.fillText(c.bottom, c.x, 56);
+        ctx.globalAlpha *= 0.85;
+        ctx.font = '700 19px "JetBrains Mono", monospace';
+        ctx.fillText(c.bottom, c.x, cy + 58);
         ctx.restore();
       }
 
       if (transform.showBranding) {
-        drawCalothrixBrandMark(ctx, 0, 175, textColor, accentColor);
+        drawCalothrixBrandMark(ctx, 0, 148, textColor, accentColor);
       }
       return;
     }
 
-    // Straight horizontal bar: ONLY Calories | Protein | Carbs | Fat
+    // Straight horizontal bar: Calories | Protein | Carbs | Fat
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     const cols = [
-      { label: 'CALORIES', val: `${calStr} kcal`, x: -345, accent: true },
-      { label: 'PROTEIN', val: proStr, x: -115, accent: false },
-      { label: 'CARBS', val: carbStr, x: 115, accent: false },
-      { label: 'FAT', val: fatStr, x: 345, accent: false },
+      { label: 'CALORIES', val: `${calStr} kcal`, x: -360, accent: true },
+      { label: 'PROTEIN', val: proStr, x: -120, accent: false },
+      { label: 'CARBS', val: carbStr, x: 120, accent: false },
+      { label: 'FAT', val: fatStr, x: 360, accent: false },
     ];
+    const barCy = -28;
 
-    // Top & bottom straight bar hairlines (zero solid fill)
     ctx.save();
     ctx.strokeStyle = textColor;
-    ctx.globalAlpha *= 0.4;
+    ctx.globalAlpha *= 0.45;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(-455, -68);
-    ctx.lineTo(455, -68);
-    ctx.moveTo(-455, 70);
-    ctx.lineTo(455, 70);
+    ctx.moveTo(-475, barCy - 68);
+    ctx.lineTo(475, barCy - 68);
+    ctx.moveTo(-475, barCy + 72);
+    ctx.lineTo(475, barCy + 72);
     ctx.stroke();
     ctx.restore();
 
     for (let i = 0; i < cols.length; i++) {
       const c = cols[i];
       ctx.fillStyle = c.accent ? accentColor : textColor;
-      ctx.font = '900 48px "Archivo", sans-serif';
-      ctx.fillText(c.val, c.x, -16);
+      ctx.font = c.val.length >= 9 ? '900 42px "Archivo", sans-serif' : '900 48px "Archivo", sans-serif';
+      ctx.fillText(c.val, c.x, barCy - 14);
 
       ctx.save();
       ctx.fillStyle = textColor;
-      ctx.globalAlpha *= 0.82;
+      ctx.globalAlpha *= 0.84;
       ctx.font = '700 19px "JetBrains Mono", monospace';
-      ctx.fillText(c.label, c.x, 34);
+      ctx.fillText(c.label, c.x, barCy + 36);
       ctx.restore();
 
       if (i < cols.length - 1) {
@@ -897,29 +913,29 @@ function drawFoodStickerOverlay(
         ctx.globalAlpha *= 0.28;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(c.x + 115, -46);
-        ctx.lineTo(c.x + 115, 46);
+        ctx.moveTo(c.x + 120, barCy - 46);
+        ctx.lineTo(c.x + 120, barCy + 46);
         ctx.stroke();
         ctx.restore();
       }
     }
 
     if (transform.showBranding) {
-      drawCalothrixBrandMark(ctx, 0, 148, textColor, accentColor);
+      drawCalothrixBrandMark(ctx, 0, 120, textColor, accentColor);
     }
     return;
   }
 
   if (template === 'classic-circles') {
-    // 2x2 large circular rings: ONLY Calories, Protein, Carbs, Fat
+    // 2x2 circular rings: Calories, Protein, Carbs, Fat
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     const items = [
-      { label: 'CALORIES', value: calStr, unit: 'KCAL', cx: -175, cy: -165, primary: true },
-      { label: 'PROTEIN', value: proStr, unit: 'PROTEIN', cx: 175, cy: -165, primary: false },
-      { label: 'CARBS', value: carbStr, unit: 'CARBS', cx: -175, cy: 165, primary: false },
-      { label: 'FAT', value: fatStr, unit: 'FAT', cx: 175, cy: 165, primary: false },
+      { label: 'CALORIES', value: calStr, unit: 'KCAL', cx: -176, cy: -200, primary: true },
+      { label: 'PROTEIN', value: proStr, unit: 'PROTEIN', cx: 176, cy: -200, primary: false },
+      { label: 'CARBS', value: carbStr, unit: 'CARBS', cx: -176, cy: 136, primary: false },
+      { label: 'FAT', value: fatStr, unit: 'FAT', cx: 176, cy: 136, primary: false },
     ];
     const radius = 144;
 
@@ -928,7 +944,7 @@ function drawFoodStickerOverlay(
       ctx.beginPath();
       ctx.arc(item.cx, item.cy, radius, 0, Math.PI * 2);
       ctx.strokeStyle = item.primary ? accentColor : textColor;
-      ctx.lineWidth = item.primary ? 5.5 : 4;
+      ctx.lineWidth = item.primary ? 5.5 : 4.2;
       ctx.stroke();
 
       ctx.beginPath();
@@ -940,7 +956,7 @@ function drawFoodStickerOverlay(
       ctx.restore();
 
       ctx.fillStyle = item.primary ? accentColor : textColor;
-      ctx.font = '800 62px "Archivo", sans-serif';
+      ctx.font = item.value.length >= 5 ? '800 54px "Archivo", sans-serif' : '800 62px "Archivo", sans-serif';
       ctx.fillText(item.value, item.cx, item.cy - 10);
 
       ctx.fillStyle = textColor;
@@ -949,31 +965,39 @@ function drawFoodStickerOverlay(
     }
 
     if (transform.showBranding) {
-      drawCalothrixBrandMark(ctx, 0, 385, textColor, accentColor);
+      drawCalothrixBrandMark(ctx, 0, 355, textColor, accentColor);
     }
     return;
   }
 
-  // 'vertical-rail' (Strava-style edge strip: ONLY Calories, Protein, Carbs, Fat)
+  // 'vertical-rail' (Compact Strava-style edge strip: CALOTHRIX + Calories, Protein, Carbs, Fat)
   if (transform.showBranding) {
     ctx.save();
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = textColor;
-    ctx.font = '800 34px "Archivo", sans-serif';
-    ctx.fillText('CALOTHRIX', -440, -760);
+    ctx.font = '800 32px "Archivo", sans-serif';
+    ctx.fillText('CALOTHRIX', 0, -515);
+
+    ctx.strokeStyle = textColor;
+    ctx.globalAlpha *= 0.35;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-90, -478);
+    ctx.lineTo(90, -478);
+    ctx.stroke();
     ctx.restore();
   }
 
   const rows = [
-    { label: 'CALORIES', val: `${calStr} kcal`, y: -510, accent: true },
-    { label: 'PROTEIN', val: proStr, y: -170, accent: false },
-    { label: 'CARBS', val: carbStr, y: 170, accent: false },
-    { label: 'FAT', val: fatStr, y: 510, accent: false },
+    { label: 'CALORIES', val: `${calStr} kcal`, y: -335, accent: true },
+    { label: 'PROTEIN', val: proStr, y: -90, accent: false },
+    { label: 'CARBS', val: carbStr, y: 155, accent: false },
+    { label: 'FAT', val: fatStr, y: 400, accent: false },
   ];
 
   ctx.save();
-  ctx.translate(425, 0);
+  ctx.translate(0, 35);
   ctx.rotate(-Math.PI / 2);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -981,14 +1005,14 @@ function drawFoodStickerOverlay(
   for (const r of rows) {
     ctx.fillStyle = textColor;
     ctx.save();
-    ctx.globalAlpha *= 0.75;
-    ctx.font = '600 22px "JetBrains Mono", monospace';
+    ctx.globalAlpha *= 0.78;
+    ctx.font = '700 22px "JetBrains Mono", monospace';
     ctx.fillText(r.label, -r.y, -30);
     ctx.restore();
 
     ctx.fillStyle = r.accent ? accentColor : textColor;
-    ctx.font = '900 40px "Archivo", sans-serif';
-    ctx.fillText(r.val, -r.y, 14);
+    ctx.font = '900 42px "Archivo", sans-serif';
+    ctx.fillText(r.val, -r.y, 16);
   }
   ctx.restore();
 }
@@ -997,15 +1021,22 @@ export function renderShareOverlayToCanvas(
   canvas: HTMLCanvasElement,
   params: RenderOverlayParams
 ): void {
-  canvas.width = STORY_WIDTH;
-  canvas.height = STORY_HEIGHT;
+  const isFoodMode = params.mode === 'food';
+  const foodDims = isFoodMode
+    ? getFoodStickerDimensions(params.foodTemplate || 'circle-row')
+    : null;
+  const targetWidth = foodDims ? foodDims.width : STORY_WIDTH;
+  const targetHeight = foodDims ? foodDims.height : STORY_HEIGHT;
+
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  ctx.clearRect(0, 0, STORY_WIDTH, STORY_HEIGHT);
+  ctx.clearRect(0, 0, targetWidth, targetHeight);
 
   // Food sticker mode is strictly transparent-only
-  const isTransparent = params.mode === 'food' ? true : Boolean(params.transparentOnly);
+  const isTransparent = isFoodMode ? true : Boolean(params.transparentOnly);
 
   if (!isTransparent) {
     // Background layer for Complete Composite export or Studio Preview
@@ -1063,8 +1094,8 @@ export function renderShareOverlayToCanvas(
 
   // Transform and draw transparent overlay artwork (zero card boxes!)
   ctx.save();
-  const centerX = STORY_WIDTH * (0.5 + params.transform.posX);
-  const centerY = STORY_HEIGHT * (0.5 + params.transform.posY);
+  const centerX = targetWidth * (0.5 + params.transform.posX);
+  const centerY = targetHeight * (0.5 + params.transform.posY);
   ctx.translate(centerX, centerY);
   ctx.rotate((params.transform.rotationDeg * Math.PI) / 180);
   ctx.scale(params.transform.scale, params.transform.scale);
@@ -1102,6 +1133,28 @@ export function renderShareOverlayToCanvas(
   }
 
   ctx.restore();
+}
+
+export function renderOverlayToAssetsSync(
+  params: RenderOverlayParams,
+  mimeType: 'image/png' | 'image/jpeg' = 'image/png'
+): { blob: Blob; dataUrl: string } {
+  const canvas = document.createElement('canvas');
+  renderShareOverlayToCanvas(canvas, params);
+  const dataUrl = canvas.toDataURL(mimeType, 0.96);
+
+  const parts = dataUrl.split(',');
+  const header = parts[0] || '';
+  const base64 = parts[1] || '';
+  const mimeMatch = header.match(/data:([^;]+);/);
+  const resolvedMime = mimeMatch ? mimeMatch[1] : mimeType;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], { type: resolvedMime });
+  return { blob, dataUrl };
 }
 
 export async function renderOverlayToAssets(
@@ -1150,8 +1203,10 @@ export function triggerBlobDownload(blob: Blob, filename: string): void {
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  window.setTimeout(() => URL.revokeObjectURL(url), 15000);
 }

@@ -268,7 +268,7 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Compact Header + Smart Calorie Calculator Trigger */}
+      {/* Compact Header */}
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -287,15 +287,6 @@ export const HomePage: React.FC = () => {
             {greeting}, {firstName}
           </h1>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setCalculatorModalOpen(true)}
-          className="min-h-[44px] px-4 rounded-xl border border-[#4E6800]/30 dark:border-[#C8FF00]/35 bg-[#C8FF00]/15 dark:bg-[#C8FF00]/10 text-[#3B5000] dark:text-[#C8FF00] text-xs sm:text-sm font-bold hover:bg-[#C8FF00]/25 transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap self-start sm:self-auto"
-        >
-          <Calculator className="w-4 h-4 shrink-0" />
-          <span>Smart Calorie Calculator</span>
-        </button>
       </section>
 
       {/* Date Navigation */}
