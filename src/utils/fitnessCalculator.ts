@@ -7,7 +7,7 @@ import type {
   MacroFocusType,
   SmartFitnessGoalType,
   WorkoutIntensity,
-} from '../types';
+} from '../types/index.ts';
 
 export const CALCULATION_VERSION = 'calothrix-smart-v2.2';
 

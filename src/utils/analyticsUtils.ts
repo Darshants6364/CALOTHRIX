@@ -8,9 +8,9 @@ import type {
   UserProfile,
   WeightEntry,
   WeeklySummaryResult,
-} from '../types';
-import { addDaysToDateKey, formatShortDate, getMondayToSundayWeek } from './dateUtils';
-import { normalizeFitnessGoal } from './fitnessCalculator';
+} from '../types/index.ts';
+import { addDaysToDateKey, formatShortDate, getMondayToSundayWeek } from './dateUtils.ts';
+import { normalizeFitnessGoal } from './fitnessCalculator.ts';
 import {
   calculateScaledNutrition,
   getEntriesForDate,
@@ -19,7 +19,7 @@ import {
   roundCal,
   sortWeightEntriesChronological,
   sumMacros,
-} from './nutritionUtils';
+} from './nutritionUtils.ts';
 
 export interface SmartFoodRecommendation {
   food: FoodItem;

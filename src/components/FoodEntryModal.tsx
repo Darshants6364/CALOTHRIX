@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { HorizontalScroller } from './HorizontalScroller';
 import { lookupBarcodeApi, searchGlobalFoodsApi } from '../services/globalFoodApiService';
 import {
@@ -161,6 +162,8 @@ const FoodEntryModalContent: React.FC = () => {
 
   const editing = foodModal.editingEntry;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const modalContainerRef = useRef<HTMLDivElement | null>(null);
+  useModalFocusTrap(modalContainerRef, foodModal.isOpen, closeFoodModal);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<
@@ -721,8 +724,14 @@ const FoodEntryModalContent: React.FC = () => {
       role="dialog"
       aria-modal="true"
       aria-label={editing ? 'Edit food entry' : 'Add food to log'}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeFoodModal();
+      }}
     >
-      <div className="w-full h-[100dvh] sm:h-auto sm:max-w-lg sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#111317] rounded-none sm:rounded-2xl border-0 sm:border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
+      <div
+        ref={modalContainerRef}
+        className="w-full h-[100dvh] sm:h-auto sm:max-w-lg sm:max-h-[90vh] flex flex-col bg-white dark:bg-[#111317] rounded-none sm:rounded-2xl border-0 sm:border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden overscroll-contain"
+      >
         {/* Header */}
         <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-2.5 sm:py-3.5 border-b border-black/10 dark:border-white/12 shrink-0 bg-white dark:bg-[#111317]">
           <div className="flex items-center gap-2 min-w-0">

@@ -34,6 +34,7 @@ import {
   validateFoodRecord,
 } from '../src/utils/foodValidationEngine.ts';
 import { resolveRegionalFoodQueryWithGemini } from './foodAiQualityService.ts';
+import { getSupabaseConfig } from './security.ts';
 
 let cachedSupplementaryFct: FoodItem[] | null = null;
 export function getSupplementaryFctFoods(): FoodItem[] {
@@ -97,17 +98,11 @@ function clearFoodCaches(): void {
 
 let serverSupabaseClient: SupabaseClient | null = null;
 function getServerSupabase(userAccessToken?: string): SupabaseClient | null {
-  const url = (
-    process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
-  ).trim();
-  const key = (
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
-  ).trim();
+  const { url, publishableKey, serviceRoleKey } = getSupabaseConfig();
+  const key = serviceRoleKey || publishableKey;
   if (!url || !key) return null;
 
-  if (userAccessToken && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (userAccessToken && !serviceRoleKey) {
     return createClient(url, key, {
       global: { headers: { Authorization: `Bearer ${userAccessToken}` } },
       auth: { persistSession: false, autoRefreshToken: false },
@@ -191,9 +186,7 @@ export function getExternalFoodSourceStatus(): SourceStatus {
       license: 'USDA FoodData Central (CC0 / Public Domain)',
     },
     supabaseAi: {
-      edgeFunctionsAvailable: Boolean(
-        process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
-      ),
+      edgeFunctionsAvailable: Boolean(getSupabaseConfig().url),
     },
   };
 }

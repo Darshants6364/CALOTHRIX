@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { HorizontalScroller } from './HorizontalScroller';
 import { lookupBarcodeApi, readBarcodeImageApi } from '../services/globalFoodApiService';
 import { FoodItem, MEAL_CATEGORIES, MealCategory } from '../types';
@@ -69,6 +70,8 @@ const BarcodeScannerModalContent: React.FC = () => {
   } = useMacroLogStore();
 
   const [manualBarcode, setManualBarcode] = useState('');
+  const modalContainerRef = useRef<HTMLDivElement | null>(null);
+  useModalFocusTrap(modalContainerRef, true, closeBarcodeScannerModal);
   const [mealType, setMealType] = useState<MealCategory>('lunch');
   const [logDate, setLogDate] = useState(barcodeScannerModal.targetDate);
   const [lookingUp, setLookingUp] = useState(false);
@@ -662,8 +665,14 @@ const BarcodeScannerModalContent: React.FC = () => {
       role="dialog"
       aria-modal="true"
       aria-label="Barcode Food Scanner"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeBarcodeScannerModal();
+      }}
     >
-      <div className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden">
+      <div
+        ref={modalContainerRef}
+        className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col bg-white dark:bg-[#111317] rounded-t-3xl sm:rounded-2xl border border-black/10 dark:border-white/12 shadow-2xl overflow-hidden overscroll-contain"
+      >
         <div className="sm:hidden w-10 h-1.5 bg-stone-300 dark:bg-slate-700 rounded-full mx-auto mt-2.5 shrink-0" />
 
         {/* Header */}

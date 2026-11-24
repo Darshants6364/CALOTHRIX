@@ -3,7 +3,6 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createClient } from '@supabase/supabase-js';
 import {
   adminVerifyOrUpdateFood,
   fetchPublicFoodOverrides,
@@ -22,7 +21,6 @@ import {
 } from './server/foodAiQualityService.ts';
 import { FOOD_FAMILIES } from './src/data/foodFamilies.ts';
 import { GLOBAL_REFERENCE_FOODS } from './src/data/globalReferenceFoods.ts';
-import { isDatabaseAdmin } from './src/utils/adminAccess.ts';
 import {
   buildDatabaseQualityReport,
   exportValidationReportCsv,
@@ -63,45 +61,36 @@ import type {
   WeightEntry,
 } from './src/types/index.ts';
 
+import {
+  accountMutationLimiter,
+  attachRequestId,
+  createSecurityHeadersMiddleware,
+  createServiceRoleSupabaseClient,
+  createUserSupabaseClient,
+  enforceAiAccessAndQuota,
+  generalApiLimiter,
+  getSupabaseConfig,
+  getSupportEmail,
+  resolveRequestActor,
+  sendSafeError,
+  validateBase64MediaPayload,
+} from './server/security.ts';
+
 async function verifyAdminRequest(
   req: express.Request
 ): Promise<{ ok: boolean; status: number; error?: string; userId?: string; token?: string }> {
-  const authHeader = String(req.headers.authorization || '');
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-  if (!token) {
-    return { ok: false, status: 401, error: 'Authentication required' };
-  }
-  const rawUrl = (
-    process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
-  ).trim();
-  let supabaseUrl = 'https://zzncijlmoskbilxjgiua.supabase.co';
-  try {
-    supabaseUrl = new URL(rawUrl).origin;
-  } catch {
-    supabaseUrl = 'https://zzncijlmoskbilxjgiua.supabase.co';
-  }
-  const anonKey = (
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
-  ).trim();
-  const sb = createClient(supabaseUrl, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data, error } = await sb.auth.getUser(token);
-  if (error || !data?.user) {
-    const msg = error?.message || '';
+  const actor = await resolveRequestActor(req);
+  if (!actor.authenticated || !actor.userId || !actor.token) {
     return {
       ok: false,
       status: 401,
-      error: /expired/i.test(msg)
-        ? 'Your session has expired. Please refresh or sign in again.'
-        : 'Invalid or expired session token. Please sign out and sign back in.',
+      error: actor.authError || 'Authentication required',
     };
   }
-  if (!isDatabaseAdmin(data.user, null)) {
+  if (!actor.isAdmin) {
     return { ok: false, status: 403, error: 'Admin privileges required' };
   }
-  return { ok: true, status: 200, userId: data.user.id, token };
+  return { ok: true, status: 200, userId: actor.userId, token: actor.token };
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -109,8 +98,24 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
-  app.use(express.json({ limit: '12mb' }));
+  const parsedPort = Number(process.env.PORT);
+  const PORT = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
+
+  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
+  app.use(attachRequestId);
+  app.use(createSecurityHeadersMiddleware());
+
+  // Safe default body limit (1 MB) across general routes; media AI routes mount a dedicated 6 MB parser
+  app.use(express.json({ limit: '1mb' }));
+  app.use('/api', generalApiLimiter);
+
+  const mediaJsonParser = express.json({ limit: '6mb' });
+
+  // Lightweight Cloud Run readiness/liveness probe
+  app.get('/healthz', (_req, res) => {
+    res.status(200).json({ ok: true, service: 'calothrix' });
+  });
 
   // Production health check
   app.get('/api/health', (_req, res) => {
@@ -126,6 +131,86 @@ async function startServer() {
         ifct2017: true,
       },
     });
+  });
+
+  // Server-verified session capabilities (keeps ADMIN_EMAILS strictly server-side)
+  app.get('/api/auth/me', async (req, res) => {
+    try {
+      const actor = await resolveRequestActor(req);
+      return res.json({
+        authenticated: actor.authenticated,
+        isAdmin: actor.authenticated ? actor.isAdmin : false,
+      });
+    } catch {
+      return res.json({ authenticated: false, isAdmin: false });
+    }
+  });
+
+  // Authenticated self-service Account & Personal Data Deletion
+  app.delete('/api/account', accountMutationLimiter, async (req, res) => {
+    try {
+      const actor = await resolveRequestActor(req);
+      if (!actor.authenticated || !actor.userId || !actor.token) {
+        return res.status(401).json({ error: actor.authError || 'Authentication required.' });
+      }
+
+      const confirm = String((req.body as { confirmText?: string } | undefined)?.confirmText || '')
+        .trim()
+        .toUpperCase();
+      if (confirm !== 'DELETE') {
+        return res.status(400).json({ error: 'Please type DELETE to confirm permanent account removal.' });
+      }
+
+      const userId = actor.userId;
+      const userSb = createUserSupabaseClient(actor.token);
+      const serviceSb = createServiceRoleSupabaseClient();
+      const db = serviceSb || userSb;
+
+      // Delete user-owned records in dependency-safe order (ignore missing optional tables)
+      const userTables = [
+        'food_entries',
+        'weight_entries',
+        'custom_foods',
+        'user_food_preferences',
+        'nutrition_goals',
+        'weight_goals',
+        'weekly_assessments',
+        'ai_meal_scans',
+        'user_saved_meals',
+        'water_logs',
+        'trainer_client_plans',
+        'target_recommendations',
+        'trainer_profiles',
+        'profiles',
+      ];
+
+      for (const table of userTables) {
+        try {
+          await db.from(table).delete().eq('user_id', userId);
+        } catch {
+          // Table may not exist in older schemas; continue cleaning remaining tables
+        }
+      }
+
+      let authAccountDeleted = false;
+      if (serviceSb) {
+        const { error: delAuthErr } = await serviceSb.auth.admin.deleteUser(userId);
+        if (!delAuthErr) {
+          authAccountDeleted = true;
+        }
+      }
+
+      return res.json({
+        ok: true,
+        dataDeleted: true,
+        authAccountDeleted,
+        message: authAccountDeleted
+          ? 'Your account and all personal nutrition data have been permanently deleted.'
+          : 'All personal nutrition records, logs, goals, and profile data have been deleted from the database. Contact support if you also require immediate auth login removal.',
+      });
+    } catch (err) {
+      return sendSafeError(req, res, 'delete_account', err, 'Failed to delete account data.');
+    }
   });
 
   // Backend Personalized Smart Calorie Tracker Calculator API
@@ -194,41 +279,17 @@ async function startServer() {
         });
       }
 
-      // 2. Verify optional Bearer JWT cleanly
-      const authHeader = String(req.headers.authorization || '');
-      const hasBearer = authHeader.startsWith('Bearer ');
-      const token = hasBearer ? authHeader.slice(7).trim() : '';
+      // 2. Enforce auth/guest AI quota cleanly
+      const actor = await enforceAiAccessAndQuota(req, res, {
+        guestAllowed: true,
+        featureName: 'Weekly Adaptive Assessment',
+      });
+      if (!actor) return;
 
-      let authenticatedUserId: string | null = null;
+      const authenticatedUserId: string | null = actor.userId;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let userScopedSupabase: any = null;
-
-      if (hasBearer && token) {
-        const rawUrl = (
-          process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
-        ).trim();
-        let supabaseUrl = 'https://zzncijlmoskbilxjgiua.supabase.co';
-        try {
-          supabaseUrl = new URL(rawUrl).origin;
-        } catch {
-          supabaseUrl = 'https://zzncijlmoskbilxjgiua.supabase.co';
-        }
-        const anonKey = (
-          process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-          'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
-        ).trim();
-
-        const sb = createClient(supabaseUrl, anonKey, {
-          global: { headers: { Authorization: `Bearer ${token}` } },
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        const { data: userData, error: authErr } = await sb.auth.getUser(token);
-        if (authErr || !userData?.user) {
-          return res.status(401).json({ error: 'Invalid or expired authentication token.' });
-        }
-        authenticatedUserId = userData.user.id;
-        userScopedSupabase = sb;
-      }
+      const userScopedSupabase: any =
+        actor.authenticated && actor.token ? createUserSupabaseClient(actor.token) : null;
 
       const actorId = authenticatedUserId || String(rawProfile.id || 'guest-user');
 
@@ -800,81 +861,107 @@ async function startServer() {
   });
 
   // Fallback AI Barcode Digit Reader for blurred/glare-covered packaging photos
-  app.post('/api/foods/read-barcode-image', async (req, res) => {
+  app.post('/api/foods/read-barcode-image', mediaJsonParser, async (req, res) => {
     try {
+      const actor = await enforceAiAccessAndQuota(req, res, {
+        guestAllowed: true,
+        featureName: 'AI Barcode Image Reader',
+      });
+      if (!actor) return;
+
       const body = (req.body || {}) as { mimeType?: string; mediaBase64?: string };
-      if (!body.mediaBase64) {
-        return res.status(400).json({ barcode: null, error: 'Missing image payload.' });
+      const validated = validateBase64MediaPayload({
+        mediaBase64: body.mediaBase64,
+        mimeType: body.mimeType,
+        kind: 'image',
+        maxBytes: 4 * 1024 * 1024,
+      });
+      if (!validated.ok) {
+        return res.status(400).json({ barcode: null, error: validated.error });
       }
       const result = await readBarcodeFromImageWithGemini({
-        mimeType: body.mimeType,
-        mediaBase64: body.mediaBase64,
+        mimeType: validated.mimeType,
+        mediaBase64: validated.cleanBase64,
       });
       return res.json(result);
     } catch (err) {
-      const e = err as Error & { statusCode?: number; status?: number };
-      const status = e.statusCode || e.status || 500;
-      return res.status(status >= 400 && status < 600 ? status : 500).json({
-        barcode: null,
-        error: e.message || 'Could not read barcode from image.',
-      });
+      return sendSafeError(
+        req,
+        res,
+        'read_barcode_image',
+        err,
+        'Could not read barcode from image right now.'
+      );
     }
   });
 
   // Semantic Food Search (Proxies to Supabase Edge Function if deployed, gracefully falls back to attribute search)
   app.post('/api/ai/food-search', async (req, res) => {
-    const query = String(req.body?.query || '').trim();
-    const authHeader = req.headers.authorization;
-    const supabaseUrl = (process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co').replace(/\/+$/, '');
-    const anonKey =
-      process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-      'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF';
+    try {
+      const actor = await enforceAiAccessAndQuota(req, res, {
+        guestAllowed: true,
+        featureName: 'Smart Food Search',
+      });
+      if (!actor) return;
 
-    if (!query) {
-      return res.json({ provider: 'deterministic_semantic', items: GLOBAL_REFERENCE_FOODS.slice(0, 12) });
-    }
+      const query = String(req.body?.query || '').trim().slice(0, 120);
+      const authHeader = req.headers.authorization;
+      const { url: supabaseUrl, publishableKey: anonKey } = getSupabaseConfig();
 
-    // Attempt Supabase Edge Function (pgvector + gte-small) when user JWT is supplied
-    if (authHeader) {
-      try {
-        const edgeRes = await fetch(`${supabaseUrl}/functions/v1/ai-food-search`, {
-          method: 'POST',
-          headers: {
-            Authorization: authHeader,
-            apikey: anonKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ query, limit: 15 }),
-          signal: AbortSignal.timeout(4000),
-        });
-        if (edgeRes.ok) {
-          const data = (await edgeRes.json()) as { results?: unknown[]; provider?: string };
-          if (Array.isArray(data.results) && data.results.length > 0) {
-            return res.json({
-              provider: 'supabase_ai',
-              items: data.results,
-            });
-          }
-        }
-      } catch {
-        // Gracefully fall back to attribute-based semantic search
+      if (!query) {
+        return res.json({ provider: 'deterministic_semantic', items: GLOBAL_REFERENCE_FOODS.slice(0, 12) });
       }
-    }
 
-    const searchRes = await searchGlobalFoods({ query, semantic: true });
-    const ranked = [...searchRes.items].sort(
-      (a, b) => scoreSemanticMatch(b, query) - scoreSemanticMatch(a, query)
-    );
-    return res.json({
-      provider: 'deterministic_semantic',
-      items: ranked.slice(0, 20),
-      sourceMeta: searchRes.sourceMeta,
-    });
+      // Attempt Supabase Edge Function (pgvector + gte-small) when user JWT is supplied
+      if (authHeader && actor.authenticated) {
+        try {
+          const edgeRes = await fetch(`${supabaseUrl}/functions/v1/ai-food-search`, {
+            method: 'POST',
+            headers: {
+              Authorization: authHeader,
+              apikey: anonKey,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query, limit: 15 }),
+            signal: AbortSignal.timeout(4000),
+          });
+          if (edgeRes.ok) {
+            const data = (await edgeRes.json()) as { results?: unknown[]; provider?: string };
+            if (Array.isArray(data.results) && data.results.length > 0) {
+              return res.json({
+                provider: 'supabase_ai',
+                items: data.results,
+              });
+            }
+          }
+        } catch {
+          // Gracefully fall back to attribute-based semantic search
+        }
+      }
+
+      const searchRes = await searchGlobalFoods({ query, semantic: true });
+      const ranked = [...searchRes.items].sort(
+        (a, b) => scoreSemanticMatch(b, query) - scoreSemanticMatch(a, query)
+      );
+      return res.json({
+        provider: 'deterministic_semantic',
+        items: ranked.slice(0, 20),
+        sourceMeta: searchRes.sourceMeta,
+      });
+    } catch (err) {
+      return sendSafeError(req, res, 'ai_food_search', err, 'Food search failed.');
+    }
   });
 
-  // Multimodal AI Meal Photo, Voice & Description Analyzer (Gemini 4)
-  app.post('/api/ai/analyze-meal', async (req, res) => {
+  // Multimodal AI Meal Photo, Voice & Description Analyzer
+  app.post('/api/ai/analyze-meal', mediaJsonParser, async (req, res) => {
     try {
+      const actor = await enforceAiAccessAndQuota(req, res, {
+        guestAllowed: true,
+        featureName: 'AI Meal Scanner',
+      });
+      if (!actor) return;
+
       const body = (req.body || {}) as {
         mode?: string;
         mimeType?: string;
@@ -887,15 +974,50 @@ async function startServer() {
       const mode: AnalyzeMealInputMode =
         body.mode === 'voice' || body.mode === 'text' ? body.mode : 'photo';
 
-      if (mode === 'text' && !(body.promptText || '').trim()) {
+      const promptText = typeof body.promptText === 'string' ? body.promptText.trim().slice(0, 1200) : '';
+
+      if (mode === 'text' && !promptText) {
         return res.status(400).json({ error: 'Please describe what you ate.' });
+      }
+
+      let cleanBase64: string | undefined;
+      let normalizedMime: string | undefined;
+
+      if (mode === 'photo') {
+        const validated = validateBase64MediaPayload({
+          mediaBase64: body.mediaBase64,
+          mimeType: body.mimeType,
+          kind: 'image',
+          maxBytes: 4 * 1024 * 1024,
+        });
+        if (!validated.ok) {
+          return res.status(400).json({ error: validated.error });
+        }
+        cleanBase64 = validated.cleanBase64;
+        normalizedMime = validated.mimeType;
+      } else if (mode === 'voice') {
+        if (body.mediaBase64) {
+          const validated = validateBase64MediaPayload({
+            mediaBase64: body.mediaBase64,
+            mimeType: body.mimeType,
+            kind: 'audio',
+            maxBytes: 5 * 1024 * 1024,
+          });
+          if (!validated.ok) {
+            return res.status(400).json({ error: validated.error });
+          }
+          cleanBase64 = validated.cleanBase64;
+          normalizedMime = validated.mimeType;
+        } else if (!promptText) {
+          return res.status(400).json({ error: 'Please record audio or speak/type your meal description.' });
+        }
       }
 
       const result = await analyzeMealWithGemini({
         mode,
-        mimeType: body.mimeType,
-        mediaBase64: body.mediaBase64,
-        promptText: body.promptText,
+        mimeType: normalizedMime,
+        mediaBase64: cleanBase64,
+        promptText,
         prepStyle: body.prepStyle,
         mealHint: body.mealHint as
           | 'breakfast'
@@ -908,38 +1030,55 @@ async function startServer() {
 
       return res.json(result);
     } catch (err) {
-      const e = err as Error & { statusCode?: number; status?: number };
-      const status = e.statusCode || e.status || 500;
-      return res.status(status >= 400 && status < 600 ? status : 500).json({
-        error: e.message || 'Meal analysis failed.',
-      });
+      return sendSafeError(req, res, 'analyze_meal', err, 'Meal analysis failed. Please try again.');
     }
   });
 
   // Nutrition Facts Label OCR -> Structured Custom Food
-  app.post('/api/ai/scan-label', async (req, res) => {
+  app.post('/api/ai/scan-label', mediaJsonParser, async (req, res) => {
     try {
+      const actor = await enforceAiAccessAndQuota(req, res, {
+        guestAllowed: true,
+        featureName: 'Nutrition Label OCR',
+      });
+      if (!actor) return;
+
       const body = (req.body || {}) as { mimeType?: string; mediaBase64?: string };
-      if (!body.mediaBase64) {
-        return res.status(400).json({ error: 'Missing nutrition label image payload.' });
+      const validated = validateBase64MediaPayload({
+        mediaBase64: body.mediaBase64,
+        mimeType: body.mimeType,
+        kind: 'image',
+        maxBytes: 4 * 1024 * 1024,
+      });
+      if (!validated.ok) {
+        return res.status(400).json({ error: validated.error });
       }
       const result = await parseNutritionLabelWithGemini({
-        mimeType: body.mimeType,
-        mediaBase64: body.mediaBase64,
+        mimeType: validated.mimeType,
+        mediaBase64: validated.cleanBase64,
       });
       return res.json(result);
     } catch (err) {
-      const e = err as Error & { statusCode?: number; status?: number };
-      const status = e.statusCode || e.status || 500;
-      return res.status(status >= 400 && status < 600 ? status : 500).json({
-        error: e.message || 'Failed to read nutrition label.',
-      });
+      return sendSafeError(
+        req,
+        res,
+        'scan_label',
+        err,
+        'Failed to read nutrition label. Please try a clearer photo.'
+      );
     }
   });
 
-  // Interactive Nutrition Coach ("Finish My Day" / Rebalance)
+  // Interactive Nutrition Coach (Strictly authenticated + rate-limited)
   app.post('/api/ai/coach', async (req, res) => {
     try {
+      const actor = await enforceAiAccessAndQuota(req, res, {
+        requireAuth: true,
+        guestAllowed: false,
+        featureName: 'AI Nutrition Coach',
+      });
+      if (!actor) return;
+
       const body = (req.body || {}) as {
         prompt?: string;
         remainingCalories?: number;
@@ -951,7 +1090,11 @@ async function startServer() {
         dietaryPreference?: string;
         restrictions?: string[];
       };
-      const prompt = (body.prompt || '').trim() || 'Suggest high-protein ideas to finish my remaining macros today.';
+      const prompt =
+        String(body.prompt || '')
+          .trim()
+          .slice(0, 600) ||
+        'Suggest high-protein ideas to finish my remaining macros today.';
       const result = await coachChatWithGemini({
         prompt,
         remainingCalories: Number(body.remainingCalories ?? 400),
@@ -961,21 +1104,24 @@ async function startServer() {
         goalCalories: Number(body.goalCalories ?? 2000),
         goalProtein: Number(body.goalProtein ?? 120),
         dietaryPreference: body.dietaryPreference,
-        restrictions: Array.isArray(body.restrictions) ? body.restrictions : [],
+        restrictions: Array.isArray(body.restrictions) ? body.restrictions.slice(0, 12) : [],
       });
       return res.json(result);
     } catch (err) {
-      const e = err as Error & { statusCode?: number; status?: number };
-      const status = e.statusCode || e.status || 500;
-      return res.status(status >= 400 && status < 600 ? status : 500).json({
-        error: e.message || 'Coach request failed.',
-      });
+      return sendSafeError(req, res, 'ai_coach', err, 'Coach request failed. Please try again.');
     }
   });
 
-  // AI Reinforcement Training Event Capture (AI description/output vs User final edited output)
+  // AI Reinforcement Training Event Capture (Strictly authenticated to prevent anonymous data poisoning)
   app.post('/api/ai/training-event', async (req, res) => {
     try {
+      const actor = await resolveRequestActor(req);
+      if (!actor.authenticated || !actor.userId || !actor.token) {
+        return res.status(401).json({
+          error: actor.authError || 'Authentication required to submit meal correction feedback.',
+        });
+      }
+
       const body = (req.body || {}) as {
         inputMode?: AiTrainingInputMode;
         prepStyle?: string;
@@ -1006,48 +1152,32 @@ async function startServer() {
         ? (body.inputMode as AiTrainingInputMode)
         : 'text';
 
-      const authHeader = String(req.headers.authorization || '');
-      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : undefined;
-      let userId: string | null = null;
-
-      if (token) {
-        try {
-          const supabaseUrl = (
-            process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co'
-          ).trim();
-          const anonKey = (
-            process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-            'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF'
-          ).trim();
-          const sb = createClient(supabaseUrl, anonKey, {
-            auth: { persistSession: false, autoRefreshToken: false },
-          });
-          const { data } = await sb.auth.getUser(token);
-          userId = data?.user?.id || null;
-        } catch {
-          userId = null;
-        }
-      }
-
       const result = await recordAiTrainingEvent({
-        userId,
-        userToken: token,
+        userId: actor.userId,
+        userToken: actor.token,
         inputMode,
         prepStyle: body.prepStyle,
-        userInputText: body.userInputText,
-        imageStoragePath: body.imageStoragePath,
-        aiDescription:
-          body.aiDescription || body.aiRawOutput.mealTitle || 'AI Meal Analysis',
+        userInputText: body.userInputText?.slice(0, 800),
+        imageStoragePath: body.imageStoragePath?.slice(0, 300),
+        aiDescription: (
+          body.aiDescription ||
+          body.aiRawOutput.mealTitle ||
+          'AI Meal Analysis'
+        ).slice(0, 300),
         aiRawOutput: body.aiRawOutput,
         userFinalOutput: body.userFinalOutput,
-        userFeedbackNote: body.userFeedbackNote,
+        userFeedbackNote: body.userFeedbackNote?.slice(0, 500),
       });
 
       return res.json(result);
     } catch (err) {
-      return res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to record AI training event.',
-      });
+      return sendSafeError(
+        req,
+        res,
+        'ai_training_event',
+        err,
+        'Failed to record meal feedback.'
+      );
     }
   });
 
@@ -1137,14 +1267,17 @@ async function startServer() {
 
   // Weekly AI Progress Summary (Supabase Edge Function with deterministic fallback)
   app.post('/api/ai/weekly-summary', async (req, res) => {
+    const actor = await enforceAiAccessAndQuota(req, res, {
+      guestAllowed: true,
+      featureName: 'Weekly Nutrition Summary',
+    });
+    if (!actor) return;
+
     const payload = req.body || {};
     const authHeader = req.headers.authorization;
-    const supabaseUrl = (process.env.VITE_SUPABASE_URL || 'https://zzncijlmoskbilxjgiua.supabase.co').replace(/\/+$/, '');
-    const anonKey =
-      process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-      'sb_publishable_1ga_OKeLe193hBppZQjr1Q_NVnAYHcF';
+    const { url: supabaseUrl, publishableKey: anonKey } = getSupabaseConfig();
 
-    if (authHeader) {
+    if (authHeader && actor.authenticated) {
       try {
         const edgeRes = await fetch(`${supabaseUrl}/functions/v1/ai-weekly-summary`, {
           method: 'POST',
@@ -1289,7 +1422,7 @@ async function startServer() {
           try {
             window.opener.postMessage(
               { type: 'CALOTHRIX_SUPABASE_OAUTH', hash: hash, search: search },
-              '*'
+              window.location.origin
             );
             document.getElementById('status').textContent = 'Signed in! Closing window...';
             setTimeout(function () { window.close(); }, 180);
@@ -1305,6 +1438,7 @@ async function startServer() {
   });
 
   app.get('/privacy', (_req, res) => {
+    const supportEmail = getSupportEmail();
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!doctype html>
 <html lang="en">
@@ -1316,23 +1450,32 @@ async function startServer() {
       body { font-family: system-ui, -apple-system, sans-serif; max-width: 720px; margin: 48px auto; padding: 0 20px; color: #f3f4f6; background: #0b0f14; line-height: 1.6; }
       h1 { font-size: 24px; margin-bottom: 8px; }
       h2 { font-size: 16px; margin-top: 24px; }
-      p { color: #94a3b8; font-size: 14px; }
+      p, li { color: #94a3b8; font-size: 14px; }
+      ul { padding-left: 20px; }
     </style>
   </head>
   <body>
     <h1>CALOTHRIX Privacy Policy</h1>
-    <p>Effective Date: November 16, 2026</p>
+    <p>Effective Date: November 22, 2026</p>
     <h2>1. Information We Collect</h2>
-    <p>When you sign in with Google or Email, CALOTHRIX receives your name, email address, and profile avatar solely to authenticate your account and isolate your personal nutrition, macro, and weight tracking records.</p>
-    <h2>2. Data Storage & Security</h2>
-    <p>All food logs, custom foods, goals, and body weight entries are stored privately in Supabase PostgreSQL protected by Row-Level Security so only your authenticated account can read or modify your data.</p>
-    <h2>3. Data Sharing & Deletion</h2>
-    <p>CALOTHRIX does not sell or share your personal data with third parties. For questions or data removal requests, contact darshants6364@gmail.com.</p>
+    <p>When you sign in with Google or Email, CALOTHRIX stores your account identifier, name, email address, and profile avatar to authenticate your account and synchronize your nutrition logs, body metrics, water intake, saved meals, and weight history.</p>
+    <h2>2. AI Processing of Images, Audio &amp; Text</h2>
+    <p>When you explicitly use optional AI logging tools (Meal Photo Scan, Voice Meal Logging, Nutrition Label OCR, Barcode Image Reader, or Weekly Assessment Explanations), the submitted meal photo, voice recording/transcript, nutrition label photo, or text description is transmitted over HTTPS to our server and processed by Google Gemini API to generate structured nutrition estimates.</p>
+    <ul>
+      <li>AI nutrition values are estimates — you can always review and edit every item before saving.</li>
+      <li>Do not include sensitive personal documents or identifying information in meal photos or audio recordings.</li>
+      <li>If you use Guest Mode, diary records are stored locally in your browser until you sign in or clear browser data.</li>
+    </ul>
+    <h2>3. Data Storage &amp; Security</h2>
+    <p>Signed-in user data is stored in Supabase PostgreSQL protected by Row-Level Security so only your authenticated account (and any trainer you explicitly approve) can access your records.</p>
+    <h2>4. Data Export &amp; Account Deletion</h2>
+    <p>CALOTHRIX does not sell your personal health or nutrition data. You can export your complete history (CSV or JSON) or permanently delete your account and stored data directly inside Profile &amp; Settings at any time. For privacy inquiries, contact ${supportEmail}.</p>
   </body>
 </html>`);
   });
 
   app.get('/terms', (_req, res) => {
+    const supportEmail = getSupportEmail();
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!doctype html>
 <html lang="en">
@@ -1349,13 +1492,13 @@ async function startServer() {
   </head>
   <body>
     <h1>CALOTHRIX Terms of Service</h1>
-    <p>Effective Date: November 16, 2026</p>
-    <h2>1. Use of Service</h2>
-    <p>CALOTHRIX provides personal nutrition, macronutrient, and body weight tracking tools for informational purposes. It is not medical advice.</p>
-    <h2>2. User Accounts</h2>
-    <p>Each user is responsible for maintaining access to their authenticated Google or Email account. Your logged entries remain private to your account.</p>
+    <p>Effective Date: November 22, 2026</p>
+    <h2>1. Informational Use Only</h2>
+    <p>CALOTHRIX provides calorie, macronutrient, hydration, and weight tracking tools and mathematical estimates for general wellness and informational purposes. It is not medical, diagnostic, or clinical nutrition advice.</p>
+    <h2>2. User Accounts &amp; Fair Use</h2>
+    <p>You are responsible for keeping your account credentials secure and using AI features fairly within published usage limits. Your logged nutrition entries remain private to your account.</p>
     <h2>3. Contact</h2>
-    <p>For questions about these terms, contact darshants6364@gmail.com.</p>
+    <p>For questions about these terms, contact ${supportEmail}.</p>
   </body>
 </html>`);
   });

@@ -1,12 +1,16 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { Suspense, lazy, memo, useCallback, useMemo, useState } from 'react';
 import {
   Barcode,
+  Bookmark,
   BookmarkPlus,
+  BookOpen,
   Check,
   Copy,
   Download,
+  Heart,
   History,
   Mic,
+  MoreHorizontal,
   Pencil,
   Plus,
   Sparkles,
@@ -22,6 +26,12 @@ import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { FoodLogEntry, MealCategory, MEAL_CATEGORIES } from '../types';
 import { formatReadableDate, formatShortDate } from '../utils/dateUtils';
 import { formatFoodQuantity, getMealBreakdown, round1 } from '../utils/nutritionUtils';
+
+const FoodDatabasePage = lazy(() =>
+  import('./FoodDatabasePage').then((m) => ({ default: m.FoodDatabasePage }))
+);
+
+type FoodLogSubTab = 'diary' | 'database' | 'favorites' | 'custom' | 'saved-meals';
 
 interface FoodLogEntryRowProps {
   entry: FoodLogEntry;
@@ -49,6 +59,7 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
   }) => {
     const [editingQty, setEditingQty] = useState(false);
     const [qtyValue, setQtyValue] = useState(String(entry.quantityGrams));
+    const [menuOpen, setMenuOpen] = useState(false);
 
     const commitQty = () => {
       const parsed = parseFloat(qtyValue);
@@ -61,10 +72,10 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
     };
 
     return (
-      <div className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-stone-50/60 dark:hover:bg-white/[0.02] transition-colors">
-        <div className="min-w-0">
+      <div className="px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 hover:bg-stone-50/60 dark:hover:bg-white/[0.02] transition-colors">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {entry.foodName}
             </span>
             {editingQty ? (
@@ -87,16 +98,16 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
                     }
                   }}
                   aria-label={`Quick edit grams for ${entry.foodName}`}
-                  className="w-20 h-7 px-2 rounded-md border border-[#C8FF00] bg-white dark:bg-[#090A0C] text-xs font-mono-nums text-slate-900 dark:text-slate-100"
+                  className="w-20 h-9 px-2 rounded-lg border border-[#4E6800] dark:border-[#C8FF00] bg-white dark:bg-[#090A0C] text-xs font-mono-nums text-slate-900 dark:text-slate-100"
                 />
-                <span className="text-[11px] text-slate-400">g</span>
+                <span className="text-xs text-slate-400">g</span>
                 <button
                   type="button"
                   onClick={commitQty}
                   aria-label="Save quantity"
-                  className="p-1 rounded text-emerald-600 dark:text-[#C8FF00] hover:bg-black/5 dark:hover:bg-white/10"
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-emerald-600 dark:text-[#C8FF00] hover:bg-black/5 dark:hover:bg-white/10"
                 >
-                  <Check className="w-3.5 h-3.5" />
+                  <Check className="w-4 h-4" />
                 </button>
                 <button
                   type="button"
@@ -105,9 +116,9 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
                     setEditingQty(false);
                   }}
                   aria-label="Cancel quantity edit"
-                  className="p-1 rounded text-slate-400 hover:text-slate-700"
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               </span>
             ) : (
@@ -117,14 +128,14 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
                   setQtyValue(String(entry.quantityGrams));
                   setEditingQty(true);
                 }}
-                title="Click to quickly edit quantity"
-                className="text-xs text-slate-500 dark:text-slate-400 hover:text-[#4E6800] dark:hover:text-[#C8FF00] underline decoration-dotted underline-offset-2 font-mono-nums"
+                title="Tap to edit quantity"
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-[#4E6800] dark:hover:text-[#C8FF00] underline decoration-dotted underline-offset-2 font-mono-nums py-0.5"
               >
                 {formatFoodQuantity(entry.quantityGrams, foodUnit)}
               </button>
             )}
           </div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 tabular-nums">
+          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 tabular-nums">
             <span>P {entry.protein}g</span>
             <span aria-hidden="true">·</span>
             <span>C {entry.carbs}g</span>
@@ -132,72 +143,92 @@ const FoodLogEntryRow = memo<FoodLogEntryRowProps>(
             <span>F {entry.fat}g</span>
             <span aria-hidden="true">·</span>
             <span>Fibre {entry.fibre}g</span>
-            {entry.sourceName && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="text-[11px] text-slate-400">{entry.sourceName}</span>
-              </>
-            )}
           </div>
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-1.5 shrink-0">
-          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 font-mono-nums mr-1.5">
+          <span className="text-sm font-bold text-slate-900 dark:text-slate-100 font-mono-nums mr-1">
             {entry.calories} kcal
           </span>
 
-          <select
-            aria-label={`Move ${entry.foodName} to meal`}
-            value={entry.mealType}
-            onChange={(e) => onMealChange(entry, e.target.value as MealCategory)}
-            className="h-9 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
-          >
-            {MEAL_CATEGORIES.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.shortLabel}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1 relative">
+            <button
+              type="button"
+              onClick={() => onEdit(entry)}
+              title="Edit entry"
+              aria-label={`Edit ${entry.foodName}`}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onDownloadSticker(entry, mealShortLabel)}
-            title="Download transparent macro sticker"
-            aria-label={`Download transparent sticker for ${entry.foodName}`}
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-slate-500 hover:text-[#4E6800] dark:hover:text-[#C8FF00] hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
-          >
-            <Download className="w-4 h-4" />
-          </button>
+            <button
+              type="button"
+              onClick={() => onDelete(entry)}
+              title="Delete entry"
+              aria-label={`Delete ${entry.foodName}`}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onEdit(entry)}
-            title="Edit entry"
-            aria-label={`Edit ${entry.foodName}`}
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={`More actions for ${entry.foodName}`}
+              aria-expanded={menuOpen}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
 
-          <button
-            type="button"
-            onClick={() => onDuplicate(entry)}
-            title="Duplicate entry"
-            aria-label={`Duplicate ${entry.foodName}`}
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-stone-100 dark:hover:bg-[#14161C] transition-colors"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onDelete(entry)}
-            title="Delete entry"
-            aria-label={`Delete ${entry.foodName}`}
-            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-12 z-20 w-48 rounded-xl border border-black/12 dark:border-white/15 bg-white dark:bg-[#151820] shadow-xl p-1.5 space-y-1">
+                <div className="px-2 py-1">
+                  <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">
+                    Move to meal
+                  </label>
+                  <select
+                    aria-label={`Move ${entry.foodName} to meal`}
+                    value={entry.mealType}
+                    onChange={(e) => {
+                      onMealChange(entry, e.target.value as MealCategory);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full h-9 px-2 rounded-lg border border-black/10 dark:border-white/15 bg-[#F4F3EF] dark:bg-[#090A0C] text-xs text-slate-800 dark:text-slate-200"
+                  >
+                    {MEAL_CATEGORIES.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.shortLabel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDuplicate(entry);
+                    setMenuOpen(false);
+                  }}
+                  className="w-full min-h-[38px] px-2.5 rounded-lg text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 inline-flex items-center gap-2"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  Duplicate entry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDownloadSticker(entry, mealShortLabel);
+                    setMenuOpen(false);
+                  }}
+                  className="w-full min-h-[38px] px-2.5 rounded-lg text-left text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 inline-flex items-center gap-2"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download PNG sticker
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -224,43 +255,34 @@ export const FoodLogPage: React.FC = () => {
     copyMealFromPreviousDay,
     savedMeals,
     saveMealCombo,
+    deleteSavedMealCombo,
     logSavedMealCombo,
+    toggleFavoriteFood,
+    deleteCustomFood,
     notify,
     allFoods,
   } = useMacroLogStore();
 
+  const [subTab, setSubTab] = useState<FoodLogSubTab>('diary');
   const [pendingDelete, setPendingDelete] = useState<FoodLogEntry | null>(null);
   const [savingComboMeal, setSavingComboMeal] = useState<MealCategory | null>(null);
   const [comboNameInput, setComboNameInput] = useState('');
+  const [comboTargetMeal, setComboTargetMeal] = useState<MealCategory>('lunch');
 
   const foodById = useMemo(() => new Map(allFoods.map((f) => [f.id, f])), [allFoods]);
+
+  const favoriteFoods = useMemo(
+    () =>
+      state.favoriteFoodIds
+        .map((id) => foodById.get(id))
+        .filter((f): f is NonNullable<typeof f> => Boolean(f)),
+    [foodById, state.favoriteFoodIds]
+  );
 
   const mealBreakdown = useMemo(
     () => getMealBreakdown(selectedDateEntries),
     [selectedDateEntries]
   );
-
-  const aiPhotoBatchesByMeal = useMemo(() => {
-    const out = {} as Record<MealCategory, FoodLogEntry[][]>;
-    for (const meal of MEAL_CATEGORIES) {
-      const items = mealBreakdown[meal.id].items;
-      const aiBatchMap = new Map<string, FoodLogEntry[]>();
-      for (const entry of items) {
-        if (entry.sourceName === 'AI Photo Scan' || entry.sourceName === 'AI Photo Re-log') {
-          const key = entry.createdAt || 'ai-photo';
-          const group = aiBatchMap.get(key) || [];
-          group.push(entry);
-          aiBatchMap.set(key, group);
-        }
-      }
-      const batches: FoodLogEntry[][] = [];
-      aiBatchMap.forEach((group) => {
-        if (group.length >= 2) batches.push(group);
-      });
-      out[meal.id] = batches;
-    }
-    return out;
-  }, [mealBreakdown]);
 
   const handleMealChange = useCallback(
     (entry: FoodLogEntry, nextMeal: MealCategory) => {
@@ -315,51 +337,23 @@ export const FoodLogPage: React.FC = () => {
     [state.settings.foodUnit]
   );
 
-  const openAiPhotoBatchSticker = (
-    mealLabel: string,
-    batchItems: FoodLogEntry[]
-  ) => {
-    const batchTotals = batchItems.reduce(
-      (acc, item) => ({
-        calories: acc.calories + (item.calories || 0),
-        protein: acc.protein + (item.protein || 0),
-        carbs: acc.carbs + (item.carbs || 0),
-        fat: acc.fat + (item.fat || 0),
-        fibre: acc.fibre + (item.fibre || 0),
-      }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 }
-    );
-
-    const itemNames = batchItems.map((item) => item.foodName).filter(Boolean);
-    const titleSummary =
-      itemNames.length > 0
-        ? itemNames.slice(0, 3).join(', ') + (itemNames.length > 3 ? ` +${itemNames.length - 3}` : '')
-        : `${mealLabel} · AI Photo Scan`;
-
-    openShareStudio({
-      mode: 'food',
-      foodPayload: {
-        title: titleSummary,
-        subtitle: `${batchItems.length} items`,
-        calories: Math.round(batchTotals.calories),
-        protein: round1(batchTotals.protein),
-        carbs: round1(batchTotals.carbs),
-        fat: round1(batchTotals.fat),
-        fibre: round1(batchTotals.fibre),
-        dateLabel: formatShortDate(selectedDate),
-      },
-    });
-  };
+  const subTabs: { id: FoodLogSubTab; label: string; count?: number }[] = [
+    { id: 'diary', label: 'Daily Log' },
+    { id: 'database', label: 'Food Database' },
+    { id: 'favorites', label: 'Favorites', count: favoriteFoods.length },
+    { id: 'custom', label: 'Custom Foods', count: state.customFoods.length },
+    { id: 'saved-meals', label: 'Saved Meals', count: savedMeals.length },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Daily Food Diary · {formatReadableDate(selectedDate)}
+            {formatReadableDate(selectedDate)}
           </p>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          <h1 className="mt-0.5 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             Food Log
           </h1>
         </div>
@@ -368,17 +362,16 @@ export const FoodLogPage: React.FC = () => {
           <button
             type="button"
             onClick={() => openMealScannerModal({ mode: 'photo', date: selectedDate })}
-            title="Log with Photo, Voice, Description, or Label OCR"
-            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs sm:text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 whitespace-nowrap"
           >
             <Sparkles className="w-4 h-4" />
-            <span>AI Meal Logger</span>
+            <span>AI Logger</span>
           </button>
 
           <button
             type="button"
             onClick={() => openBarcodeScannerModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <Barcode className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
             <span>Barcode</span>
@@ -387,296 +380,518 @@ export const FoodLogPage: React.FC = () => {
           <button
             type="button"
             onClick={() => openAddFoodModal({ date: selectedDate })}
-            className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#111317] text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <Plus className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-            <span>Search Food</span>
+            <span>Add Food</span>
           </button>
         </div>
       </section>
 
-      <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+      {/* Integrated Food Log Sub-Navigation: Diary | Food Database | Favorites | Custom Foods | Saved Meals */}
+      <nav
+        aria-label="Food Log sections"
+        className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1"
+      >
+        {subTabs.map((tab) => {
+          const active = subTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSubTab(tab.id)}
+              className={`min-h-[40px] px-3.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors inline-flex items-center gap-1.5 shrink-0 ${
+                active
+                  ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black'
+                  : 'bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 text-slate-600 dark:text-slate-300 hover:border-[#4E6800] dark:hover:border-[#C8FF00]'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {typeof tab.count === 'number' && tab.count > 0 && (
+                <span
+                  className={`text-[10px] font-mono-nums ${
+                    active ? 'opacity-80' : 'text-slate-400'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
 
-      {/* Full-Day Nutritional Totals Bar */}
-      <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5">
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-          <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Calories</div>
-            <div className="mt-0.5 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
-              {selectedDateTotals.calories.toLocaleString()}{' '}
-              <span className="text-xs font-normal text-slate-400">
-                / {state.goals.calories}
-              </span>
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Protein</div>
-            <div className="mt-0.5 text-lg font-bold font-mono-nums text-lime-700 dark:text-lime-400">
-              {selectedDateTotals.protein}g{' '}
-              <span className="text-xs font-normal text-slate-400">/ {state.goals.protein}g</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Carbs</div>
-            <div className="mt-0.5 text-lg font-bold font-mono-nums text-amber-700 dark:text-amber-400">
-              {selectedDateTotals.carbs}g{' '}
-              <span className="text-xs font-normal text-slate-400">/ {state.goals.carbs}g</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Fat</div>
-            <div className="mt-0.5 text-lg font-bold font-mono-nums text-indigo-700 dark:text-indigo-400">
-              {selectedDateTotals.fat}g{' '}
-              <span className="text-xs font-normal text-slate-400">/ {state.goals.fat}g</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Fibre</div>
-            <div className="mt-0.5 text-lg font-bold font-mono-nums text-teal-700 dark:text-teal-400">
-              {selectedDateTotals.fibre}g{' '}
-              <span className="text-xs font-normal text-slate-400">/ {state.goals.fibre}g</span>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* SUB-TAB: FOOD DATABASE */}
+      {subTab === 'database' && (
+        <Suspense
+          fallback={
+            <div className="h-48 rounded-2xl bg-black/5 dark:bg-white/5 animate-pulse" />
+          }
+        >
+          <FoodDatabasePage />
+        </Suspense>
+      )}
 
-      {/* Instant 1-line Natural Language Quick Log */}
-      <QuickAiLogBar targetDate={selectedDate} />
-
-      {/* Empty Day Notice */}
-      {selectedDateEntries.length === 0 && (
-        <section className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-8 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#14161C] text-slate-500 dark:text-slate-300 flex items-center justify-center mx-auto">
-            <Utensils className="w-6 h-6" />
-          </div>
-          <h2 className="mt-3 text-base font-semibold text-slate-900 dark:text-slate-100">
-            No food logged for {formatReadableDate(selectedDate)}
-          </h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            Each calendar day starts clean. Add your first meal to immediately update your calories and macros.
-          </p>
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+      {/* SUB-TAB: FAVORITES */}
+      {subTab === 'favorites' && (
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-black/8 dark:border-white/10 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                Favorite Foods
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Tap any food to log it for {formatShortDate(selectedDate)}
+              </p>
+            </div>
             <button
               type="button"
-              onClick={() => openAddFoodModal({ date: selectedDate })}
-              className="min-h-[44px] px-5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold inline-flex items-center gap-2"
+              onClick={() => setSubTab('database')}
+              className="min-h-[38px] px-3 rounded-xl border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5"
             >
-              <Plus className="w-4 h-4" />
-              Log First Meal
-            </button>
-            <button
-              type="button"
-              onClick={() => openMealScannerModal({ mode: 'voice', date: selectedDate })}
-              className="min-h-[44px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-sm font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-2"
-            >
-              <Mic className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
-              Log with Voice or Photo
+              <BookOpen className="w-3.5 h-3.5" />
+              Browse Database
             </button>
           </div>
+          {favoriteFoods.length === 0 ? (
+            <div className="p-8 text-center">
+              <Heart className="w-7 h-7 text-slate-400 mx-auto" />
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                No favorites saved yet
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Star your frequent meals in Food Database or Add Food for one-tap logging.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-black/6 dark:divide-white/8">
+              {favoriteFoods.map((food) => (
+                <div
+                  key={food.id}
+                  className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      {food.name}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
+                      {food.servingName} ({food.servingWeightGrams}g) · {food.calories} kcal · P {food.protein}g · C {food.carbs}g · F {food.fat}g
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openAddFoodModal({ food, date: selectedDate })}
+                      className="min-h-[40px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Log
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleFavoriteFood(food.id)}
+                      aria-label={`Remove ${food.name} from favorites`}
+                      className="min-h-[40px] min-w-[40px] rounded-xl text-rose-500 hover:bg-rose-500/10 flex items-center justify-center"
+                    >
+                      <Heart className="w-4 h-4 fill-current" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
-      {/* Meal Sections */}
-      <div className="space-y-4">
-        {MEAL_CATEGORIES.map((meal) => {
-          const { items, totals } = mealBreakdown[meal.id];
-          const aiPhotoBatches = aiPhotoBatchesByMeal[meal.id];
-
-          return (
-            <section
-              key={meal.id}
-              className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl"
+      {/* SUB-TAB: CUSTOM FOODS */}
+      {subTab === 'custom' && (
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-black/8 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                My Custom Foods
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Homemade recipes and personal foods synced to your account
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSubTab('database')}
+              className="min-h-[40px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1.5"
             >
-              {/* Meal Header */}
-              <div className="px-5 py-4 border-b border-stone-100 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                    {meal.label}
-                  </h2>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                    {totals.calories} kcal · P {totals.protein}g · C {totals.carbs}g · F {totals.fat}g · Fibre {totals.fibre}g
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  {savedMeals.length > 0 && (
-                    <select
-                      aria-label={`Log saved meal to ${meal.shortLabel}`}
-                      value=""
-                      onChange={(e) => {
-                        const found = savedMeals.find((c) => c.id === e.target.value);
-                        if (found) logSavedMealCombo(found, meal.id, selectedDate);
-                      }}
-                      className="h-[38px] px-2.5 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50 dark:bg-[#090A0C] text-xs font-medium text-slate-700 dark:text-slate-200"
+              <Plus className="w-3.5 h-3.5" />
+              Create Custom Food
+            </button>
+          </div>
+          {state.customFoods.length === 0 ? (
+            <div className="p-8 text-center">
+              <Utensils className="w-7 h-7 text-slate-400 mx-auto" />
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                No custom foods yet
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Add homemade dishes or packaged items in Food Database to reuse anytime.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-black/6 dark:divide-white/8">
+              {state.customFoods.map((food) => (
+                <div
+                  key={food.id}
+                  className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      {food.name}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
+                      {food.servingName} ({food.servingWeightGrams}g) · {food.calories} kcal · P {food.protein}g · C {food.carbs}g · F {food.fat}g
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openAddFoodModal({ food, date: selectedDate })}
+                      className="min-h-[40px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1"
                     >
-                      <option value="">+ Saved Meal...</option>
-                      {savedMeals.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.totalCalories} kcal)
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                      <Plus className="w-3.5 h-3.5" />
+                      Log
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteCustomFood(food.id)}
+                      aria-label={`Delete custom food ${food.name}`}
+                      className="min-h-[40px] min-w-[40px] rounded-xl text-slate-500 hover:text-red-500 hover:bg-red-500/10 flex items-center justify-center"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
-                  {items.length >= 2 && (
+      {/* SUB-TAB: SAVED MEALS */}
+      {subTab === 'saved-meals' && (
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-black/8 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                Saved Meal Combos
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Log multi-item meals in one tap · Synced across devices
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="saved-meal-target" className="text-xs text-slate-500 dark:text-slate-400">
+                Log into:
+              </label>
+              <select
+                id="saved-meal-target"
+                value={comboTargetMeal}
+                onChange={(e) => setComboTargetMeal(e.target.value as MealCategory)}
+                className="h-10 px-3 rounded-xl border border-black/10 dark:border-white/12 bg-[#F4F3EF] dark:bg-[#090A0C] text-xs font-semibold text-slate-800 dark:text-slate-100"
+              >
+                {MEAL_CATEGORIES.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.shortLabel}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {savedMeals.length === 0 ? (
+            <div className="p-8 text-center">
+              <Bookmark className="w-7 h-7 text-slate-400 mx-auto" />
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                No saved meals yet
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Log 2 or more items in any meal on Daily Log and tap &ldquo;Save as Meal&rdquo; to create a reusable combo.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-black/6 dark:divide-white/8">
+              {savedMeals.map((combo) => (
+                <div
+                  key={combo.id}
+                  className="px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      {combo.name}
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 font-mono-nums">
+                      {combo.items.length} items · {combo.totalCalories} kcal · P {combo.totalProtein}g · C {combo.totalCarbs}g · F {combo.totalFat}g
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-400 truncate">
+                      {combo.items.map((i) => i.foodName).join(', ')}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
-                        setSavingComboMeal(meal.id);
-                        setComboNameInput(`${meal.shortLabel} Combo`);
+                        logSavedMealCombo(combo, comboTargetMeal, selectedDate);
+                        setSubTab('diary');
                       }}
-                      className="min-h-[38px] px-3 rounded-xl border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-[#C8FF00] inline-flex items-center gap-1.5 whitespace-nowrap"
+                      className="min-h-[42px] px-4 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1.5"
                     >
-                      <BookmarkPlus className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
-                      Save as Meal
+                      <Plus className="w-3.5 h-3.5" />
+                      Log Meal
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => deleteSavedMealCombo(combo.id)}
+                      aria-label={`Delete saved meal ${combo.name}`}
+                      className="min-h-[42px] min-w-[42px] rounded-xl text-slate-500 hover:text-red-500 hover:bg-red-500/10 flex items-center justify-center"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
-                  <button
-                    type="button"
-                    onClick={() => openAddFoodModal({ meal: meal.id, date: selectedDate })}
-                    className="min-h-[38px] px-3.5 rounded-xl bg-stone-100 dark:bg-[#14161C] border border-black/8 dark:border-white/12 text-xs font-semibold text-slate-800 dark:text-slate-100 hover:border-[#C8FF00] transition-colors inline-flex items-center gap-1.5 whitespace-nowrap"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add to {meal.shortLabel}
-                  </button>
+      {/* SUB-TAB: DAILY DIARY */}
+      {subTab === 'diary' && (
+        <>
+          <DateStrip selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+
+          {/* Full-Day Nutritional Totals Bar */}
+          <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Calories</div>
+                <div className="mt-0.5 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
+                  {selectedDateTotals.calories.toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-slate-400">/ {state.goals.calories}</span>
                 </div>
               </div>
-
-              {savingComboMeal === meal.id && (
-                <div className="px-5 py-3 bg-[#C8FF00]/10 border-b border-[#C8FF00]/25 flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    value={comboNameInput}
-                    onChange={(e) => setComboNameInput(e.target.value)}
-                    placeholder="Combo name (e.g., My Morning Breakfast)"
-                    className="flex-1 min-w-[200px] h-9 px-3 rounded-lg border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      saveMealCombo(
-                        comboNameInput,
-                        meal.id,
-                        items.map((it) => ({
-                          foodId: it.foodId,
-                          foodName: it.foodName,
-                          quantityGrams: it.quantityGrams,
-                          unitLabel: it.unitLabel || it.servingName,
-                          calories: it.calories,
-                          protein: it.protein,
-                          carbs: it.carbs,
-                          fat: it.fat,
-                          fibre: it.fibre,
-                        }))
-                      );
-                      setSavingComboMeal(null);
-                    }}
-                    className="h-9 px-3.5 rounded-lg bg-[#C8FF00] text-black text-xs font-bold"
-                  >
-                    Save Combo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSavingComboMeal(null)}
-                    className="h-9 px-2.5 text-xs text-slate-500"
-                  >
-                    Cancel
-                  </button>
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Protein</div>
+                <div className="mt-0.5 text-lg font-bold font-mono-nums text-[#4E6800] dark:text-[#C8FF00]">
+                  {selectedDateTotals.protein}g{' '}
+                  <span className="text-xs font-normal text-slate-400">/ {state.goals.protein}g</span>
                 </div>
-              )}
-
-              {/* Meal Items */}
-              {items.length === 0 ? (
-                <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 dark:text-slate-500">
-                  <span>Nothing logged under {meal.label} yet.</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const count = copyMealFromPreviousDay(meal.id, selectedDate);
-                      if (count === 0) {
-                        notify(`No ${meal.shortLabel.toLowerCase()} entries found from yesterday`, 'info');
-                      }
-                    }}
-                    className="min-h-[32px] px-2.5 rounded-lg border border-black/10 dark:border-white/12 text-xs font-medium text-slate-600 dark:text-slate-300 hover:border-[#C8FF00] inline-flex items-center gap-1.5"
-                  >
-                    <History className="w-3.5 h-3.5" />
-                    Copy yesterday
-                  </button>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Carbs</div>
+                <div className="mt-0.5 text-lg font-bold font-mono-nums text-amber-700 dark:text-amber-400">
+                  {selectedDateTotals.carbs}g{' '}
+                  <span className="text-xs font-normal text-slate-400">/ {state.goals.carbs}g</span>
                 </div>
-              ) : (
-                <div className="divide-y divide-stone-100 dark:divide-white/10">
-                    {items.map((entry) => (
-                      <FoodLogEntryRow
-                        key={entry.id}
-                        entry={entry}
-                        mealShortLabel={meal.shortLabel}
-                        foodUnit={state.settings.foodUnit}
-                        onMealChange={handleMealChange}
-                        onQuickQuantityChange={quickUpdateFoodEntryQuantity}
-                        onDownloadSticker={openFoodItemSticker}
-                        onEdit={openEditFoodModal}
-                        onDuplicate={handleDuplicate}
-                        onDelete={setPendingDelete}
-                      />
-                    ))}
-
-                    {aiPhotoBatches.map((batch, idx) => {
-                      const batchTotals = batch.reduce(
-                        (acc, item) => ({
-                          calories: acc.calories + (item.calories || 0),
-                          protein: round1(acc.protein + (item.protein || 0)),
-                          carbs: round1(acc.carbs + (item.carbs || 0)),
-                          fat: round1(acc.fat + (item.fat || 0)),
-                        }),
-                        { calories: 0, protein: 0, carbs: 0, fat: 0 }
-                      );
-                      const batchNames = batch
-                        .map((item) => item.foodName)
-                        .filter(Boolean)
-                        .join(', ');
-
-                      return (
-                        <div
-                          key={batch[0]?.createdAt || `ai-batch-${idx}`}
-                          className="px-5 py-3 bg-lime-500/8 dark:bg-[#C8FF00]/6 flex flex-wrap items-center justify-between gap-2.5 last:rounded-b-2xl"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#4E6800] dark:text-[#C8FF00]">
-                              <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                              <span>
-                                AI Photo Scan · {batch.length} items
-                              </span>
-                            </div>
-                            <div
-                              title={batchNames}
-                              className="text-xs font-semibold text-slate-900 dark:text-slate-100 mt-0.5 line-clamp-2"
-                            >
-                              {batchNames}
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums mt-0.5">
-                              {Math.round(batchTotals.calories)} kcal · P {batchTotals.protein}g · C{' '}
-                              {batchTotals.carbs}g · F {batchTotals.fat}g
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => openAiPhotoBatchSticker(meal.shortLabel, batch)}
-                            className="min-h-[38px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>Full Macros PNG</span>
-                          </button>
-                        </div>
-                      );
-                    })}
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Fat</div>
+                <div className="mt-0.5 text-lg font-bold font-mono-nums text-indigo-700 dark:text-indigo-400">
+                  {selectedDateTotals.fat}g{' '}
+                  <span className="text-xs font-normal text-slate-400">/ {state.goals.fat}g</span>
                 </div>
-              )}
+              </div>
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">Fibre</div>
+                <div className="mt-0.5 text-lg font-bold font-mono-nums text-teal-700 dark:text-teal-400">
+                  {selectedDateTotals.fibre}g{' '}
+                  <span className="text-xs font-normal text-slate-400">/ {state.goals.fibre}g</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Instant 1-line Natural Language Quick Log */}
+          <QuickAiLogBar targetDate={selectedDate} />
+
+          {/* Empty Day Notice */}
+          {selectedDateEntries.length === 0 && (
+            <section className="bg-white dark:bg-[#111317] border border-dashed border-stone-300 dark:border-white/15 rounded-2xl p-7 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-stone-100 dark:bg-[#14161C] text-slate-500 dark:text-slate-300 flex items-center justify-center mx-auto">
+                <Utensils className="w-6 h-6" />
+              </div>
+              <h2 className="mt-3 text-base font-semibold text-slate-900 dark:text-slate-100">
+                No food logged for {formatReadableDate(selectedDate)}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                Search Indian &amp; global foods, scan a photo or barcode, or describe what you ate.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => openAddFoodModal({ date: selectedDate })}
+                  className="min-h-[44px] px-5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold inline-flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Log First Meal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openMealScannerModal({ mode: 'voice', date: selectedDate })}
+                  className="min-h-[44px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-sm font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-2"
+                >
+                  <Mic className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+                  Voice or Photo
+                </button>
+              </div>
             </section>
-          );
-        })}
-      </div>
+          )}
+
+          {/* Meal Sections */}
+          <div className="space-y-4">
+            {MEAL_CATEGORIES.map((meal) => {
+              const { items, totals } = mealBreakdown[meal.id];
+
+              return (
+                <section
+                  key={meal.id}
+                  className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl"
+                >
+                  <div className="px-4 sm:px-5 py-4 border-b border-stone-100 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                        {meal.label}
+                      </h2>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                        {totals.calories} kcal · P {totals.protein}g · C {totals.carbs}g · F {totals.fat}g · Fibre {totals.fibre}g
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {savedMeals.length > 0 && (
+                        <select
+                          aria-label={`Log saved meal to ${meal.shortLabel}`}
+                          value=""
+                          onChange={(e) => {
+                            const found = savedMeals.find((c) => c.id === e.target.value);
+                            if (found) logSavedMealCombo(found, meal.id, selectedDate);
+                          }}
+                          className="h-[40px] px-2.5 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50 dark:bg-[#090A0C] text-xs font-medium text-slate-700 dark:text-slate-200"
+                        >
+                          <option value="">+ Saved Meal</option>
+                          {savedMeals.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.totalCalories} kcal)
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {items.length >= 2 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSavingComboMeal(meal.id);
+                            setComboNameInput(`${meal.shortLabel} Combo`);
+                          }}
+                          className="min-h-[40px] px-3 rounded-xl border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-[#4E6800] dark:hover:border-[#C8FF00] inline-flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          <BookmarkPlus className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
+                          Save Meal
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => openAddFoodModal({ meal: meal.id, date: selectedDate })}
+                        className="min-h-[40px] px-3.5 rounded-xl bg-stone-100 dark:bg-[#14161C] border border-black/8 dark:border-white/12 text-xs font-bold text-slate-800 dark:text-slate-100 hover:border-[#4E6800] dark:hover:border-[#C8FF00] transition-colors inline-flex items-center gap-1.5 whitespace-nowrap"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  {savingComboMeal === meal.id && (
+                    <div className="px-4 sm:px-5 py-3 bg-[#C8FF00]/10 border-b border-[#C8FF00]/25 flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={comboNameInput}
+                        onChange={(e) => setComboNameInput(e.target.value)}
+                        placeholder="Combo name (e.g., High-Protein Breakfast)"
+                        className="flex-1 min-w-[200px] h-10 px-3 rounded-xl border border-black/10 dark:border-white/15 bg-white dark:bg-[#090A0C] text-xs text-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          saveMealCombo(
+                            comboNameInput,
+                            meal.id,
+                            items.map((it) => ({
+                              foodId: it.foodId,
+                              foodName: it.foodName,
+                              quantityGrams: it.quantityGrams,
+                              unitLabel: it.unitLabel || it.servingName,
+                              calories: it.calories,
+                              protein: it.protein,
+                              carbs: it.carbs,
+                              fat: it.fat,
+                              fibre: it.fibre,
+                            }))
+                          );
+                          setSavingComboMeal(null);
+                        }}
+                        className="h-10 px-4 rounded-xl bg-[#C8FF00] text-black text-xs font-bold"
+                      >
+                        Save Combo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSavingComboMeal(null)}
+                        className="h-10 px-3 text-xs font-medium text-slate-500"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+
+                  {items.length === 0 ? (
+                    <div className="px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span>Nothing logged under {meal.label} yet.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const count = copyMealFromPreviousDay(meal.id, selectedDate);
+                          if (count === 0) {
+                            notify(`No ${meal.shortLabel.toLowerCase()} entries found from yesterday`, 'info');
+                          }
+                        }}
+                        className="min-h-[36px] px-3 rounded-lg border border-black/10 dark:border-white/12 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-[#4E6800] dark:hover:border-[#C8FF00] inline-flex items-center gap-1.5"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                        Copy yesterday
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-stone-100 dark:divide-white/10">
+                      {items.map((entry) => (
+                        <FoodLogEntryRow
+                          key={entry.id}
+                          entry={entry}
+                          mealShortLabel={meal.shortLabel}
+                          foodUnit={state.settings.foodUnit}
+                          onMealChange={handleMealChange}
+                          onQuickQuantityChange={quickUpdateFoodEntryQuantity}
+                          onDownloadSticker={openFoodItemSticker}
+                          onEdit={openEditFoodModal}
+                          onDuplicate={handleDuplicate}
+                          onDelete={setPendingDelete}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <ConfirmDialog
         isOpen={pendingDelete !== null}

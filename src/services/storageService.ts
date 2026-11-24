@@ -24,13 +24,13 @@ class LocalStorageRepository implements StorageRepository {
         localStorage.getItem(STORAGE_KEY) ||
         LEGACY_KEYS.map((k) => localStorage.getItem(k)).find(Boolean);
       if (!raw) {
-        const initial = createDemoState();
+        const initial = createEmptyState();
         this.saveState(initial);
         return initial;
       }
       const parsed = JSON.parse(raw) as MacroLogPersistedState;
       if (!parsed || typeof parsed !== 'object' || !parsed.profile || !parsed.goals) {
-        const fallback = createDemoState();
+        const fallback = createEmptyState();
         this.saveState(fallback);
         return fallback;
       }
@@ -39,7 +39,7 @@ class LocalStorageRepository implements StorageRepository {
       }
       return parsed;
     } catch {
-      return createDemoState();
+      return createEmptyState();
     }
   }
 

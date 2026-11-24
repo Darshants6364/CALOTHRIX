@@ -141,11 +141,12 @@ export async function readBarcodeImageApi(dataUrl: string): Promise<{
   error?: string;
 }> {
   try {
+    const authHeaders = await getAccessTokenHeader();
     const mimeMatch = dataUrl.match(/^data:([^;]+);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const res = await fetch('/api/foods/read-barcode-image', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({
         mimeType,
         mediaBase64: dataUrl,

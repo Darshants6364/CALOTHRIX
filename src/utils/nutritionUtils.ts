@@ -1,14 +1,14 @@
-import {
+import { MEAL_CATEGORIES } from '../types/index.ts';
+import type {
   FoodItem,
   FoodLogEntry,
   MacroNutrients,
   MealCategory,
-  MEAL_CATEGORIES,
   NutritionGoals,
   WeightEntry,
-} from '../types';
-import { getMondayToSundayWeek, parseLocalDateKey } from './dateUtils';
-import { searchFoodsIntelligent } from './foodSearchEngine';
+} from '../types/index.ts';
+import { getMondayToSundayWeek, parseLocalDateKey } from './dateUtils.ts';
+import { searchFoodsIntelligent } from './foodSearchEngine.ts';
 
 export function round1(val: number): number {
   return Math.round(val * 10) / 10;
