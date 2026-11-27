@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { DEFAULT_FOODS } from '../data/defaultFoods';
-import { createEmptyState } from '../data/demoData';
+import { createDemoState, createEmptyState, seedDemoAuxiliaryCaches } from '../data/demoData';
 import {
   supabase,
   SUPABASE_PUBLISHABLE_KEY,
@@ -836,27 +836,38 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         let nextState = result.state;
         let mergedGuestCount = 0;
 
-        // Non-destructive Guest-to-Account merge: preserve both existing cloud logs AND guest logs
+        // Non-destructive Guest-to-Account merge: preserve user-created guest logs without importing synthetic demo records
         if (wasGuest && !result.needsSchemaSetup) {
           const guestState = storageService.loadState();
+          const isSyntheticDemo = Boolean(guestState.isDemoData);
+          const userGuestFoodEntries = guestState.foodEntries.filter(
+            (e) => !e.id.startsWith('demo-')
+          );
+          const userGuestCustomFoods = guestState.customFoods.filter(
+            (f) => !f.id.startsWith('demo-')
+          );
+          const userGuestWeights = guestState.weightEntries.filter(
+            (w) => !w.id.startsWith('demo-')
+          );
+
           const hasGuestRecords =
-            guestState.foodEntries.length > 0 ||
-            guestState.customFoods.length > 0 ||
-            guestState.weightEntries.length > 0;
+            userGuestFoodEntries.length > 0 ||
+            userGuestCustomFoods.length > 0 ||
+            userGuestWeights.length > 0;
 
           if (hasGuestRecords) {
             const existingFoodIds = new Set(nextState.foodEntries.map((e) => e.id));
-            const newGuestFoodEntries = guestState.foodEntries
+            const newGuestFoodEntries = userGuestFoodEntries
               .filter((e) => !existingFoodIds.has(e.id))
               .map((e) => ({ ...e, userId: user.id }));
 
             const existingCustomIds = new Set(nextState.customFoods.map((f) => f.id));
-            const newGuestCustomFoods = guestState.customFoods
+            const newGuestCustomFoods = userGuestCustomFoods
               .filter((f) => !existingCustomIds.has(f.id))
               .map((f) => ({ ...f, userId: user.id }));
 
             const existingWeightIds = new Set(nextState.weightEntries.map((w) => w.id));
-            const newGuestWeights = guestState.weightEntries
+            const newGuestWeights = userGuestWeights
               .filter((w) => !existingWeightIds.has(w.id))
               .map((w) => ({ ...w, userId: user.id }));
 
@@ -864,12 +875,16 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               newGuestFoodEntries.length + newGuestCustomFoods.length + newGuestWeights.length;
 
             if (mergedGuestCount > 0) {
-              const mergedFavs = Array.from(
-                new Set([...nextState.favoriteFoodIds, ...guestState.favoriteFoodIds])
-              );
-              const mergedRecents = Array.from(
-                new Set([...guestState.recentFoodIds, ...nextState.recentFoodIds])
-              ).slice(0, 12);
+              const mergedFavs = isSyntheticDemo
+                ? nextState.favoriteFoodIds
+                : Array.from(
+                    new Set([...nextState.favoriteFoodIds, ...guestState.favoriteFoodIds])
+                  );
+              const mergedRecents = isSyntheticDemo
+                ? nextState.recentFoodIds
+                : Array.from(
+                    new Set([...guestState.recentFoodIds, ...nextState.recentFoodIds])
+                  ).slice(0, 12);
 
               const migratedState: MacroLogPersistedState = {
                 ...nextState,
@@ -879,7 +894,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 favoriteFoodIds: mergedFavs,
                 recentFoodIds: mergedRecents,
                 goals:
-                  nextState.goals.calories === 0 && guestState.goals.calories > 0
+                  !isSyntheticDemo && nextState.goals.calories === 0 && guestState.goals.calories > 0
                     ? { ...guestState.goals, userId: user.id }
                     : nextState.goals,
                 profile: { ...nextState.profile, roleSelected: true },
@@ -894,37 +909,39 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
           }
 
-          // Merge guest water & saved meals into authenticated user cache
-          try {
-            const guestWaterRaw = localStorage.getItem(`calothrix_water_${GUEST_USER_ID}`);
-            if (guestWaterRaw) {
-              const guestWater = JSON.parse(guestWaterRaw) as { logs?: Record<string, number>; goalMl?: number };
-              const userWaterRaw = localStorage.getItem(`calothrix_water_${user.id}`);
-              const userWater = userWaterRaw
-                ? (JSON.parse(userWaterRaw) as { logs?: Record<string, number>; goalMl?: number })
-                : {};
-              const mergedLogs = { ...(guestWater.logs || {}), ...(userWater.logs || {}) };
-              localStorage.setItem(
-                `calothrix_water_${user.id}`,
-                JSON.stringify({ logs: mergedLogs, goalMl: userWater.goalMl || guestWater.goalMl || 2500 })
-              );
-            }
-            const guestMealsRaw = localStorage.getItem(`calothrix_saved_meals_${GUEST_USER_ID}`);
-            if (guestMealsRaw) {
-              const guestMeals = JSON.parse(guestMealsRaw) as SavedMealCombo[];
-              const userMealsRaw = localStorage.getItem(`calothrix_saved_meals_${user.id}`);
-              const userMeals = userMealsRaw ? (JSON.parse(userMealsRaw) as SavedMealCombo[]) : [];
-              const byId = new Map<string, SavedMealCombo>();
-              for (const m of [...guestMeals, ...userMeals]) {
-                if (m?.id) byId.set(m.id, m);
+          // Merge user-created guest water & saved meals (skip synthetic demo seed caches)
+          if (!isSyntheticDemo) {
+            try {
+              const guestWaterRaw = localStorage.getItem(`calothrix_water_${GUEST_USER_ID}`);
+              if (guestWaterRaw) {
+                const guestWater = JSON.parse(guestWaterRaw) as { logs?: Record<string, number>; goalMl?: number };
+                const userWaterRaw = localStorage.getItem(`calothrix_water_${user.id}`);
+                const userWater = userWaterRaw
+                  ? (JSON.parse(userWaterRaw) as { logs?: Record<string, number>; goalMl?: number })
+                  : {};
+                const mergedLogs = { ...(guestWater.logs || {}), ...(userWater.logs || {}) };
+                localStorage.setItem(
+                  `calothrix_water_${user.id}`,
+                  JSON.stringify({ logs: mergedLogs, goalMl: userWater.goalMl || guestWater.goalMl || 2500 })
+                );
               }
-              localStorage.setItem(
-                `calothrix_saved_meals_${user.id}`,
-                JSON.stringify(Array.from(byId.values()).slice(0, 40))
-              );
+              const guestMealsRaw = localStorage.getItem(`calothrix_saved_meals_${GUEST_USER_ID}`);
+              if (guestMealsRaw) {
+                const guestMeals = JSON.parse(guestMealsRaw) as SavedMealCombo[];
+                const userMealsRaw = localStorage.getItem(`calothrix_saved_meals_${user.id}`);
+                const userMeals = userMealsRaw ? (JSON.parse(userMealsRaw) as SavedMealCombo[]) : [];
+                const byId = new Map<string, SavedMealCombo>();
+                for (const m of [...guestMeals, ...userMeals]) {
+                  if (m?.id && !m.id.startsWith('demo-')) byId.set(m.id, m);
+                }
+                localStorage.setItem(
+                  `calothrix_saved_meals_${user.id}`,
+                  JSON.stringify(Array.from(byId.values()).slice(0, 40))
+                );
+              }
+            } catch {
+              // Ignore cache merge failures
             }
-          } catch {
-            // Ignore cache merge failures
           }
 
           localStorage.removeItem(GUEST_MODE_KEY);
@@ -1092,24 +1109,50 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const enterGuestMode = useCallback(() => {
     localStorage.setItem(GUEST_MODE_KEY, '1');
+    const savedTheme =
+      (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
     const loaded = storageService.loadState();
-    const guestState: MacroLogPersistedState = {
-      ...loaded,
-      profile: {
-        ...loaded.profile,
-        name: loaded.profile.name && loaded.profile.name !== 'Alex Mercer' ? loaded.profile.name : 'Guest Athlete',
-        accountRole: 'individual',
-        roleSelected: true,
-      },
-    };
+
+    const hasUserCustomData =
+      !loaded.isDemoData &&
+      (loaded.foodEntries.length > 0 ||
+        loaded.weightEntries.length > 0 ||
+        loaded.goals.calories > 0);
+
+    const needsFullDemoSeed =
+      !hasUserCustomData &&
+      (!loaded.isDemoData ||
+        loaded.foodEntries.length < 500 ||
+        loaded.weightEntries.length < 100);
+
+    const guestState: MacroLogPersistedState = needsFullDemoSeed
+      ? createDemoState(GUEST_USER_ID, loaded.settings?.theme || savedTheme)
+      : {
+          ...loaded,
+          profile: {
+            ...loaded.profile,
+            id: GUEST_USER_ID,
+            name:
+              loaded.profile.name && loaded.profile.name !== 'Alex Mercer'
+                ? loaded.profile.name
+                : 'Aarav Mehta',
+            accountRole: 'individual',
+            roleSelected: true,
+          },
+        };
+
+    if (needsFullDemoSeed) {
+      seedDemoAuxiliaryCaches(GUEST_USER_ID, guestState);
+    }
+
     storageService.saveState(guestState);
     setState(guestState);
     setNeedsSchemaSetup(false);
     hydrateAuxiliaryLocalCaches(GUEST_USER_ID, null);
     setAuthMode('guest');
     setActiveTab('home');
-    notify('Guest session ready — log freely & sign in anytime to sync');
-  }, [hydrateAuxiliaryLocalCaches, notify]);
+    notify('1-year demo workspace ready — explore all charts or sign in anytime to save');
+  }, [hydrateAuxiliaryLocalCaches, notify, setActiveTab]);
 
   const exitGuestModeToAuth = useCallback(() => {
     setAuthMode('unauthenticated');
@@ -1141,15 +1184,39 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (session?.user) {
           await hydrateForUser(session.user);
         } else if (localStorage.getItem(GUEST_MODE_KEY) === '1') {
+          const savedTheme =
+            (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) ||
+            'dark';
           const loaded = storageService.loadState();
-          setState({
-            ...loaded,
-            profile: {
-              ...loaded.profile,
-              accountRole: 'individual',
-              roleSelected: true,
-            },
-          });
+          const hasUserCustomData =
+            !loaded.isDemoData &&
+            (loaded.foodEntries.length > 0 ||
+              loaded.weightEntries.length > 0 ||
+              loaded.goals.calories > 0);
+          const needsFullDemoSeed =
+            !hasUserCustomData &&
+            (!loaded.isDemoData ||
+              loaded.foodEntries.length < 500 ||
+              loaded.weightEntries.length < 100);
+
+          const guestState: MacroLogPersistedState = needsFullDemoSeed
+            ? createDemoState(GUEST_USER_ID, loaded.settings?.theme || savedTheme)
+            : {
+                ...loaded,
+                profile: {
+                  ...loaded.profile,
+                  id: GUEST_USER_ID,
+                  accountRole: 'individual',
+                  roleSelected: true,
+                },
+              };
+
+          if (needsFullDemoSeed) {
+            seedDemoAuxiliaryCaches(GUEST_USER_ID, guestState);
+            storageService.saveState(guestState);
+          }
+
+          setState(guestState);
           hydrateAuxiliaryLocalCaches(GUEST_USER_ID, null);
           setAuthMode('guest');
         } else {
@@ -1410,6 +1477,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         localStorage.removeItem(`calothrix_water_${GUEST_USER_ID}`);
         localStorage.removeItem(`calothrix_saved_meals_${GUEST_USER_ID}`);
         localStorage.removeItem(`calothrix_burn_${GUEST_USER_ID}`);
+        localStorage.removeItem(`calothrix_weekly_assessments_${GUEST_USER_ID}`);
+        localStorage.removeItem(`calothrix_target_history_${GUEST_USER_ID}`);
         const savedTheme =
           (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
         storageService.clearAll(savedTheme);
