@@ -420,12 +420,12 @@ export const LandingSmartCalculatorModal: React.FC<LandingSmartCalculatorModalPr
                   </label>
 
                   <label className="block space-y-1">
-                    <span className="text-[11px] font-medium text-zinc-400">Workouts / Week</span>
+                    <span className="text-[11px] font-medium text-zinc-400">Workouts / Week (0–7)</span>
                     <input
                       type="number"
                       inputMode="numeric"
                       min={0}
-                      max={14}
+                      max={7}
                       value={workoutFrequency}
                       onChange={(e) => {
                         setWorkoutFrequency(e.target.value);
@@ -456,7 +456,7 @@ export const LandingSmartCalculatorModal: React.FC<LandingSmartCalculatorModalPr
                   </div>
                 </div>
                 <p className="text-[11px] text-zinc-400 leading-snug">
-                  Custom calibrated estimate (65% tier + 35% steps/workouts) — avoids double-counting exercise, steps, or TEF.
+                  Blends your daily lifestyle tier (65%) with steps and weekly workouts (35%) so activity is never double-counted.
                 </p>
               </div>
 
@@ -722,7 +722,7 @@ export const LandingSmartCalculatorModal: React.FC<LandingSmartCalculatorModalPr
                     >
                       <span className="inline-flex items-center gap-1.5">
                         <Info className="w-3.5 h-3.5 text-[#C8FF00]" />
-                        <span>Calculation transparency (exact internal values)</span>
+                        <span>How Your Targets Are Calculated</span>
                       </span>
                       {showBreakdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
@@ -768,7 +768,7 @@ export const LandingSmartCalculatorModal: React.FC<LandingSmartCalculatorModalPr
                         }}
                         className="min-h-[46px] px-4 rounded-xl border border-white/20 text-white text-xs sm:text-sm font-semibold hover:bg-white/10 transition cursor-pointer"
                       >
-                        Try Guest Mode
+                        TRY(NO SIGN-UP)
                       </button>
                     )}
                   </div>

@@ -183,9 +183,9 @@ export const HomePage: React.FC = () => {
   const dailyInsight = useMemo(() => {
     if (!hasGoal) {
       return {
-        title: 'Set your daily calorie target',
+        title: 'Create your personalized nutrition plan',
         detail:
-          'Use the Smart Calorie Calculator to calculate a personalized calorie, macro, and hydration plan based on your stats.',
+          'Enter your measurements, activity, and goal in the Smart Calorie Calculator to set daily calorie, macro, and hydration targets.',
         actionLabel: 'Open Calculator',
         onAction: () => setCalculatorModalOpen(true),
       };
@@ -715,7 +715,9 @@ export const HomePage: React.FC = () => {
                     ) : weightDeltaKg > 0 ? (
                       <TrendingUp className="w-3.5 h-3.5 text-amber-500" />
                     ) : null}
-                    {weightDeltaKg > 0 ? `+${weightDeltaKg}` : weightDeltaKg} kg
+                    {weightDeltaKg > 0 ? '+' : weightDeltaKg < 0 ? '-' : ''}
+                    {convertWeightToDisplay(Math.abs(weightDeltaKg), settings.weightUnit)}{' '}
+                    {settings.weightUnit}
                   </span>
                 )}
                 {weightGoal.targetWeightKg > 0 && (

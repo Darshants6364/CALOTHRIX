@@ -189,10 +189,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             )}
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-[#111317] dark:text-white truncate">
-                {isGuest ? 'Guest Session' : displayName}
+                {isGuest ? 'Guest Login' : displayName}
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                {isGuest ? 'Saved on this device' : displayEmail || 'Signed in'}
+                {isGuest ? 'Saved locally on this device' : displayEmail || 'Signed in'}
               </div>
             </div>
           </button>
@@ -224,7 +224,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             className="w-full min-h-[40px] px-3 rounded-xl border border-black/12 dark:border-white/15 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-black/5 dark:hover:bg-white/5 transition-colors inline-flex items-center justify-center gap-2"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>{isGuest ? 'Exit Guest Mode' : 'Sign Out'}</span>
+            <span>{isGuest ? 'Exit Guest Login' : 'Sign Out'}</span>
           </button>
         </div>
       </aside>

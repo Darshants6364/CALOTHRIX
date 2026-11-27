@@ -445,9 +445,9 @@ export function validateCalculatorInput(
   if (
     !Number.isFinite(workoutFrequencyPerWeek) ||
     workoutFrequencyPerWeek < 0 ||
-    workoutFrequencyPerWeek > 14
+    workoutFrequencyPerWeek > 7
   ) {
-    errors.push('Workout frequency must be between 0 and 14 sessions per week.');
+    errors.push('Workout frequency must be between 0 and 7 sessions per week.');
   }
   if (!Number.isFinite(dailyAverageSteps) || dailyAverageSteps < 0 || dailyAverageSteps > 50000) {
     errors.push('Daily average steps must be between 0 and 50,000.');
@@ -618,7 +618,7 @@ export function calculateActivityBreakdown(
 
   const intensityScale =
     workoutIntensity === 'vigorous' ? 0.055 : workoutIntensity === 'moderate' ? 0.04 : 0.025;
-  const clampedWorkouts = Math.max(0, Math.min(14, workoutFrequencyPerWeek));
+  const clampedWorkouts = Math.max(0, Math.min(7, workoutFrequencyPerWeek));
   const workoutContributionExact = Math.min(0.36, clampedWorkouts * intensityScale);
 
   const behavioralPalExact = Math.min(
@@ -1083,7 +1083,7 @@ export function calculateHydrationEstimate(
   disclaimer: string;
 } {
   const safeWeightKg = Math.max(30, Math.min(300, weightKg));
-  const clampedWorkouts = Math.max(0, Math.min(14, Math.round(workoutFrequencyPerWeek)));
+  const clampedWorkouts = Math.max(0, Math.min(7, Math.round(workoutFrequencyPerWeek)));
   const workoutIntensity: WorkoutIntensity = options?.workoutIntensity || 'moderate';
   const avgWorkoutDurationMin =
     options?.avgWorkoutDurationMin !== undefined
@@ -1173,7 +1173,7 @@ export function calculateSmartFitnessTargets(
   const macroFocus = normalizeMacroFocus(input.macroFocus);
   const workoutIntensity: WorkoutIntensity = input.workoutIntensity || 'moderate';
   const dailySteps = input.dailyAverageSteps ?? 7500;
-  const workoutsPerWeek = Math.max(0, Math.min(14, Math.round(input.workoutFrequencyPerWeek ?? 0)));
+  const workoutsPerWeek = Math.max(0, Math.min(7, Math.round(input.workoutFrequencyPerWeek ?? 0)));
   const avgWorkoutDurationMin =
     input.avgWorkoutDurationMin !== undefined
       ? Math.max(0, Math.min(240, input.avgWorkoutDurationMin))

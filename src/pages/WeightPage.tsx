@@ -347,32 +347,33 @@ export const WeightPage: React.FC = () => {
         <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400">Current Weight</div>
           <div className="mt-1 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
-            {formatWeight(currentKg, unit)}
+            {currentKg > 0 ? formatWeight(currentKg, unit) : '—'}
           </div>
         </div>
         <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400">Previous</div>
           <div className="mt-1 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
-            {previousKg !== null ? formatWeight(previousKg, unit) : '—'}
+            {previousKg !== null && previousKg > 0 ? formatWeight(previousKg, unit) : '—'}
           </div>
         </div>
         <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400">Starting Weight</div>
           <div className="mt-1 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
-            {formatWeight(startingKg, unit)}
+            {startingKg > 0 ? formatWeight(startingKg, unit) : '—'}
           </div>
         </div>
         <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400">Target Weight</div>
           <div className="mt-1 text-lg font-bold font-mono-nums text-lime-700 dark:text-lime-400">
-            {formatWeight(targetKg, unit)}
+            {targetKg > 0 ? formatWeight(targetKg, unit) : 'Not set'}
           </div>
         </div>
         <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
           <div className="text-xs text-slate-500 dark:text-slate-400">Total Change</div>
           <div className="mt-1 text-lg font-bold font-mono-nums text-slate-900 dark:text-slate-50">
-            {totalChangeKg > 0 ? '+' : ''}
-            {convertWeightToDisplay(totalChangeKg, unit)} {unit}
+            {startingKg > 0 && currentKg > 0
+              ? `${totalChangeKg > 0 ? '+' : ''}${convertWeightToDisplay(totalChangeKg, unit)} ${unit}`
+              : '—'}
           </div>
         </div>
         <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
@@ -381,7 +382,7 @@ export const WeightPage: React.FC = () => {
             {targetKg <= 0
               ? 'Not set'
               : currentKg <= 0
-              ? formatWeight(0, unit)
+              ? '—'
               : isAtTarget
               ? 'On target'
               : `${convertWeightToDisplay(remainingToTargetKg, unit)} ${unit}`}

@@ -1544,7 +1544,8 @@ async function startServer() {
         server: {
           middlewareMode: true,
           allowedHosts: true,
-          hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer },
+          hmr: false,
+          ws: false,
         },
         appType: 'spa',
       });
@@ -1559,6 +1560,18 @@ async function startServer() {
     app.use(async (req, res, next) => {
       try {
         const vite = await vitePromise;
+        if (req.path === '/@vite/client') {
+          const transformed = await vite.transformRequest('/@vite/client');
+          if (transformed?.code) {
+            const safeCode = transformed.code.replace(
+              'transport.connect(createHMRHandler(handleMessage));',
+              '/* HMR WebSocket connection disabled */'
+            );
+            res.setHeader('Cache-Control', 'no-cache');
+            res.status(200).type('application/javascript').send(safeCode);
+            return;
+          }
+        }
         vite.middlewares(req, res, next);
       } catch (err) {
         next(err);

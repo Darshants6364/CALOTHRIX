@@ -98,7 +98,7 @@ export const RoleSelectionScreen: React.FC = () => {
               </div>
               <div>
                 <h2 className="text-base font-bold text-[#111317] dark:text-white">
-                  Normal User
+                  Personal Account
                 </h2>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   Track daily meals, search global & Indian foods, calculate personalized macro targets, log body weight, and optionally share progress with a coach.
@@ -223,7 +223,7 @@ export const RoleSelectionScreen: React.FC = () => {
                 <span>
                   {selectedRole === 'trainer'
                     ? 'Enter Trainer Dashboard'
-                    : 'Continue as Normal User'}
+                    : 'Continue as Personal Account'}
                 </span>
                 <ArrowRight className="w-4 h-4" />
               </>

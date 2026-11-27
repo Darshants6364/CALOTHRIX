@@ -210,8 +210,8 @@ export const WeightProgressCard: React.FC<WeightProgressCardProps> = ({
             No weigh-ins logged for {data.rangeLabel}
           </p>
           <p className="text-xs text-[#52555E] dark:text-[#9A9CA3] max-w-md mx-auto">
-            Missing days are never filled in automatically. Log your scale weight a few times per
-            week to track your real progress trend.
+            Log your weight a few times per week to see your rolling trend and progress toward your
+            target.
           </p>
         </div>
       ) : (
@@ -233,7 +233,7 @@ export const WeightProgressCard: React.FC<WeightProgressCardProps> = ({
                 </span>
               )}
             </div>
-            <span>Unlogged days stay blank</span>
+            <span>Shows only recorded weigh-ins</span>
           </div>
 
           <div className="h-56 w-full">

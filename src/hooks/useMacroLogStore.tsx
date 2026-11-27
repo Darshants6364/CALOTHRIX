@@ -1107,43 +1107,62 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [hydrateAuxiliaryLocalCaches, notify, refreshCoachingAlertsForUser, syncPendingNow]
   );
 
-  const enterGuestMode = useCallback(() => {
-    localStorage.setItem(GUEST_MODE_KEY, '1');
-    const savedTheme =
-      (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
-    const loaded = storageService.loadState();
-
-    const hasUserCustomData =
-      !loaded.isDemoData &&
-      (loaded.foodEntries.length > 0 ||
+  const buildGuestDemoState = useCallback(
+    (savedTheme: AppSettings['theme']): { guestState: MacroLogPersistedState; seededFresh: boolean } => {
+      const loaded = storageService.loadState();
+      const hasExistingGuestData =
+        Boolean(loaded.isDemoData) ||
+        loaded.foodEntries.length > 0 ||
         loaded.weightEntries.length > 0 ||
-        loaded.goals.calories > 0);
+        loaded.customFoods.length > 0 ||
+        loaded.goals.calories > 0 ||
+        Boolean(loaded.profile?.onboardingCompleted);
 
-    const needsFullDemoSeed =
-      !hasUserCustomData &&
-      (!loaded.isDemoData ||
-        loaded.foodEntries.length < 500 ||
-        loaded.weightEntries.length < 100);
+      if (!hasExistingGuestData) {
+        const seeded = createDemoState(GUEST_USER_ID, loaded.settings?.theme || savedTheme);
+        seedDemoAuxiliaryCaches(GUEST_USER_ID, seeded);
+        return {
+          seededFresh: true,
+          guestState: {
+            ...seeded,
+            profile: {
+              ...seeded.profile,
+              id: GUEST_USER_ID,
+              accountRole: 'individual',
+              roleSelected: true,
+            },
+          },
+        };
+      }
 
-    const guestState: MacroLogPersistedState = needsFullDemoSeed
-      ? createDemoState(GUEST_USER_ID, loaded.settings?.theme || savedTheme)
-      : {
+      if (loaded.isDemoData && typeof window !== 'undefined') {
+        const hasWaterCache = Boolean(localStorage.getItem(`calothrix_water_${GUEST_USER_ID}`));
+        if (!hasWaterCache) {
+          seedDemoAuxiliaryCaches(GUEST_USER_ID, loaded);
+        }
+      }
+
+      return {
+        seededFresh: false,
+        guestState: {
           ...loaded,
           profile: {
             ...loaded.profile,
             id: GUEST_USER_ID,
-            name:
-              loaded.profile.name && loaded.profile.name !== 'Alex Mercer'
-                ? loaded.profile.name
-                : 'Aarav Mehta',
             accountRole: 'individual',
             roleSelected: true,
           },
-        };
+        },
+      };
+    },
+    []
+  );
 
-    if (needsFullDemoSeed) {
-      seedDemoAuxiliaryCaches(GUEST_USER_ID, guestState);
-    }
+  const enterGuestMode = useCallback(() => {
+    localStorage.setItem(GUEST_MODE_KEY, '1');
+    const savedTheme =
+      (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) || 'dark';
+    const { guestState } = buildGuestDemoState(savedTheme);
 
     storageService.saveState(guestState);
     setState(guestState);
@@ -1151,8 +1170,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     hydrateAuxiliaryLocalCaches(GUEST_USER_ID, null);
     setAuthMode('guest');
     setActiveTab('home');
-    notify('1-year demo workspace ready — explore all charts or sign in anytime to save');
-  }, [hydrateAuxiliaryLocalCaches, notify, setActiveTab]);
+    notify('Guest Login active — your data stays saved on this device. Sign in anytime to sync.');
+  }, [buildGuestDemoState, hydrateAuxiliaryLocalCaches, notify, setActiveTab]);
 
   const exitGuestModeToAuth = useCallback(() => {
     setAuthMode('unauthenticated');
@@ -1187,32 +1206,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const savedTheme =
             (localStorage.getItem('calothrix_theme_pref_v2') as AppSettings['theme'] | null) ||
             'dark';
-          const loaded = storageService.loadState();
-          const hasUserCustomData =
-            !loaded.isDemoData &&
-            (loaded.foodEntries.length > 0 ||
-              loaded.weightEntries.length > 0 ||
-              loaded.goals.calories > 0);
-          const needsFullDemoSeed =
-            !hasUserCustomData &&
-            (!loaded.isDemoData ||
-              loaded.foodEntries.length < 500 ||
-              loaded.weightEntries.length < 100);
-
-          const guestState: MacroLogPersistedState = needsFullDemoSeed
-            ? createDemoState(GUEST_USER_ID, loaded.settings?.theme || savedTheme)
-            : {
-                ...loaded,
-                profile: {
-                  ...loaded.profile,
-                  id: GUEST_USER_ID,
-                  accountRole: 'individual',
-                  roleSelected: true,
-                },
-              };
-
-          if (needsFullDemoSeed) {
-            seedDemoAuxiliaryCaches(GUEST_USER_ID, guestState);
+          const { guestState, seededFresh } = buildGuestDemoState(savedTheme);
+          if (seededFresh) {
             storageService.saveState(guestState);
           }
 

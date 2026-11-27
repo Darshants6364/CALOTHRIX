@@ -172,7 +172,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
           {resolvedTheme === 'dark' ? (
             <>
               <Sun className="w-4 h-4 text-[#C8FF00]" />
-              <span>White</span>
+              <span>Light</span>
             </>
           ) : (
             <>
@@ -211,10 +211,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-bold text-[#111317] dark:text-white">
-                  Normal User
+                  Personal Account
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
-                  Personal tracker
+                  Personal nutrition tracker
                 </div>
               </div>
             </button>
