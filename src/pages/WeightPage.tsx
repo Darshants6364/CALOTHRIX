@@ -81,7 +81,7 @@ export const WeightPage: React.FC = () => {
   const today = getTodayDateKey();
   const { weightGoal } = state;
 
-  const [range, setRange] = useState<WeightRange>('30d');
+  const [range, setRange] = useState<WeightRange>('6m');
   const [showTrendLine, setShowTrendLine] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
   const [historyFilterDate, setHistoryFilterDate] = useState('');
