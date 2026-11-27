@@ -8,6 +8,14 @@ import type {
   NutritionLabelOcrResult,
 } from '../src/types/index.ts';
 import { getReinforcementPromptContext } from './aiTrainingService.ts';
+import {
+  callGroqChatJson,
+  GROQ_TEXT_MODELS,
+  GROQ_VISION_MODELS,
+  isGroqConfigured,
+  parseLooseJsonObject,
+  transcribeAudioWithGroq,
+} from './groqClient.ts';
 
 export type AnalyzeMealInputMode = 'photo' | 'voice' | 'text';
 export type MealPrepStyle = 'homemade_low_oil' | 'standard' | 'restaurant_rich';
@@ -136,10 +144,124 @@ function extractGeminiErrorDetails(err: unknown): {
   return { statusCode, message: cleanMessage, retryable };
 }
 
+function hasGeminiApiKey(): boolean {
+  return Boolean((process.env.GEMINI_API_KEY || '').trim());
+}
+
 export async function analyzeMealWithGemini(
   req: AnalyzeMealRequest
 ): Promise<MealAiAnalysisResult> {
-  const ai = getGeminiClient();
+  const contextNote = (req.promptText || '').trim();
+  const mealHintText = req.mealHint ? `Expected meal slot hint: ${req.mealHint}.` : '';
+  const prepInstruction =
+    req.prepStyle === 'homemade_low_oil'
+      ? 'Preparation style: Homemade with minimal oil/ghee (~1 tsp per serving). Keep added cooking fat conservative.'
+      : req.prepStyle === 'restaurant_rich'
+      ? 'Preparation style: Restaurant / takeout rich preparation (generous oil, butter, ghee, or cream typical of dining out).'
+      : 'Preparation style: Standard everyday home or café preparation.';
+
+  const reinforcementContext = await getReinforcementPromptContext(contextNote || req.mode);
+  const systemInstruction = [
+    'You are a precision clinical & sports nutritionist. Return realistic food weights and nutrition estimates grounded in USDA FoodData Central and Indian ICMR-NIN IFCT 2017 data. Ensure item calories match (protein*4 + carbs*4 + fat*9) closely. Return strictly valid JSON matching the schema.',
+    reinforcementContext,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  let parsed: Record<string, unknown> | null = null;
+  let groqDetectedVoiceTranscript = '';
+
+  if (isGroqConfigured()) {
+    try {
+      const jsonContract = `Return ONLY a valid JSON object (no markdown, no explanation) with this exact structure:
+{
+  "mealTitle": "Short clear title summarizing the whole meal",
+  "detectedDescription": "1-sentence visual/text/spoken summary of the meal",
+  "suggestedMealType": "breakfast" | "lunch" | "evening_snacks" | "dinner" | "other",
+  "confidence": "high" | "moderate" | "low",
+  "nutritionTip": "One concise practical nutrition observation (max 140 characters)",
+  "items": [
+    {
+      "name": "Clear food name",
+      "estimatedQuantityDescription": "Human portion label e.g. 2 medium rotis, 1 bowl (200g)",
+      "estimatedGrams": 150,
+      "calories": 220,
+      "protein": 8.5,
+      "carbs": 30.0,
+      "fat": 6.0,
+      "fibre": 4.2,
+      "notes": "optional short note"
+    }
+  ]
+}`;
+
+      if (req.mode === 'photo') {
+        const cleanBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
+        if (!cleanBase64) {
+          const err = new Error('No meal photo data received.');
+          (err as Error & { statusCode?: number }).statusCode = 400;
+          throw err;
+        }
+        const mimeType = req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg';
+        const raw = await callGroqChatJson({
+          models: GROQ_VISION_MODELS,
+          systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
+          userContent: [
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${cleanBase64}` } },
+            {
+              type: 'text',
+              text: `Analyze the meal photograph. Identify every visible dish, food item, and drink (Indian dishes like roti, dal, sambar, dosa, idli, paneer, rice, curd as well as international foods). Estimate realistic cooked weights in grams and calculate calories, protein (g), carbs (g), fat (g), and fibre (g). ${prepInstruction} ${contextNote ? `User note: "${contextNote}". ` : ''}${mealHintText}`,
+            },
+          ],
+          timeoutMs: 25000,
+        });
+        parsed = parseLooseJsonObject(raw);
+      } else if (req.mode === 'voice') {
+        const cleanBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
+        let spokenSentence = contextNote;
+        if (cleanBase64) {
+          const transcript = await transcribeAudioWithGroq({
+            base64Audio: cleanBase64,
+            mimeType: req.mimeType,
+            timeoutMs: 20000,
+          });
+          spokenSentence = [transcript, contextNote].filter(Boolean).join(' — ');
+          groqDetectedVoiceTranscript = transcript;
+        } else if (!contextNote) {
+          const err = new Error('No voice recording or spoken sentence received.');
+          (err as Error & { statusCode?: number }).statusCode = 400;
+          throw err;
+        }
+
+        const raw = await callGroqChatJson({
+          models: GROQ_TEXT_MODELS,
+          systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
+          userContent: `Analyze this spoken meal description: "${spokenSentence}". Set "detectedDescription" accurately preserving Indian food names and household measures (katori, bowl, roti, piece, glass, spoon), and break down every food or drink with realistic weights in grams and nutritional estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${mealHintText}`,
+          timeoutMs: 18000,
+        });
+        parsed = parseLooseJsonObject(raw);
+      } else {
+        const raw = await callGroqChatJson({
+          models: GROQ_TEXT_MODELS,
+          systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
+          userContent: `Analyze this meal description: "${contextNote}". Set "detectedDescription" to a clean summary of what was described, and break down every food or drink mentioned with realistic serving weights in grams and macronutrient estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${mealHintText}`,
+          timeoutMs: 18000,
+        });
+        parsed = parseLooseJsonObject(raw);
+      }
+    } catch (groqErr) {
+      const anyErr = groqErr as Error & { statusCode?: number };
+      const isBadInputOrAuth =
+        anyErr?.statusCode === 400 || anyErr?.statusCode === 401 || anyErr?.statusCode === 413;
+      if (isBadInputOrAuth || !hasGeminiApiKey()) {
+        throw groqErr;
+      }
+      console.warn('[mealAi] Groq meal analysis failed, falling back to Gemini:', anyErr.message);
+    }
+  }
+
+  if (!parsed) {
+    const ai = getGeminiClient();
 
   const parts: Array<
     | { text: string }
@@ -197,14 +319,6 @@ export async function analyzeMealWithGemini(
       : `Analyze this meal description: "${contextNote}". Set "detectedDescription" to a clean summary of what was described, and break down every food or drink mentioned with realistic serving weights in grams and macronutrient estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${mealHintText}`;
 
   parts.push({ text: instructionPrompt });
-
-  const reinforcementContext = await getReinforcementPromptContext(contextNote || req.mode);
-  const systemInstruction = [
-    'You are a precision clinical & sports nutritionist. Return realistic food weights and nutrition estimates grounded in USDA FoodData Central and Indian ICMR-NIN IFCT 2017 data. Ensure item calories match (protein*4 + carbs*4 + fat*9) closely. Return strictly valid JSON matching the schema.',
-    reinforcementContext,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
 
   const responseSchema = {
     type: Type.OBJECT,
@@ -275,9 +389,9 @@ export async function analyzeMealWithGemini(
   // Use fastest low-latency model first for instant response on all devices,
   // with clean fallback on transient congestion.
   const attempts: Array<{ model: string; thinkingLevel: ThinkingLevel; waitMs: number; timeoutMs: number }> = [
-    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, waitMs: 0, timeoutMs: 12000 },
-    { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW, waitMs: 350, timeoutMs: 14000 },
-    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, waitMs: 700, timeoutMs: 12000 },
+    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, waitMs: 0, timeoutMs: 16000 },
+    { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW, waitMs: 500, timeoutMs: 18000 },
+    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, waitMs: 1100, timeoutMs: 16000 },
   ];
 
   let responseText = '';
@@ -311,9 +425,14 @@ export async function analyzeMealWithGemini(
     } catch (err) {
       lastError = err;
       const details = extractGeminiErrorDetails(err);
+      const rawMsg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[mealAi] analyzeMeal attempt failed (${attempt.model}, status=${details.statusCode}, retryable=${details.retryable}): ${rawMsg}`
+      );
       if (!details.retryable) {
-        const fatal = new Error(details.message);
-        (fatal as Error & { statusCode?: number }).statusCode = details.statusCode;
+        const fatal = new Error(details.message) as Error & { statusCode?: number; expose?: boolean };
+        fatal.statusCode = details.statusCode;
+        fatal.expose = true;
         throw fatal;
       }
     }
@@ -321,16 +440,17 @@ export async function analyzeMealWithGemini(
 
   if (!responseText) {
     const details = extractGeminiErrorDetails(lastError);
-    const wrapped = new Error(details.message);
-    (wrapped as Error & { statusCode?: number }).statusCode = details.statusCode;
+    const wrapped = new Error(details.message) as Error & { statusCode?: number; expose?: boolean };
+    wrapped.statusCode = details.statusCode;
+    wrapped.expose = true;
     throw wrapped;
   }
 
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(responseText) as Record<string, unknown>;
-  } catch {
-    throw new Error('Could not parse structured nutrition breakdown from AI output.');
+    try {
+      parsed = JSON.parse(responseText) as Record<string, unknown>;
+    } catch {
+      throw new Error('Could not parse structured nutrition breakdown from AI output.');
+    }
   }
 
   const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
@@ -372,7 +492,9 @@ export async function analyzeMealWithGemini(
 
   return {
     mealTitle: String(parsed.mealTitle || items[0].name).trim(),
-    detectedDescription: String(parsed.detectedDescription || contextNote || '').trim(),
+    detectedDescription: String(
+      parsed.detectedDescription || groqDetectedVoiceTranscript || contextNote || ''
+    ).trim(),
     suggestedMealType,
     confidence,
     items,
@@ -394,8 +516,33 @@ export async function readBarcodeFromImageWithGemini(req: {
     return { barcode: null };
   }
 
-  const ai = getGeminiClient();
   const mimeType = req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg';
+
+  if (isGroqConfigured()) {
+    try {
+      const raw = await callGroqChatJson({
+        models: GROQ_VISION_MODELS,
+        systemInstruction:
+          'You read food product barcodes accurately. Return strictly valid JSON: {"barcode":"digits or empty string"}.',
+        userContent: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${rawBase64}` } },
+          {
+            type: 'text',
+            text: 'Read the numeric barcode printed on this food product package (EAN-13, EAN-8, UPC-A, or UPC-E — usually 8 to 14 digits printed directly underneath the vertical black bars). Return ONLY {"barcode":"<digits>"} with no spaces or dashes, or {"barcode":""} if unreadable.',
+          },
+        ],
+        timeoutMs: 14000,
+      });
+      const parsed = parseLooseJsonObject(raw) as { barcode?: string };
+      const digits = String(parsed.barcode || '').replace(/\D/g, '').trim();
+      return { barcode: /^\d{6,14}$/.test(digits) ? digits : null };
+    } catch (groqErr) {
+      if (!hasGeminiApiKey()) throw groqErr;
+      console.warn('[mealAi] Groq barcode read failed, falling back to Gemini:', groqErr);
+    }
+  }
+
+  const ai = getGeminiClient();
 
   const response = await withTimeout(
     ai.models.generateContent({
@@ -460,45 +607,7 @@ export async function parseNutritionLabelWithGemini(req: {
     throw err;
   }
 
-  const ai = getGeminiClient();
   const mimeType = req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg';
-
-  const responseSchema = {
-    type: Type.OBJECT,
-    properties: {
-      name: { type: Type.STRING, description: 'Product name if visible, otherwise Packaged Food' },
-      brand: { type: Type.STRING, description: 'Brand name if visible, else empty string' },
-      servingName: { type: Type.STRING, description: 'Serving label e.g. 1 serving (30g) or 100g' },
-      servingWeightGrams: { type: Type.NUMBER, description: 'Numeric weight in grams or ml per serving (default 100 if per 100g)' },
-      calories: { type: Type.NUMBER, description: 'Energy in kcal per servingWeightGrams' },
-      protein: { type: Type.NUMBER },
-      carbs: { type: Type.NUMBER },
-      fat: { type: Type.NUMBER },
-      fibre: { type: Type.NUMBER },
-      sugarG: { type: Type.NUMBER },
-      sodiumMg: { type: Type.NUMBER },
-      confidence: { type: Type.STRING, description: 'high, moderate, or low' },
-    },
-    required: [
-      'name',
-      'servingName',
-      'servingWeightGrams',
-      'calories',
-      'protein',
-      'carbs',
-      'fat',
-      'fibre',
-      'confidence',
-    ],
-  };
-
-  let responseText = '';
-  const attempts: Array<{ model: string; thinkingLevel: ThinkingLevel; timeoutMs: number }> = [
-    { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, timeoutMs: 12000 },
-    { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW, timeoutMs: 14000 },
-  ];
-  let lastError: unknown;
-
   const reinforcementContext = await getReinforcementPromptContext('nutrition label ocr');
   const labelSystemInstruction = [
     'You are a precision food label OCR extractor. Read FSSAI (India), US FDA, and EU Nutrition Facts tables accurately without inventing numbers.',
@@ -507,53 +616,130 @@ export async function parseNutritionLabelWithGemini(req: {
     .filter(Boolean)
     .join('\n\n');
 
-  for (const attempt of attempts) {
+  let parsed: Record<string, unknown> | null = null;
+
+  if (isGroqConfigured()) {
     try {
-      const response = await withTimeout(
-        ai.models.generateContent({
-          model: attempt.model,
-          contents: {
-            parts: [
-              { inlineData: { mimeType, data: rawBase64 } },
-              {
-                text: 'Extract the Nutrition Facts / Nutritional Information table accurately. Convert kJ to kcal (divide by 4.184) if only kJ is shown. Normalize values to match servingWeightGrams (prefer per-serving if clearly stated, otherwise 100g). Keep missing sugar or sodium as 0 if absent.',
-              },
-            ],
+      const raw = await callGroqChatJson({
+        models: GROQ_VISION_MODELS,
+        systemInstruction: `${labelSystemInstruction}\n\nReturn ONLY a valid JSON object: {"name":"string","brand":"string","servingName":"string","servingWeightGrams":number,"calories":number,"protein":number,"carbs":number,"fat":number,"fibre":number,"sugarG":number,"sodiumMg":number,"confidence":"high"|"moderate"|"low"}`,
+        userContent: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${rawBase64}` } },
+          {
+            type: 'text',
+            text: 'Extract the Nutrition Facts / Nutritional Information table accurately. Convert kJ to kcal (divide by 4.184) if only kJ is shown. Normalize values to match servingWeightGrams (prefer per-serving if clearly stated, otherwise 100g). Keep missing sugar or sodium as 0 if absent.',
           },
-          config: {
-            systemInstruction: labelSystemInstruction,
-            thinkingConfig: { thinkingLevel: attempt.thinkingLevel },
-            responseMimeType: 'application/json',
-            responseSchema,
-          },
-        }),
-        attempt.timeoutMs,
-        'Nutrition label OCR timed out.'
-      );
-      const txt = (response.text || '').trim();
-      if (txt) {
-        responseText = txt;
-        break;
+        ],
+        timeoutMs: 25000,
+      });
+      parsed = parseLooseJsonObject(raw);
+    } catch (groqErr) {
+      const anyErr = groqErr as Error & { statusCode?: number };
+      const isBadInputOrAuth =
+        anyErr?.statusCode === 400 || anyErr?.statusCode === 401 || anyErr?.statusCode === 413;
+      if (isBadInputOrAuth || !hasGeminiApiKey()) {
+        throw groqErr;
       }
-    } catch (err) {
-      lastError = err;
-      const details = extractGeminiErrorDetails(err);
-      if (!details.retryable) {
-        const fatal = new Error(details.message);
-        (fatal as Error & { statusCode?: number }).statusCode = details.statusCode;
-        throw fatal;
-      }
+      console.warn('[mealAi] Groq label OCR failed, falling back to Gemini:', anyErr.message);
     }
   }
 
-  if (!responseText) {
-    const details = extractGeminiErrorDetails(lastError);
-    const wrapped = new Error(details.message);
-    (wrapped as Error & { statusCode?: number }).statusCode = details.statusCode;
-    throw wrapped;
-  }
+  if (!parsed) {
+    const ai = getGeminiClient();
 
-  const parsed = JSON.parse(responseText) as Record<string, unknown>;
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        name: { type: Type.STRING, description: 'Product name if visible, otherwise Packaged Food' },
+        brand: { type: Type.STRING, description: 'Brand name if visible, else empty string' },
+        servingName: { type: Type.STRING, description: 'Serving label e.g. 1 serving (30g) or 100g' },
+        servingWeightGrams: { type: Type.NUMBER, description: 'Numeric weight in grams or ml per serving (default 100 if per 100g)' },
+        calories: { type: Type.NUMBER, description: 'Energy in kcal per servingWeightGrams' },
+        protein: { type: Type.NUMBER },
+        carbs: { type: Type.NUMBER },
+        fat: { type: Type.NUMBER },
+        fibre: { type: Type.NUMBER },
+        sugarG: { type: Type.NUMBER },
+        sodiumMg: { type: Type.NUMBER },
+        confidence: { type: Type.STRING, description: 'high, moderate, or low' },
+      },
+      required: [
+        'name',
+        'servingName',
+        'servingWeightGrams',
+        'calories',
+        'protein',
+        'carbs',
+        'fat',
+        'fibre',
+        'confidence',
+      ],
+    };
+
+    let responseText = '';
+    const attempts: Array<{ model: string; thinkingLevel: ThinkingLevel; waitMs: number; timeoutMs: number }> = [
+      { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL, waitMs: 0, timeoutMs: 16000 },
+      { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW, waitMs: 500, timeoutMs: 18000 },
+    ];
+    let lastError: unknown;
+
+    for (const attempt of attempts) {
+      if (attempt.waitMs > 0) {
+        await delay(attempt.waitMs);
+      }
+      try {
+        const response = await withTimeout(
+          ai.models.generateContent({
+            model: attempt.model,
+            contents: {
+              parts: [
+                { inlineData: { mimeType, data: rawBase64 } },
+                {
+                  text: 'Extract the Nutrition Facts / Nutritional Information table accurately. Convert kJ to kcal (divide by 4.184) if only kJ is shown. Normalize values to match servingWeightGrams (prefer per-serving if clearly stated, otherwise 100g). Keep missing sugar or sodium as 0 if absent.',
+                },
+              ],
+            },
+            config: {
+              systemInstruction: labelSystemInstruction,
+              thinkingConfig: { thinkingLevel: attempt.thinkingLevel },
+              responseMimeType: 'application/json',
+              responseSchema,
+            },
+          }),
+          attempt.timeoutMs,
+          'Nutrition label OCR timed out.'
+        );
+        const txt = (response.text || '').trim();
+        if (txt) {
+          responseText = txt;
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+        const details = extractGeminiErrorDetails(err);
+        const rawMsg = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[mealAi] scanLabel attempt failed (${attempt.model}, status=${details.statusCode}, retryable=${details.retryable}): ${rawMsg}`
+        );
+        if (!details.retryable) {
+          const fatal = new Error(details.message) as Error & { statusCode?: number; expose?: boolean };
+          fatal.statusCode = details.statusCode;
+          fatal.expose = true;
+          throw fatal;
+        }
+      }
+    }
+
+    if (!responseText) {
+      const details = extractGeminiErrorDetails(lastError);
+      const wrapped = new Error(details.message) as Error & { statusCode?: number; expose?: boolean };
+      wrapped.statusCode = details.statusCode;
+      wrapped.expose = true;
+      throw wrapped;
+    }
+
+    parsed = JSON.parse(responseText) as Record<string, unknown>;
+  }
   const confRaw = String(parsed.confidence || 'moderate');
   const confidence: NutritionLabelOcrResult['confidence'] =
     confRaw === 'high' || confRaw === 'low' ? confRaw : 'moderate';
@@ -708,9 +894,46 @@ export async function coachChatWithGemini(req: {
   dietaryPreference?: string;
   restrictions?: string[];
 }): Promise<CoachAdviceResult> {
-  const hasKey = Boolean((process.env.GEMINI_API_KEY || '').trim());
-  if (!hasKey) {
+  const groqActive = isGroqConfigured();
+  const hasGemini = hasGeminiApiKey();
+  if (!groqActive && !hasGemini) {
     return buildDeterministicCoachAdvice(req);
+  }
+
+  const userPrompt = `User question: "${req.prompt}". Daily goals: ${req.goalCalories} kcal, ${req.goalProtein}g protein. Remaining today: ${Math.round(req.remainingCalories)} kcal, ${Math.round(req.remainingProtein)}g protein, ${Math.round(req.remainingCarbs)}g carbs, ${Math.round(req.remainingFat)}g fat. Diet: ${req.dietaryPreference || 'omnivore'}. Restrictions: ${(req.restrictions || []).join(', ') || 'none'}. Give direct, realistic Indian + global meal/snack suggestions with exact macro estimates that respect remaining budget.`;
+
+  if (groqActive) {
+    try {
+      const raw = await callGroqChatJson({
+        models: GROQ_TEXT_MODELS,
+        systemInstruction:
+          'You are Calothrix Nutrition Coach. Give concise, actionable advice grounded in realistic portions and user dietary preferences. Suggest 2-3 loggable food ideas. Return strictly valid JSON: {"reply":"2-3 concise sentences","suggestions":[{"title":"string","calories":number,"protein":number,"carbs":number,"fat":number,"fibre":number,"reason":"string"}]}.',
+        userContent: userPrompt,
+        timeoutMs: 12000,
+      });
+      const parsed = parseLooseJsonObject(raw);
+      const rawSugs = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
+      const suggestions: CoachSuggestionItem[] = rawSugs.map((s) => {
+        const row = (s || {}) as Record<string, unknown>;
+        return {
+          title: String(row.title || 'Balanced Snack').trim(),
+          calories: Math.round(normalizeNumber(row.calories, 0)),
+          protein: normalizeNumber(row.protein, 1),
+          carbs: normalizeNumber(row.carbs, 1),
+          fat: normalizeNumber(row.fat, 1),
+          fibre: normalizeNumber(row.fibre, 1),
+          reason: String(row.reason || '').trim(),
+        };
+      });
+
+      return {
+        provider: 'gemini',
+        reply: String(parsed.reply || '').trim() || buildDeterministicCoachAdvice(req).reply,
+        suggestions: suggestions.length > 0 ? suggestions : buildDeterministicCoachAdvice(req).suggestions,
+      };
+    } catch {
+      if (!hasGemini) return buildDeterministicCoachAdvice(req);
+    }
   }
 
   try {
@@ -745,7 +968,7 @@ export async function coachChatWithGemini(req: {
         contents: {
           parts: [
             {
-              text: `User question: "${req.prompt}". Daily goals: ${req.goalCalories} kcal, ${req.goalProtein}g protein. Remaining today: ${Math.round(req.remainingCalories)} kcal, ${Math.round(req.remainingProtein)}g protein, ${Math.round(req.remainingCarbs)}g carbs, ${Math.round(req.remainingFat)}g fat. Diet: ${req.dietaryPreference || 'omnivore'}. Restrictions: ${(req.restrictions || []).join(', ') || 'none'}. Give direct, realistic Indian + global meal/snack suggestions with exact macro estimates that respect remaining budget.`,
+              text: userPrompt,
             },
           ],
         },
@@ -885,9 +1108,81 @@ export async function generateWeeklyAssessmentExplanation(params: {
   const { assessment, dietaryPreference = 'omnivore', foodRestrictions = [], goalLabel } = params;
   const fallback = assessment.fallbackAiSummary;
 
-  const hasKey = Boolean((process.env.GEMINI_API_KEY || '').trim());
-  if (!hasKey) {
+  const groqActive = isGroqConfigured();
+  const hasGemini = hasGeminiApiKey();
+  if (!groqActive && !hasGemini) {
     return fallback;
+  }
+
+  const facts = {
+    cycleNumber: assessment.assessmentWeekNumber,
+    cycleDays: assessment.cycleDays,
+    period: `${assessment.weekStartDate} to ${assessment.weekEndDate}`,
+    statusTag: assessment.statusTag,
+    goal: goalLabel,
+    goalSpeed: assessment.goalSpeed,
+    dietaryPreference,
+    foodRestrictions,
+    latestMeasuredWeightKg: assessment.weightAnalysis.latestMeasuredWeightKg,
+    previousMeasuredWeightKg: assessment.weightAnalysis.previousMeasuredWeightKg,
+    current7dAvgWeightKg: assessment.weightAnalysis.current7dAvgWeightKg,
+    previous7dAvgWeightKg: assessment.weightAnalysis.previous7dAvgWeightKg,
+    assessedTrendWeightKg: assessment.weightAnalysis.assessedTrendWeightKg,
+    previousTrendWeightKg: assessment.weightAnalysis.previousTrendWeightKg,
+    cycleTrendChangeKg: assessment.weightAnalysis.cycleWeightChangeKg,
+    weeklyTrendRateKg: assessment.weightAnalysis.weeklyWeightChangeKg,
+    foodLoggedDays: assessment.foodLoggedDays,
+    weightLoggedDays: assessment.weightLoggedDays,
+    loggingCompletenessPct: assessment.loggingCompletenessPct,
+    calorieAdherencePct: assessment.adherencePercentage,
+    avgDailyCalories: assessment.avgDailyCalories,
+    avgDailyProtein: assessment.avgDailyProtein,
+    avgDailyCarbs: assessment.avgDailyCarbs,
+    avgDailyFat: assessment.avgDailyFat,
+    avgDailyFibre: assessment.avgDailyFibre,
+    confidenceLevel: assessment.confidenceLevel,
+    formulaTdeeKcal: assessment.estimatedTdeeKcal,
+    priorTdeeKcal: assessment.priorTdeeKcal,
+    calibratedTdeeKcal: assessment.calibratedTdeeKcal,
+    previousCalories: assessment.previousRecommendedCalories,
+    newCalories: assessment.recommendedCalories,
+    calorieDeltaKcal: assessment.calorieDeltaKcal,
+    newMacros: {
+      proteinG: assessment.recommendedProtein,
+      carbsG: assessment.recommendedCarbs,
+      fatG: assessment.recommendedFat,
+      fibreG: assessment.recommendedFibre,
+    },
+    goalCompleted: assessment.goalCompleted,
+    adjustmentType: assessment.adjustmentType,
+    deterministicReason: assessment.adjustmentReason,
+  };
+
+  const reviewPrompt = `Explain this deterministic 14-day nutrition progress review clearly in plain English for everyday users (avoid technical jargon like BMR, EWMA, or PAL). STRICT RULES:
+1. NEVER change, override, or invent any numeric targets—quote ONLY the exact figures in the JSON facts below.
+2. Explain weight progress smoothly using the 14-day trend alongside recent scale readings; never make unsupported claims about exact grams of muscle or fat gained/lost.
+3. Keep "summary" crisp (1-3 short sentences) and "reason" to 1 short sentence for the UI card.
+4. Give 2-3 practical tips for the next 14-day cycle incorporating realistic Indian food options (e.g., paneer, dal, curd, eggs, chicken, roti, oats, ragi, idli, sprouts) alongside international options, strictly respecting dietaryPreference (${dietaryPreference}) and restrictions (${foodRestrictions.join(', ') || 'none'}).
+5. When confidenceLevel is "low", clearly explain what extra logs are needed and reassure the user that targets were kept unchanged.
+
+DETERMINISTIC ASSESSMENT FACTS:
+${JSON.stringify(facts)}`;
+
+  if (groqActive) {
+    try {
+      const raw = await callGroqChatJson({
+        models: GROQ_TEXT_MODELS,
+        systemInstruction:
+          'You are CALOTHRIX Nutrition Explainer. Return strictly valid JSON with keys: status, summary, reason, headline, bodyChangeAnalysis, calorieAdjustmentReason, actionableTips (array of 2-3 strings), confidenceExplanation. Never alter numeric targets.',
+        userContent: reviewPrompt,
+        timeoutMs: 12000,
+      });
+      const parsed = parseLooseJsonObject(raw);
+      const validated = validateWeeklyAssessmentAiExplanation(parsed, fallback);
+      return validated.explanation;
+    } catch {
+      if (!hasGemini) return fallback;
+    }
   }
 
   try {
@@ -947,65 +1242,13 @@ export async function generateWeeklyAssessmentExplanation(params: {
       ],
     };
 
-    const facts = {
-      cycleNumber: assessment.assessmentWeekNumber,
-      cycleDays: assessment.cycleDays,
-      period: `${assessment.weekStartDate} to ${assessment.weekEndDate}`,
-      statusTag: assessment.statusTag,
-      goal: goalLabel,
-      goalSpeed: assessment.goalSpeed,
-      dietaryPreference,
-      foodRestrictions,
-      latestMeasuredWeightKg: assessment.weightAnalysis.latestMeasuredWeightKg,
-      previousMeasuredWeightKg: assessment.weightAnalysis.previousMeasuredWeightKg,
-      current7dAvgWeightKg: assessment.weightAnalysis.current7dAvgWeightKg,
-      previous7dAvgWeightKg: assessment.weightAnalysis.previous7dAvgWeightKg,
-      assessedTrendWeightKg: assessment.weightAnalysis.assessedTrendWeightKg,
-      previousTrendWeightKg: assessment.weightAnalysis.previousTrendWeightKg,
-      cycleTrendChangeKg: assessment.weightAnalysis.cycleWeightChangeKg,
-      weeklyTrendRateKg: assessment.weightAnalysis.weeklyWeightChangeKg,
-      foodLoggedDays: assessment.foodLoggedDays,
-      weightLoggedDays: assessment.weightLoggedDays,
-      loggingCompletenessPct: assessment.loggingCompletenessPct,
-      calorieAdherencePct: assessment.adherencePercentage,
-      avgDailyCalories: assessment.avgDailyCalories,
-      avgDailyProtein: assessment.avgDailyProtein,
-      avgDailyCarbs: assessment.avgDailyCarbs,
-      avgDailyFat: assessment.avgDailyFat,
-      avgDailyFibre: assessment.avgDailyFibre,
-      confidenceLevel: assessment.confidenceLevel,
-      formulaTdeeKcal: assessment.estimatedTdeeKcal,
-      priorTdeeKcal: assessment.priorTdeeKcal,
-      calibratedTdeeKcal: assessment.calibratedTdeeKcal,
-      previousCalories: assessment.previousRecommendedCalories,
-      newCalories: assessment.recommendedCalories,
-      calorieDeltaKcal: assessment.calorieDeltaKcal,
-      newMacros: {
-        proteinG: assessment.recommendedProtein,
-        carbsG: assessment.recommendedCarbs,
-        fatG: assessment.recommendedFat,
-        fibreG: assessment.recommendedFibre,
-      },
-      goalCompleted: assessment.goalCompleted,
-      adjustmentType: assessment.adjustmentType,
-      deterministicReason: assessment.adjustmentReason,
-    };
-
     const response = await withTimeout(
       ai.models.generateContent({
         model: 'gemini-3.1-flash-lite',
         contents: {
           parts: [
             {
-              text: `Explain this deterministic 14-day nutrition progress review clearly in plain English for everyday users (avoid technical jargon like BMR, EWMA, or PAL). STRICT RULES:
-1. NEVER change, override, or invent any numeric targets—quote ONLY the exact figures in the JSON facts below.
-2. Explain weight progress smoothly using the 14-day trend alongside recent scale readings; never make unsupported claims about exact grams of muscle or fat gained/lost.
-3. Keep "summary" crisp (1-3 short sentences) and "reason" to 1 short sentence for the UI card.
-4. Give 2-3 practical tips for the next 14-day cycle incorporating realistic Indian food options (e.g., paneer, dal, curd, eggs, chicken, roti, oats, ragi, idli, sprouts) alongside international options, strictly respecting dietaryPreference (${dietaryPreference}) and restrictions (${foodRestrictions.join(', ') || 'none'}).
-5. When confidenceLevel is "low", clearly explain what extra logs are needed and reassure the user that targets were kept unchanged.
-
-DETERMINISTIC ASSESSMENT FACTS:
-${JSON.stringify(facts)}`,
+              text: reviewPrompt,
             },
           ],
         },

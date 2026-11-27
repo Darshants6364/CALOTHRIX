@@ -374,9 +374,12 @@ export function sendSafeError(
   const status = rawStatus >= 400 && rawStatus < 600 ? rawStatus : 500;
   const requestId = logServerError(context, req, err);
 
-  // Only pass through client-facing 4xx messages; sanitize 5xx internal failures
+  // Pass through client-facing 4xx messages or explicitly exposed safe 503/504 messages; sanitize internal failures
+  const hasSafeMessage = Boolean(
+    e?.message && !/sql|postgres|stack|api[_ ]?key/i.test(e.message)
+  );
   const clientMessage =
-    status >= 400 && status < 500 && e?.message && !/sql|postgres|stack|api[_ ]?key/i.test(e.message)
+    hasSafeMessage && ((status >= 400 && status < 500) || e?.expose === true)
       ? e.message
       : fallbackMessage;
 

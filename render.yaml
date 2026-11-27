@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: calothrix
+    runtime: node
+    plan: free
+    buildCommand: npm install --include=dev --legacy-peer-deps && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: USDA_FDC_API_KEY
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false
