@@ -67,10 +67,12 @@ export const ProfileSettingsPage: React.FC = () => {
       : ''
   );
   const [dailySteps, setDailySteps] = useState(
-    profile.dailyAverageSteps > 0 ? String(profile.dailyAverageSteps) : '7000'
+    profile.onboardingCompleted || profile.dailyAverageSteps > 0
+      ? String(profile.dailyAverageSteps ?? 0)
+      : '7000'
   );
   const [workoutFrequency, setWorkoutFrequency] = useState(
-    String(profile.workoutFrequencyPerWeek ?? 3)
+    String(Math.max(0, Math.min(7, profile.workoutFrequencyPerWeek ?? 3)))
   );
   const [workoutIntensity, setWorkoutIntensity] = useState<WorkoutIntensity>(
     profile.workoutIntensity || 'moderate'
@@ -86,6 +88,8 @@ export const ProfileSettingsPage: React.FC = () => {
   const [foodRestrictions, setFoodRestrictions] = useState<FoodRestriction[]>(
     profile.foodRestrictions || []
   );
+  const [profileError, setProfileError] = useState('');
+  const [profileSavedNotice, setProfileSavedNotice] = useState(false);
 
   useEffect(() => {
     setName(profile.name);
@@ -102,8 +106,12 @@ export const ProfileSettingsPage: React.FC = () => {
         ? String(convertWeightToDisplay(profile.targetWeightKg, settings.weightUnit))
         : ''
     );
-    setDailySteps(profile.dailyAverageSteps > 0 ? String(profile.dailyAverageSteps) : '7000');
-    setWorkoutFrequency(String(profile.workoutFrequencyPerWeek ?? 3));
+    setDailySteps(
+      profile.onboardingCompleted || profile.dailyAverageSteps > 0
+        ? String(profile.dailyAverageSteps ?? 0)
+        : '7000'
+    );
+    setWorkoutFrequency(String(Math.max(0, Math.min(7, profile.workoutFrequencyPerWeek ?? 3))));
     setWorkoutIntensity(profile.workoutIntensity || 'moderate');
     setActivityLevel(profile.activityLevel);
     setFitnessGoal(normalizeFitnessGoal(profile.fitnessGoal));
@@ -120,36 +128,75 @@ export const ProfileSettingsPage: React.FC = () => {
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    const parsedAge = parseInt(age, 10);
-    const parsedHeight = parseFloat(heightCm);
-    const parsedCurrentW = parseFloat(currentWeight);
-    const parsedTargetW = parseFloat(targetWeight);
-    const parsedSteps = parseInt(dailySteps, 10);
-    const parsedWorkouts = parseInt(workoutFrequency, 10);
+    if (!name.trim()) {
+      setProfileError('Please enter a display name.');
+      return;
+    }
 
+    const parsedAge = age.trim() === '' ? 0 : parseInt(age, 10);
+    if (age.trim() !== '' && (!Number.isFinite(parsedAge) || parsedAge < 14 || parsedAge > 100)) {
+      setProfileError('Age must be between 14 and 100 years.');
+      return;
+    }
+
+    const parsedHeight = heightCm.trim() === '' ? 0 : parseFloat(heightCm);
+    if (heightCm.trim() !== '' && (!Number.isFinite(parsedHeight) || parsedHeight < 120 || parsedHeight > 240)) {
+      setProfileError('Height must be between 120 and 240 cm.');
+      return;
+    }
+
+    let nextCurrentWeightKg = profile.currentWeightKg;
+    if (currentWeight.trim() !== '') {
+      const parsedCurrentW = parseFloat(currentWeight);
+      const convertedCurrent = Number.isFinite(parsedCurrentW)
+        ? convertDisplayWeightToKg(parsedCurrentW, settings.weightUnit)
+        : NaN;
+      if (!Number.isFinite(convertedCurrent) || convertedCurrent < 30 || convertedCurrent > 300) {
+        setProfileError(
+          `Current weight must be between ${settings.weightUnit === 'lbs' ? '66 and 660 lbs' : '30 and 300 kg'}.`
+        );
+        return;
+      }
+      nextCurrentWeightKg = convertedCurrent;
+    }
+
+    let nextTargetWeightKg = profile.targetWeightKg;
+    if (targetWeight.trim() !== '') {
+      const parsedTargetW = parseFloat(targetWeight);
+      const convertedTarget = Number.isFinite(parsedTargetW)
+        ? convertDisplayWeightToKg(parsedTargetW, settings.weightUnit)
+        : NaN;
+      if (!Number.isFinite(convertedTarget) || convertedTarget < 30 || convertedTarget > 300) {
+        setProfileError(
+          `Target weight must be between ${settings.weightUnit === 'lbs' ? '66 and 660 lbs' : '30 and 300 kg'}.`
+        );
+        return;
+      }
+      nextTargetWeightKg = convertedTarget;
+    }
+
+    const parsedSteps = dailySteps.trim() === '' ? 0 : parseInt(dailySteps, 10);
+    if (!Number.isFinite(parsedSteps) || parsedSteps < 0 || parsedSteps > 50000) {
+      setProfileError('Daily average steps must be between 0 and 50,000.');
+      return;
+    }
+
+    const parsedWorkouts = workoutFrequency.trim() === '' ? 0 : parseInt(workoutFrequency, 10);
+    if (!Number.isFinite(parsedWorkouts) || parsedWorkouts < 0 || parsedWorkouts > 7) {
+      setProfileError('Workouts per week must be between 0 and 7.');
+      return;
+    }
+
+    setProfileError('');
     updateProfile({
       name: name.trim(),
-      age: Number.isFinite(parsedAge) && parsedAge >= 0 ? parsedAge : profile.age,
+      age: parsedAge,
       biologicalSex,
-      heightCm:
-        Number.isFinite(parsedHeight) && parsedHeight >= 0 ? parsedHeight : profile.heightCm,
-      currentWeightKg:
-        Number.isFinite(parsedCurrentW) && parsedCurrentW >= 0
-          ? convertDisplayWeightToKg(parsedCurrentW, settings.weightUnit)
-          : profile.currentWeightKg,
-      targetWeightKg:
-        Number.isFinite(parsedTargetW) && parsedTargetW >= 0
-          ? convertDisplayWeightToKg(parsedTargetW, settings.weightUnit)
-          : profile.targetWeightKg,
-      dailyAverageSteps:
-        Number.isFinite(parsedSteps) && parsedSteps >= 0
-          ? parsedSteps
-          : profile.dailyAverageSteps,
-      workoutFrequencyPerWeek:
-        Number.isFinite(parsedWorkouts) && parsedWorkouts >= 0
-          ? parsedWorkouts
-          : profile.workoutFrequencyPerWeek,
+      heightCm: parsedHeight,
+      currentWeightKg: nextCurrentWeightKg,
+      targetWeightKg: nextTargetWeightKg,
+      dailyAverageSteps: parsedSteps,
+      workoutFrequencyPerWeek: parsedWorkouts,
       workoutIntensity,
       activityLevel,
       fitnessGoal,
@@ -157,11 +204,13 @@ export const ProfileSettingsPage: React.FC = () => {
       dietaryPreference,
       foodRestrictions,
     });
+    setProfileSavedNotice(true);
+    setTimeout(() => setProfileSavedNotice(false), 3000);
   };
 
   const displayAvatar = profile.avatarUrl || authDetails?.avatarUrl;
   const providerLabel = isGuest
-    ? 'Local Guest Session'
+    ? 'Guest Login (This Device)'
     : authDetails?.provider === 'google'
     ? 'Google Account'
     : authDetails?.provider === 'email'
@@ -199,7 +248,7 @@ export const ProfileSettingsPage: React.FC = () => {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
-                  {isGuest ? 'Guest Session' : authDetails?.name || profile.name}
+                  {isGuest ? 'Guest Login' : authDetails?.name || profile.name}
                 </h2>
                 {!isGuest && (
                   <ShieldCheck className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
@@ -207,7 +256,7 @@ export const ProfileSettingsPage: React.FC = () => {
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-300 truncate">
                 {isGuest
-                  ? 'Entries are stored on this device. Sign in to sync across devices.'
+                  ? 'Your logs and targets are saved on this device. Sign in anytime to sync across devices.'
                   : authDetails?.email || profile.email}
               </p>
               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -232,7 +281,7 @@ export const ProfileSettingsPage: React.FC = () => {
               className="min-h-[44px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 hover:bg-stone-50 dark:hover:bg-white/5 inline-flex items-center gap-2 whitespace-nowrap"
             >
               <LogOut className="w-4 h-4" />
-              {isGuest ? 'Exit Guest Mode' : 'Sign Out'}
+              {isGuest ? 'Exit Guest Login' : 'Sign Out'}
             </button>
           </div>
         </div>
@@ -262,6 +311,12 @@ export const ProfileSettingsPage: React.FC = () => {
         <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
           Body, Activity &amp; Dietary Profile
         </h2>
+
+        {profileError && (
+          <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/60 text-xs font-medium text-red-700 dark:text-red-300">
+            {profileError}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -362,12 +417,12 @@ export const ProfileSettingsPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-              Workouts / Week
+              Workouts / Week (0–7)
             </label>
             <input
               type="number"
               min="0"
-              max="14"
+              max="7"
               value={workoutFrequency}
               onChange={(e) => setWorkoutFrequency(e.target.value)}
               className="w-full h-11 px-3.5 rounded-xl border border-black/10 dark:border-white/15 bg-stone-50/60 dark:bg-[#090A0C] text-sm font-mono-nums text-slate-900 dark:text-slate-100"
@@ -468,10 +523,10 @@ export const ProfileSettingsPage: React.FC = () => {
         <div className="flex justify-end">
           <button
             type="submit"
-            className="min-h-[44px] px-5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center gap-2"
+            className="min-h-[44px] px-5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity inline-flex items-center gap-2 cursor-pointer"
           >
             <Check className="w-4 h-4" />
-            Save Profile
+            {profileSavedNotice ? 'Profile Saved' : 'Save Profile'}
           </button>
         </div>
       </form>

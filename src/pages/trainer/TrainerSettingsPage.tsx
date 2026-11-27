@@ -228,10 +228,10 @@ export const TrainerSettingsPage: React.FC = () => {
           <Shield className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
           <div>
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Switch to Personal User Tracker
+              Switch to Personal Account
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Switch this account back to the Normal User meal-logging and personal goal dashboard anytime. Your trainer roster remains saved in the database.
+              Switch this account back to your Personal Account meal-logging and nutrition goal dashboard anytime. Your trainer roster remains saved in the database.
             </p>
           </div>
         </div>
@@ -241,7 +241,7 @@ export const TrainerSettingsPage: React.FC = () => {
           onClick={() => void selectAccountRole('individual')}
           className="min-h-[42px] px-4 rounded-xl border border-black/10 dark:border-white/15 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-stone-50 dark:hover:bg-slate-800 whitespace-nowrap shrink-0"
         >
-          Switch to Normal User
+          Switch to Personal Account
         </button>
       </section>
     </div>

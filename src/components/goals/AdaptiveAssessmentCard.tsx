@@ -115,14 +115,14 @@ export const AdaptiveAssessmentCard: React.FC<AdaptiveAssessmentCardProps> = ({
 
   return (
     <section
-      aria-label="Two Weeks Progress Review"
+      aria-label="14-Day Progress Review"
       className="rounded-2xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#111317] p-4 sm:p-5 space-y-4"
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
           <h2 className="text-sm sm:text-base font-bold text-[#111317] dark:text-white">
-            Two Weeks Progress Review
+            14-Day Progress Review
           </h2>
         </div>
 

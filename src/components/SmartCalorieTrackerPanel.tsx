@@ -145,12 +145,14 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
     state.profile.activityLevel || 'moderate'
   );
   const [dailyAverageSteps, setDailyAverageSteps] = useState<string>(
-    state.profile.dailyAverageSteps > 0 || isConfigured
+    isConfigured || state.profile.dailyAverageSteps > 0
       ? String(state.profile.dailyAverageSteps ?? 7000)
       : '7000'
   );
   const [workoutFrequency, setWorkoutFrequency] = useState<string>(
-    isConfigured ? String(state.profile.workoutFrequencyPerWeek ?? 3) : '3'
+    isConfigured
+      ? String(Math.max(0, Math.min(7, state.profile.workoutFrequencyPerWeek ?? 3)))
+      : '3'
   );
   const [workoutIntensity, setWorkoutIntensity] = useState<WorkoutIntensity>(
     state.profile.workoutIntensity || 'moderate'
@@ -228,12 +230,14 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
     setTargetWeightDisplay(formatWeightInput(effectiveTargetKg, unit));
     setActivityLevel(state.profile.activityLevel || 'moderate');
     setDailyAverageSteps(
-      state.profile.dailyAverageSteps > 0 || isConfigured
+      isConfigured || state.profile.dailyAverageSteps > 0
         ? String(state.profile.dailyAverageSteps ?? 7000)
         : '7000'
     );
     setWorkoutFrequency(
-      isConfigured ? String(state.profile.workoutFrequencyPerWeek ?? 3) : '3'
+      isConfigured
+        ? String(Math.max(0, Math.min(7, state.profile.workoutFrequencyPerWeek ?? 3)))
+        : '3'
     );
     setWorkoutIntensity(state.profile.workoutIntensity || 'moderate');
     setFitnessGoal(normalizeFitnessGoal(state.profile.fitnessGoal));
@@ -413,7 +417,7 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
         manualOverrideActive: false,
       },
       {
-        adjustmentType: state.goals.calories === 0 ? 'initial' : 'initial',
+        adjustmentType: 'initial',
         adjustmentReason:
           state.goals.calories === 0
             ? 'Initial personalized targets calculated and applied during onboarding.'
@@ -482,9 +486,9 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
         workoutFrequency.trim() === '' ||
         !Number.isFinite(pWorkouts) ||
         pWorkouts < 0 ||
-        pWorkouts > 14
+        pWorkouts > 7
       ) {
-        setStepError('Enter workouts per week (0–14).');
+        setStepError('Enter workouts per week (0–7).');
         return;
       }
       if (bodyFatPct.trim() !== '') {
@@ -749,13 +753,13 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
 
                 <label className="block space-y-1.5">
                   <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    Workouts / Week (0–14) *
+                    Workouts / Week (0–7) *
                   </span>
                   <input
                     type="number"
                     inputMode="numeric"
                     min={0}
-                    max={14}
+                    max={7}
                     value={workoutFrequency}
                     onChange={(e) => {
                       const nextVal = e.target.value;
@@ -1366,13 +1370,13 @@ export const SmartCalorieTrackerPanel: React.FC<SmartCalorieTrackerPanelProps> =
 
               <label className="block space-y-1">
                 <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                  Workouts / Week (0–14)
+                  Workouts / Week (0–7)
                 </span>
                 <input
                   type="number"
                   inputMode="numeric"
                   min={0}
-                  max={14}
+                  max={7}
                   value={workoutFrequency}
                   onChange={(e) => {
                     const nextVal = e.target.value;
