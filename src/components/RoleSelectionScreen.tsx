@@ -1,50 +1,27 @@
 import React, { useState } from 'react';
 import { ArrowRight, CheckCircle2, ClipboardCheck, Loader2, Shield, Users } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { TrainerOnboardingInput } from '../types';
 import { CalothrixLogo } from './CalothrixLogo';
-
-const SPECIALTY_OPTIONS = [
-  'Fat Loss',
-  'Muscle Hypertrophy',
-  'Body Recomposition',
-  'Indian Nutrition',
-  'Strength & Conditioning',
-  'Contest Prep',
-];
+import { TrainerOnboardingFlow } from './TrainerOnboardingFlow';
 
 export const RoleSelectionScreen: React.FC = () => {
   const { state, authDetails, selectAccountRole, signOut } = useMacroLogStore();
   const [selectedRole, setSelectedRole] = useState<'individual' | 'trainer'>('individual');
-  const [trainerName, setTrainerName] = useState(
-    authDetails?.name || state.profile.name || ''
-  );
-  const [trainerBio, setTrainerBio] = useState('');
-  const [specialties, setSpecialties] = useState<string[]>(['Fat Loss', 'Macro Coaching']);
   const [submitting, setSubmitting] = useState(false);
 
-  const toggleSpecialty = (item: string) => {
-    setSpecialties((prev) =>
-      prev.includes(item) ? prev.filter((s) => s !== item) : [...prev, item]
-    );
-  };
-
-  const handleContinue = async (e: React.FormEvent) => {
+  const handleContinuePersonal = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      if (selectedRole === 'trainer') {
-        await selectAccountRole('trainer', {
-          displayName: trainerName.trim() || authDetails?.name || 'Coach',
-          bio: trainerBio.trim(),
-          specialties: specialties.length > 0 ? specialties : ['Macro Coaching'],
-          certifications: [],
-        });
-      } else {
-        await selectAccountRole('individual');
-      }
+      await selectAccountRole('individual');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleCompleteTrainerOnboarding = async (onboarding: TrainerOnboardingInput) => {
+    await selectAccountRole('trainer', onboarding);
   };
 
   return (
@@ -60,10 +37,7 @@ export const RoleSelectionScreen: React.FC = () => {
         </button>
       </div>
 
-      <form
-        onSubmit={handleContinue}
-        className="w-full max-w-3xl mx-auto my-8 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl"
-      >
+      <div className="w-full max-w-3xl mx-auto my-8 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl">
         <div>
           <span className="text-xs font-mono-nums font-semibold text-[#4E6800] dark:text-[#C8FF00] uppercase tracking-[0.16em]">
             Welcome{authDetails?.name ? `, ${authDetails.name}` : ''}
@@ -72,7 +46,7 @@ export const RoleSelectionScreen: React.FC = () => {
             Choose Your Workspace Role
           </h1>
           <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
-            Select how you want to use CALOTHRIX. You can also adjust your coaching role later in Settings.
+            Select how you want to use CALOTHRIX. You can also onboard as a trainer later from Settings.
           </p>
         </div>
 
@@ -101,12 +75,12 @@ export const RoleSelectionScreen: React.FC = () => {
                   Personal Account
                 </h2>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Track daily meals, search global & Indian foods, calculate personalized macro targets, log body weight, and optionally share progress with a coach.
+                  Track daily meals, search global &amp; Indian foods, calculate personalized macro targets, log body weight, and optionally share progress with a coach.
                 </p>
               </div>
             </div>
             <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-              Includes Personal Goal Calculator & Global Food Search
+              Includes Personal Goal Calculator &amp; Global Food Search
             </div>
           </button>
 
@@ -145,92 +119,38 @@ export const RoleSelectionScreen: React.FC = () => {
           </button>
         </div>
 
-        {/* Trainer Quick Setup when Trainer is selected */}
-        {selectedRole === 'trainer' && (
-          <div className="rounded-xl border border-black/10 dark:border-white/12 bg-[#F4F3EF]/70 dark:bg-[#090A0C] p-4 sm:p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-[#111317] dark:text-white">
-              Trainer Profile Setup
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                  Coach Display Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={trainerName}
-                  onChange={(e) => setTrainerName(e.target.value)}
-                  placeholder="Coach Alex"
-                  className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-white dark:bg-[#111317] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
-                  Short Coaching Bio (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={trainerBio}
-                  onChange={(e) => setTrainerBio(e.target.value)}
-                  placeholder="Evidence-based fat loss & strength nutrition"
-                  className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-white dark:bg-[#111317] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <span className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
-                Coaching Specialties
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {SPECIALTY_OPTIONS.map((spec) => {
-                  const active = specialties.includes(spec);
-                  return (
-                    <button
-                      key={spec}
-                      type="button"
-                      onClick={() => toggleSpecialty(spec)}
-                      className={`min-h-[34px] px-3 rounded-lg border text-xs font-medium transition-colors ${
-                        active
-                          ? 'bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black border-[#111317] dark:border-[#C8FF00] font-semibold'
-                          : 'bg-white dark:bg-[#111317] border-black/12 dark:border-white/12 text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      {spec}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+        {selectedRole === 'trainer' ? (
+          <div className="rounded-xl border border-black/10 dark:border-white/12 bg-white dark:bg-[#14171D] p-5 sm:p-6">
+            <TrainerOnboardingFlow
+              mode="authenticated"
+              initialDisplayName={authDetails?.name || state.profile.name || ''}
+              cancelLabel="Back to Role Choice"
+              onCancel={() => setSelectedRole('individual')}
+              onCompleteAuthenticated={handleCompleteTrainerOnboarding}
+            />
           </div>
+        ) : (
+          <form onSubmit={handleContinuePersonal} className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="min-h-[46px] px-6 rounded-xl bg-[#C8FF00] hover:bg-[#D9FF4D] text-black text-sm font-bold uppercase tracking-[0.06em] transition-colors inline-flex items-center gap-2 disabled:opacity-60"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Setting up...</span>
+                </>
+              ) : (
+                <>
+                  <span>Continue as Personal Account</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </form>
         )}
-
-        <div className="flex justify-end pt-2">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="min-h-[46px] px-6 rounded-xl bg-[#C8FF00] hover:bg-[#D9FF4D] text-black text-sm font-bold uppercase tracking-[0.06em] transition-colors inline-flex items-center gap-2 disabled:opacity-60"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Setting up...</span>
-              </>
-            ) : (
-              <>
-                <span>
-                  {selectedRole === 'trainer'
-                    ? 'Enter Trainer Dashboard'
-                    : 'Continue as Personal Account'}
-                </span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </div>
-      </form>
+      </div>
 
       <p className="text-center text-xs text-slate-500 dark:text-slate-500">
         CALOTHRIX · Eat Smart. Track Progress. Build Better.

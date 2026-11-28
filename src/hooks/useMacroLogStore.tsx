@@ -65,12 +65,14 @@ import {
   ToastMessage,
   TrainerClientPlan,
   TrainerNavTab,
+  TrainerOnboardingInput,
   UserProfile,
   WeeklyAssessmentDueStatus,
   WeeklyAssessmentRecord,
   WeightEntry,
   WeightGoal,
 } from '../types';
+import { PENDING_TRAINER_ONBOARDING_KEY } from '../components/TrainerOnboardingFlow';
 import { isDatabaseAdmin } from '../utils/adminAccess';
 import { addDaysToDateKey, getTodayDateKey } from '../utils/dateUtils';
 import {
@@ -230,9 +232,9 @@ interface MacroLogContextValue {
     name: string,
     email: string,
     password: string,
-    intendedRole?: AccountRole
+    intendedRole?: AccountRole,
+    trainerOnboarding?: TrainerOnboardingInput
   ) => Promise<{ error?: string; needsEmailConfirmation?: boolean }>;
-  signInWithMagicLink: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   enterGuestMode: () => void;
   exitGuestModeToAuth: () => void;
@@ -333,14 +335,10 @@ interface MacroLogContextValue {
   updateSettings: (updates: Partial<AppSettings>) => void;
   exportData: (format: 'json' | 'csv') => void;
   // Role Selection, Trainer Workspace & Coaching
+  needsTrainerOnboarding: boolean;
   selectAccountRole: (
     role: AccountRole,
-    trainerOnboarding?: {
-      displayName: string;
-      bio: string;
-      specialties: string[];
-      certifications: string[];
-    }
+    trainerOnboarding?: TrainerOnboardingInput
   ) => Promise<boolean>;
   trainerTab: TrainerNavTab;
   setTrainerTab: (tab: TrainerNavTab) => void;
@@ -412,6 +410,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [serverIsAdmin, setServerIsAdmin] = useState(false);
   const [needsSchemaSetup, setNeedsSchemaSetup] = useState(false);
+  const [needsTrainerOnboarding, setNeedsTrainerOnboarding] = useState(false);
   const [syncingDb, setSyncingDb] = useState(false);
 
   const isAdmin = useMemo(
@@ -956,20 +955,63 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             : null;
         const desiredRole: AccountRole | null =
           pendingAuthRole || (!nextState.profile.roleSelected ? metaRole : null);
+        const resolvedRole: AccountRole | null =
+          desiredRole || (nextState.profile.roleSelected ? nextState.profile.accountRole : null);
+        let nextNeedsTrainerOnboarding = false;
 
-        if (desiredRole === 'trainer' && !result.needsSchemaSetup) {
+        if (resolvedRole === 'trainer' && !result.needsSchemaSetup) {
+          let pendingOnboarding: TrainerOnboardingInput | null = null;
+          if (typeof window !== 'undefined') {
+            try {
+              const rawOnboarding = localStorage.getItem(PENDING_TRAINER_ONBOARDING_KEY);
+              if (rawOnboarding) {
+                pendingOnboarding = JSON.parse(rawOnboarding) as TrainerOnboardingInput;
+              }
+              localStorage.removeItem(PENDING_TRAINER_ONBOARDING_KEY);
+            } catch {
+              localStorage.removeItem(PENDING_TRAINER_ONBOARDING_KEY);
+            }
+          }
+          const metaOnboarding =
+            user.user_metadata?.trainer_onboarding &&
+            typeof user.user_metadata.trainer_onboarding === 'object'
+              ? (user.user_metadata.trainer_onboarding as TrainerOnboardingInput)
+              : null;
+          const resolvedOnboarding = pendingOnboarding || metaOnboarding;
+
           const existingTrainer = await fetchTrainerProfile(user.id);
-          if (existingTrainer.ok && !existingTrainer.data) {
-            const authInfo = extractAuthDetails(user);
-            await upsertTrainerProfile({
-              userId: user.id,
-              displayName: authInfo.name || nextState.profile.name || 'Coach',
-              bio: '',
-              specialties: ['Fat Loss', 'Macro Coaching'],
-              certifications: [],
-              acceptingClients: true,
-              subscriptionTier: 'free',
-            });
+          if (existingTrainer.ok) {
+            if (resolvedOnboarding) {
+              const authInfo = extractAuthDetails(user);
+              await upsertTrainerProfile({
+                userId: user.id,
+                displayName:
+                  resolvedOnboarding.displayName?.trim() ||
+                  existingTrainer.data?.displayName ||
+                  authInfo.name ||
+                  nextState.profile.name ||
+                  'Coach',
+                bio: resolvedOnboarding.bio ?? existingTrainer.data?.bio ?? '',
+                specialties:
+                  resolvedOnboarding.specialties && resolvedOnboarding.specialties.length > 0
+                    ? resolvedOnboarding.specialties
+                    : existingTrainer.data?.specialties && existingTrainer.data.specialties.length > 0
+                    ? existingTrainer.data.specialties
+                    : ['Fat Loss', 'Macro Coaching'],
+                certifications:
+                  resolvedOnboarding.certifications ?? existingTrainer.data?.certifications ?? [],
+                acceptingClients:
+                  resolvedOnboarding.acceptingClients ??
+                  existingTrainer.data?.acceptingClients ??
+                  true,
+              });
+              nextNeedsTrainerOnboarding = false;
+            } else if (existingTrainer.data) {
+              nextNeedsTrainerOnboarding = false;
+            } else {
+              // Require new coaches logging in via Google or Email to complete post-login onboarding
+              nextNeedsTrainerOnboarding = true;
+            }
           }
           if (nextState.profile.accountRole !== 'trainer' || !nextState.profile.roleSelected) {
             const updatedProfile: UserProfile = {
@@ -995,6 +1037,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         setState(nextState);
         setNeedsSchemaSetup(result.needsSchemaSetup);
+        setNeedsTrainerOnboarding(nextNeedsTrainerOnboarding);
         setAuthMode('authenticated');
 
         hydrateAuxiliaryLocalCaches(user.id, user);
@@ -1167,6 +1210,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     storageService.saveState(guestState);
     setState(guestState);
     setNeedsSchemaSetup(false);
+    setNeedsTrainerOnboarding(false);
     hydrateAuxiliaryLocalCaches(GUEST_USER_ID, null);
     setAuthMode('guest');
     setActiveTab('home');
@@ -1404,7 +1448,8 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       name: string,
       email: string,
       password: string,
-      intendedRole?: AccountRole
+      intendedRole?: AccountRole,
+      trainerOnboarding?: TrainerOnboardingInput
     ): Promise<{ error?: string; needsEmailConfirmation?: boolean }> => {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
@@ -1413,6 +1458,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           data: {
             full_name: name.trim(),
             ...(intendedRole ? { intended_role: intendedRole } : {}),
+            ...(trainerOnboarding ? { trainer_onboarding: trainerOnboarding } : {}),
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
@@ -1428,20 +1474,6 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [hydrateForUser, notify]
   );
 
-  const signInWithMagicLink = useCallback(
-    async (email: string): Promise<{ error?: string }> => {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-      if (error) return { error: error.message };
-      return {};
-    },
-    []
-  );
-
   const signOut = useCallback(async () => {
     localStorage.removeItem(GUEST_MODE_KEY);
     if (authUserRef.current) {
@@ -1449,6 +1481,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     setAuthUser(null);
     setNeedsSchemaSetup(false);
+    setNeedsTrainerOnboarding(false);
     setPendingInvitations([]);
     setPendingRecommendations([]);
     setCoachPlans([]);
@@ -2451,12 +2484,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const selectAccountRole = useCallback(
     async (
       role: AccountRole,
-      trainerOnboarding?: {
-        displayName: string;
-        bio: string;
-        specialties: string[];
-        certifications: string[];
-      }
+      trainerOnboarding?: TrainerOnboardingInput
     ): Promise<boolean> => {
       const user = authUserRef.current;
       if (!user) return false;
@@ -2470,34 +2498,41 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           );
           return false;
         }
-        if (!existing.data || trainerOnboarding?.bio || (trainerOnboarding?.certifications?.length ?? 0) > 0) {
-          const res = await upsertTrainerProfile({
-            userId: user.id,
-            displayName:
-              existing.data?.displayName ||
-              trainerOnboarding?.displayName ||
-              stateRef.current.profile.name ||
-              'Coach',
-            bio: trainerOnboarding?.bio ?? existing.data?.bio ?? '',
-            specialties:
-              existing.data?.specialties && existing.data.specialties.length > 0
-                ? existing.data.specialties
-                : trainerOnboarding?.specialties || ['Fat Loss', 'Macro Coaching'],
-            certifications:
-              existing.data?.certifications && existing.data.certifications.length > 0
-                ? existing.data.certifications
-                : trainerOnboarding?.certifications || [],
-            acceptingClients: existing.data?.acceptingClients ?? true,
-            subscriptionTier: existing.data?.subscriptionTier ?? 'free',
-          });
-          if (!res.ok) {
-            notify(
-              res.error || 'Could not initialize trainer profile. Please verify SQL migration.',
-              'error'
-            );
-            return false;
+        if (!existing.data && !trainerOnboarding) {
+          setNeedsTrainerOnboarding(true);
+        } else {
+          if (!existing.data || trainerOnboarding) {
+            const res = await upsertTrainerProfile({
+              userId: user.id,
+              displayName:
+                trainerOnboarding?.displayName?.trim() ||
+                existing.data?.displayName ||
+                stateRef.current.profile.name ||
+                'Coach',
+              bio: trainerOnboarding?.bio ?? existing.data?.bio ?? '',
+              specialties:
+                trainerOnboarding?.specialties && trainerOnboarding.specialties.length > 0
+                  ? trainerOnboarding.specialties
+                  : existing.data?.specialties && existing.data.specialties.length > 0
+                  ? existing.data.specialties
+                  : ['Fat Loss', 'Macro Coaching'],
+              certifications:
+                trainerOnboarding?.certifications ?? existing.data?.certifications ?? [],
+              acceptingClients:
+                trainerOnboarding?.acceptingClients ?? existing.data?.acceptingClients ?? true,
+            });
+            if (!res.ok) {
+              notify(
+                res.error || 'Could not initialize trainer profile. Please verify SQL migration.',
+                'error'
+              );
+              return false;
+            }
           }
+          setNeedsTrainerOnboarding(false);
         }
+      } else {
+        setNeedsTrainerOnboarding(false);
       }
 
       const nextProfile: UserProfile = {
@@ -2511,7 +2546,9 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (role === 'trainer') {
         setTrainerTab('overview');
-        notify('Trainer Dashboard ready');
+        if (trainerOnboarding) {
+          notify('Trainer Dashboard ready');
+        }
       } else {
         if (stateRef.current.goals.calories === 0) {
           setActiveTab('goals');
@@ -3417,7 +3454,6 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       signInWithGoogle,
       signInWithEmail,
       signUpWithEmail,
-      signInWithMagicLink,
       signOut,
       enterGuestMode,
       exitGuestModeToAuth,
@@ -3462,6 +3498,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateProfile,
       updateSettings,
       exportData,
+      needsTrainerOnboarding,
       selectAccountRole,
       trainerTab,
       setTrainerTab,
@@ -3523,7 +3560,6 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       signInWithGoogle,
       signInWithEmail,
       signUpWithEmail,
-      signInWithMagicLink,
       signOut,
       enterGuestMode,
       exitGuestModeToAuth,
@@ -3568,6 +3604,7 @@ export const MacroLogProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateProfile,
       updateSettings,
       exportData,
+      needsTrainerOnboarding,
       selectAccountRole,
       trainerTab,
       selectedTrainerClientId,

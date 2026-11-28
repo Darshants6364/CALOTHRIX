@@ -8,9 +8,12 @@ import {
   ShieldCheck,
   Sun,
   Users,
+  X,
 } from 'lucide-react';
 import { ClientCoachingSection } from '../components/ClientCoachingSection';
+import { TrainerOnboardingFlow } from '../components/TrainerOnboardingFlow';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { fetchTrainerProfile } from '../services/trainerService';
 import {
   ActivityLevel,
   BiologicalSex,
@@ -19,6 +22,8 @@ import {
   FitnessGoalType,
   FoodRestriction,
   GoalSpeed,
+  TrainerOnboardingInput,
+  TrainerProfile,
   WorkoutIntensity,
 } from '../types';
 import { normalizeFitnessGoal } from '../utils/fitnessCalculator';
@@ -34,6 +39,7 @@ export const ProfileSettingsPage: React.FC = () => {
   const {
     state,
     authMode,
+    authUser,
     isAdmin,
     authDetails,
     showCoachMode,
@@ -90,6 +96,24 @@ export const ProfileSettingsPage: React.FC = () => {
   );
   const [profileError, setProfileError] = useState('');
   const [profileSavedNotice, setProfileSavedNotice] = useState(false);
+  const [existingTrainerProfile, setExistingTrainerProfile] = useState<TrainerProfile | null>(null);
+  const [trainerOnboardingOpen, setTrainerOnboardingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!authUser || isGuest) {
+      setExistingTrainerProfile(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchTrainerProfile(authUser.id).then((res) => {
+      if (!cancelled && res.ok) {
+        setExistingTrainerProfile(res.data || null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, isGuest]);
 
   useEffect(() => {
     setName(profile.name);
@@ -636,10 +660,12 @@ export const ProfileSettingsPage: React.FC = () => {
                   Coach &amp; Trainer Tools
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400">
-                  Enable only if you coach clients or work with a nutrition trainer
+                  {existingTrainerProfile
+                    ? `Coach profile active (${existingTrainerProfile.displayName}) — switch to your Trainer Dashboard or connect with a coach.`
+                    : 'Enable to work with a nutrition coach or onboard as a personal trainer.'}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowCoachMode(!showCoachMode)}
@@ -649,23 +675,25 @@ export const ProfileSettingsPage: React.FC = () => {
                       : 'border-black/12 dark:border-white/15 text-slate-600 dark:text-slate-300'
                   }`}
                 >
-                  {showCoachMode ? 'Enabled' : 'Enable Coach Mode'}
+                  {showCoachMode ? 'Coaching Tools On' : 'Enable Coach Mode'}
                 </button>
-                {showCoachMode && (
+                {existingTrainerProfile ? (
                   <button
                     type="button"
-                    onClick={() =>
-                      void selectAccountRole('trainer', {
-                        displayName: authDetails?.name || profile.name || 'Coach',
-                        bio: '',
-                        specialties: ['Fat Loss', 'Macro Coaching'],
-                        certifications: [],
-                      })
-                    }
+                    onClick={() => void selectAccountRole('trainer')}
                     className="min-h-[38px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1.5"
                   >
                     <Users className="w-3.5 h-3.5" />
                     Open Trainer Workspace
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setTrainerOnboardingOpen(true)}
+                    className="min-h-[38px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold inline-flex items-center gap-1.5"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    Onboard as Personal Trainer
                   </button>
                 )}
               </div>
@@ -676,6 +704,44 @@ export const ProfileSettingsPage: React.FC = () => {
 
       {/* Coaching Connections (only shown when opted in or user has active coaching) */}
       {ENABLE_TRAINER_PORTAL && !isGuest && showCoachMode && <ClientCoachingSection />}
+
+      {trainerOnboardingOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Trainer Onboarding"
+        >
+          <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-6 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setTrainerOnboardingOpen(false)}
+              aria-label="Close trainer onboarding"
+              className="absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/8"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <TrainerOnboardingFlow
+              mode="authenticated"
+              initialDisplayName={
+                existingTrainerProfile?.displayName || authDetails?.name || profile.name || ''
+              }
+              initialBio={existingTrainerProfile?.bio || ''}
+              initialSpecialties={existingTrainerProfile?.specialties}
+              initialCertifications={existingTrainerProfile?.certifications}
+              initialAcceptingClients={existingTrainerProfile?.acceptingClients ?? true}
+              cancelLabel="Cancel"
+              onCancel={() => setTrainerOnboardingOpen(false)}
+              onCompleteAuthenticated={async (onboarding: TrainerOnboardingInput) => {
+                const ok = await selectAccountRole('trainer', onboarding);
+                if (ok) {
+                  setTrainerOnboardingOpen(false);
+                }
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Export & Data Privacy */}
       <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 sm:p-6 space-y-4">

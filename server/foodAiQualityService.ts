@@ -7,6 +7,11 @@ import {
   isGroqConfigured,
   parseLooseJsonObject,
 } from './groqClient.ts';
+import {
+  callOpenRouterChatJson,
+  getOpenRouterTextModels,
+  isOpenRouterConfigured,
+} from './openRouterClient.ts';
 
 const GEMINI_FAST_MODEL = 'gemini-3.1-flash-lite';
 const GEMINI_HEADERS = { 'User-Agent': 'aistudio-build' };
@@ -55,8 +60,9 @@ export async function resolveRegionalFoodQueryWithGemini(
   }
 
   const groqActive = isGroqConfigured();
+  const openRouterActive = isOpenRouterConfigured();
   const ai = getGeminiClient();
-  if (!groqActive && !ai) return null;
+  if (!groqActive && !openRouterActive && !ai) return null;
 
   // Compact list of canonical candidate names + IDs from existing verified catalog
   const sampleCandidates = searchableCatalog
@@ -75,15 +81,31 @@ ${sampleCandidates}`;
   try {
     geminiFallbackSearchCalls++;
     let parsed: Partial<RegionalSearchSuggestion> | null = null;
+    const regionalSystemPrompt =
+      'Return strictly valid JSON: {"detectedFood":"string","canonicalEnglishName":"string","matchedFoodIds":["id1"],"reasoning":"string"}.';
 
     if (groqActive) {
       try {
         const raw = await callGroqChatJson({
           models: GROQ_TEXT_MODELS,
-          systemInstruction:
-            'Return strictly valid JSON: {"detectedFood":"string","canonicalEnglishName":"string","matchedFoodIds":["id1"],"reasoning":"string"}.',
+          systemInstruction: regionalSystemPrompt,
           userContent: promptText,
           timeoutMs: 10000,
+          temperature: 0.1,
+        });
+        parsed = parseLooseJsonObject(raw) as Partial<RegionalSearchSuggestion>;
+      } catch (err) {
+        if (!openRouterActive && !ai) throw err;
+      }
+    }
+
+    if (!parsed && openRouterActive) {
+      try {
+        const raw = await callOpenRouterChatJson({
+          models: getOpenRouterTextModels(),
+          systemInstruction: regionalSystemPrompt,
+          userContent: promptText,
+          timeoutMs: 12000,
           temperature: 0.1,
         });
         parsed = parseLooseJsonObject(raw) as Partial<RegionalSearchSuggestion>;
@@ -193,12 +215,13 @@ export async function completePendingFoodWithGemini(
   }
 
   const groqActive = isGroqConfigured();
+  const openRouterActive = isOpenRouterConfigured();
   const ai = getGeminiClient();
-  if (!groqActive && !ai) {
+  if (!groqActive && !openRouterActive && !ai) {
     return {
       foodId: food.id,
       status: 'error',
-      reason: 'Server GROQ_API_KEY or GEMINI_API_KEY is not configured.',
+      reason: 'Server GROQ_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY is not configured.',
     };
   }
 
@@ -249,14 +272,31 @@ ${referenceHints}`;
   try {
     let parsed: PendingFoodCompletionPayload | null = null;
 
+    const completionSystemPrompt =
+      'Return strictly valid JSON: {"sufficientConfidence":boolean,"confidenceScore":number,"qualityStatus":"string","caloriesPer100g":number,"proteinPer100g":number,"carbsPer100g":number,"fatPer100g":number,"fibrePer100g":number,"calculationMethod":"string","sourceReferenceFoods":["string"],"reasoning":"string"}.';
+
     if (groqActive) {
       try {
         const raw = await callGroqChatJson({
           models: GROQ_TEXT_MODELS,
-          systemInstruction:
-            'Return strictly valid JSON: {"sufficientConfidence":boolean,"confidenceScore":number,"qualityStatus":"string","caloriesPer100g":number,"proteinPer100g":number,"carbsPer100g":number,"fatPer100g":number,"fibrePer100g":number,"calculationMethod":"string","sourceReferenceFoods":["string"],"reasoning":"string"}.',
+          systemInstruction: completionSystemPrompt,
           userContent: completionPrompt,
           timeoutMs: 14000,
+          temperature: 0.1,
+        });
+        parsed = parseLooseJsonObject(raw) as unknown as PendingFoodCompletionPayload;
+      } catch (err) {
+        if (!openRouterActive && !ai) throw err;
+      }
+    }
+
+    if (!parsed && openRouterActive) {
+      try {
+        const raw = await callOpenRouterChatJson({
+          models: getOpenRouterTextModels(),
+          systemInstruction: completionSystemPrompt,
+          userContent: completionPrompt,
+          timeoutMs: 18000,
           temperature: 0.1,
         });
         parsed = parseLooseJsonObject(raw) as unknown as PendingFoodCompletionPayload;
@@ -419,8 +459,10 @@ export async function discoverRegionalFoodsWithGemini(
   regionOrTopic: string,
   existingCatalog: FoodItem[]
 ): Promise<DiscoveredFoodProposal[]> {
+  const groqActive = isGroqConfigured();
+  const openRouterActive = isOpenRouterConfigured();
   const ai = getGeminiClient();
-  if (!ai) return [];
+  if (!groqActive && !openRouterActive && !ai) return [];
 
   const existingNormalized = new Map<string, string>();
   for (const f of existingCatalog) {
@@ -430,57 +472,98 @@ export async function discoverRegionalFoodsWithGemini(
     }
   }
 
-  try {
-    const response = await ai.models.generateContent({
-      model: GEMINI_FAST_MODEL,
-      contents: `Propose up to 6 authentic, commonly eaten Indian / regional foods for topic: "${regionOrTopic}".
+  const discoveryPrompt = `Propose up to 6 authentic, commonly eaten Indian / regional foods for topic: "${regionOrTopic}".
 Focus ONLY on per-100g: calories (kcal), protein (g), carbs (g), fat (g), fibre (g).
-Include English name, foodFamilyId (paneer|rice|chicken|egg|dal|milk|curd|wheat_roti|ragi|millet_rotti|dosa|idli|sambar_rasam|poha_upma|vada_snacks|fish_seafood|vegetables|sweets_desserts|beverages), resultGroup (basic_ingredient|cooked_food|prepared_dish), aliases, regionalNames, and ingredient-based calculationMethod.`,
-      config: {
-        temperature: 0.2,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            proposals: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  foodFamilyId: { type: Type.STRING },
-                  resultGroup: { type: Type.STRING },
-                  aliases: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  regionalNames: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  caloriesPer100g: { type: Type.NUMBER },
-                  proteinPer100g: { type: Type.NUMBER },
-                  carbsPer100g: { type: Type.NUMBER },
-                  fatPer100g: { type: Type.NUMBER },
-                  fibrePer100g: { type: Type.NUMBER },
-                  calculationMethod: { type: Type.STRING },
+Include English name, foodFamilyId (paneer|rice|chicken|egg|dal|milk|curd|wheat_roti|ragi|millet_rotti|dosa|idli|sambar_rasam|poha_upma|vada_snacks|fish_seafood|vegetables|sweets_desserts|beverages), resultGroup (basic_ingredient|cooked_food|prepared_dish), aliases, regionalNames, and ingredient-based calculationMethod.`;
+
+  const discoverySystemPrompt =
+    'Return strictly valid JSON: {"proposals":[{"name":"string","foodFamilyId":"string","resultGroup":"basic_ingredient"|"cooked_food"|"prepared_dish","aliases":["string"],"regionalNames":["string"],"caloriesPer100g":number,"proteinPer100g":number,"carbsPer100g":number,"fatPer100g":number,"fibrePer100g":number,"calculationMethod":"string"}]}.';
+
+  try {
+    let parsed: { proposals?: DiscoveredFoodProposal[] } | null = null;
+
+    if (groqActive) {
+      try {
+        const raw = await callGroqChatJson({
+          models: GROQ_TEXT_MODELS,
+          systemInstruction: discoverySystemPrompt,
+          userContent: discoveryPrompt,
+          timeoutMs: 14000,
+          temperature: 0.2,
+        });
+        parsed = parseLooseJsonObject(raw) as { proposals?: DiscoveredFoodProposal[] };
+      } catch (err) {
+        if (!openRouterActive && !ai) throw err;
+      }
+    }
+
+    if (!parsed && openRouterActive) {
+      try {
+        const raw = await callOpenRouterChatJson({
+          models: getOpenRouterTextModels(),
+          systemInstruction: discoverySystemPrompt,
+          userContent: discoveryPrompt,
+          timeoutMs: 18000,
+          temperature: 0.2,
+        });
+        parsed = parseLooseJsonObject(raw) as { proposals?: DiscoveredFoodProposal[] };
+      } catch (err) {
+        if (!ai) throw err;
+      }
+    }
+
+    if (!parsed && ai) {
+      const response = await ai.models.generateContent({
+        model: GEMINI_FAST_MODEL,
+        contents: discoveryPrompt,
+        config: {
+          temperature: 0.2,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              proposals: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    foodFamilyId: { type: Type.STRING },
+                    resultGroup: { type: Type.STRING },
+                    aliases: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    regionalNames: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    caloriesPer100g: { type: Type.NUMBER },
+                    proteinPer100g: { type: Type.NUMBER },
+                    carbsPer100g: { type: Type.NUMBER },
+                    fatPer100g: { type: Type.NUMBER },
+                    fibrePer100g: { type: Type.NUMBER },
+                    calculationMethod: { type: Type.STRING },
+                  },
+                  required: [
+                    'name',
+                    'foodFamilyId',
+                    'resultGroup',
+                    'caloriesPer100g',
+                    'proteinPer100g',
+                    'carbsPer100g',
+                    'fatPer100g',
+                    'fibrePer100g',
+                    'calculationMethod',
+                  ],
                 },
-                required: [
-                  'name',
-                  'foodFamilyId',
-                  'resultGroup',
-                  'caloriesPer100g',
-                  'proteinPer100g',
-                  'carbsPer100g',
-                  'fatPer100g',
-                  'fibrePer100g',
-                  'calculationMethod',
-                ],
               },
             },
+            required: ['proposals'],
           },
-          required: ['proposals'],
         },
-      },
-    });
+      });
 
-    const text = response.text;
-    if (!text) return [];
-    const parsed = JSON.parse(text) as { proposals?: DiscoveredFoodProposal[] };
+      const text = response.text;
+      if (!text) return [];
+      parsed = JSON.parse(text) as { proposals?: DiscoveredFoodProposal[] };
+    }
+
+    if (!parsed) return [];
     return (parsed.proposals || []).map((p) => {
       const norm = p.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       let existingId = existingNormalized.get(norm);

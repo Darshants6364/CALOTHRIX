@@ -870,22 +870,6 @@ begin
     return jsonb_build_object('ok', true, 'status', 'declined');
   end if;
 
-  -- Check trainer client limit
-  select coalesce(max_clients, 5) into v_max_clients
-  from public.trainer_profiles
-  where user_id = v_inv.trainer_id;
-
-  select count(*) into v_active_count
-  from public.trainer_clients
-  where trainer_id = v_inv.trainer_id
-    and status = 'active'
-    and is_archived = false
-    and client_id <> v_uid;
-
-  if v_active_count >= coalesce(v_max_clients, 5) then
-    return jsonb_build_object('ok', false, 'error', 'Trainer has reached their current plan client capacity');
-  end if;
-
   insert into public.trainer_clients (
     trainer_id,
     client_id,

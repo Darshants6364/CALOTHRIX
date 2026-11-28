@@ -1,12 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, CheckCircle2, ClipboardCheck, Mail, Moon, Shield, Sun, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  ClipboardCheck,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Moon,
+  Sun,
+  Users,
+} from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
+import { supabase } from '../lib/supabaseClient';
 import { AccountRole } from '../types';
 import { CalothrixLogo } from './CalothrixLogo';
+import { PENDING_TRAINER_ONBOARDING_KEY } from './TrainerOnboardingFlow';
 
-type EmailMode = 'signin' | 'signup' | 'magic';
+type EmailMode = 'signin' | 'signup';
 
 const PENDING_AUTH_ROLE_KEY = 'calothrix_pending_auth_role';
+const LAST_PORTAL_ROLE_KEY = 'calothrix_last_portal_role';
 
 interface AuthScreenProps {
   initialPortal?: AccountRole;
@@ -20,15 +34,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
     signInWithGoogle,
     signInWithEmail,
     signUpWithEmail,
-    signInWithMagicLink,
   } = useMacroLogStore();
 
   const [portalRole, setPortalRole] = useState<AccountRole>(() => {
     if (initialPortal === 'trainer' || initialPortal === 'individual') return initialPortal;
     if (typeof window === 'undefined') return 'individual';
     const params = new URLSearchParams(window.location.search);
-    if (params.get('role') === 'trainer' || params.get('portal') === 'trainer' || window.location.pathname.startsWith('/trainer')) {
+    if (
+      params.get('role') === 'trainer' ||
+      params.get('portal') === 'trainer' ||
+      window.location.pathname.startsWith('/trainer')
+    ) {
       return 'trainer';
+    }
+    const remembered = localStorage.getItem(LAST_PORTAL_ROLE_KEY);
+    if (remembered === 'trainer' || remembered === 'individual') {
+      return remembered;
     }
     return 'individual';
   });
@@ -39,7 +60,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
     return (
       params.get('role') === 'trainer' ||
       params.get('portal') === 'trainer' ||
-      window.location.pathname.startsWith('/trainer')
+      window.location.pathname.startsWith('/trainer') ||
+      Boolean(localStorage.getItem(LAST_PORTAL_ROLE_KEY))
     );
   });
 
@@ -54,16 +76,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
 
-  const persistPendingAuthRole = () => {
+  const persistPendingAuthRole = (overrideRole?: AccountRole) => {
     if (typeof window === 'undefined') return;
-    if (portalRole === 'trainer') {
+    const roleToUse = overrideRole || portalRole;
+    localStorage.setItem(LAST_PORTAL_ROLE_KEY, roleToUse);
+    if (roleToUse === 'trainer') {
       localStorage.setItem(PENDING_AUTH_ROLE_KEY, 'trainer');
-    } else if (roleExplicitlyToggled) {
+    } else if (roleExplicitlyToggled || overrideRole === 'individual') {
       localStorage.setItem(PENDING_AUTH_ROLE_KEY, 'individual');
     } else {
       localStorage.removeItem(PENDING_AUTH_ROLE_KEY);
@@ -73,6 +99,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
   const handleSelectPortal = (role: AccountRole) => {
     setPortalRole(role);
     setRoleExplicitlyToggled(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LAST_PORTAL_ROLE_KEY, role);
+    }
     setError('');
     setInfoMessage('');
   };
@@ -80,12 +109,37 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
   const handleGoogleClick = async () => {
     setError('');
     setInfoMessage('');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(PENDING_TRAINER_ONBOARDING_KEY);
+    }
     persistPendingAuthRole();
     setGoogleLoading(true);
     const res = await signInWithGoogle();
     setGoogleLoading(false);
     if (res.error) {
       setError(res.error);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setError('');
+    setInfoMessage('');
+    if (!email.trim()) {
+      setError('Enter your email address above first so we can send a password reset link.');
+      return;
+    }
+    setResettingPassword(true);
+    try {
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      });
+      if (resetErr) {
+        setError(resetErr.message);
+      } else {
+        setInfoMessage(`Password reset link sent to ${email.trim()}. Check your inbox.`);
+      }
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -99,17 +153,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
       return;
     }
 
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(PENDING_TRAINER_ONBOARDING_KEY);
+    }
     persistPendingAuthRole();
     setSubmitting(true);
     try {
-      if (emailMode === 'magic') {
-        const res = await signInWithMagicLink(email);
-        if (res.error) {
-          setError(res.error);
-        } else {
-          setInfoMessage(`Sign-in link sent to ${email.trim()}. Check your inbox.`);
-        }
-      } else if (emailMode === 'signup') {
+      if (emailMode === 'signup') {
         if (!name.trim()) {
           setError('Please enter your full name.');
           setSubmitting(false);
@@ -214,7 +264,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
                   Personal Account
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
-                  Personal nutrition tracker
+                  Nutrition &amp; progress
                 </div>
               </div>
             </button>
@@ -242,7 +292,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
                   Fitness Trainer
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
-                  Client progress
+                  Coach workspace
                 </div>
               </div>
             </button>
@@ -261,15 +311,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
           </h1>
           <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400">
             {isTrainerPortal
-              ? 'Access your separate Coaching Dashboard to invite clients, monitor nutrition adherence, and track client progress.'
+              ? 'Sign in or create your account. New coaches complete profile onboarding right after logging in.'
               : 'Every account stores its own food logs, goals, and weight history privately in the database.'}
           </p>
-          {isTrainerPortal && (
-            <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#C8FF00]/15 dark:bg-[#C8FF00]/10 border border-[#4E6800]/30 dark:border-[#C8FF00]/30 text-[11px] font-medium text-[#3D5200] dark:text-[#C8FF00]">
-              <Shield className="w-3.5 h-3.5" />
-              <span>Opens Dedicated Fitness Trainer Dashboard</span>
-            </div>
-          )}
         </div>
 
         {/* 1-Click Primary Google Sign-In */}
@@ -313,13 +357,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
           <div className="h-px flex-1 bg-black/10 dark:bg-white/10" />
         </div>
 
-        {/* Email Mode Tabs */}
-        <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-black/5 dark:bg-[#090A0C] border border-black/5 dark:border-white/8 mb-4">
+        {/* Email Mode Tabs: Sign In / Sign Up only */}
+        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-black/5 dark:bg-[#090A0C] border border-black/5 dark:border-white/8 mb-4">
           {(
             [
               { id: 'signin', label: 'Sign In' },
               { id: 'signup', label: 'Sign Up' },
-              { id: 'magic', label: 'Magic Link' },
             ] as const
           ).map((m) => (
             <button
@@ -378,50 +421,77 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ initialPortal, onBackToH
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder={isTrainerPortal ? 'coach@example.com' : 'you@example.com'}
               className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-[#F4F3EF]/60 dark:bg-[#090A0C] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
             />
           </div>
 
-          {emailMode !== 'magic' && (
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
                 Password
               </label>
+              {emailMode === 'signin' && (
+                <button
+                  type="button"
+                  disabled={resettingPassword}
+                  onClick={() => void handlePasswordReset()}
+                  className="text-[11px] font-medium text-[#4E6800] dark:text-[#C8FF00] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
+                >
+                  <KeyRound className="w-3 h-3" />
+                  <span>{resettingPassword ? 'Sending...' : 'Forgot password?'}</span>
+                </button>
+              )}
+            </div>
+            <div className="relative">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full h-11 px-3.5 rounded-xl border border-black/12 dark:border-white/12 bg-[#F4F3EF]/60 dark:bg-[#090A0C] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
+                className="w-full h-11 pl-3.5 pr-11 rounded-xl border border-black/12 dark:border-white/12 bg-[#F4F3EF]/60 dark:bg-[#090A0C] text-sm text-[#111317] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#C8FF00]"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
-          )}
+          </div>
 
           <button
             type="submit"
             disabled={submitting}
             className="w-full min-h-[48px] rounded-xl bg-[#C8FF00] hover:bg-[#D9FF4D] text-black text-sm font-bold uppercase tracking-[0.08em] transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            {emailMode === 'magic' ? (
-              <>
-                <Mail className="w-4 h-4" />
-                <span>{submitting ? 'Sending link...' : 'Send Sign-In Link'}</span>
-              </>
-            ) : (
-              <>
-                <span>
-                  {submitting
-                    ? 'Please wait...'
-                    : emailMode === 'signup'
-                    ? 'Create Account'
-                    : 'Sign In'}
-                </span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
+            <span>
+              {submitting
+                ? 'Please wait...'
+                : emailMode === 'signup'
+                ? 'Create Account'
+                : isTrainerPortal
+                ? 'Sign In to Trainer Portal'
+                : 'Sign In'}
+            </span>
+            <ArrowRight className="w-4 h-4" />
           </button>
         </form>
+
+        {isTrainerPortal && (
+          <p className="mt-4 text-center text-[11px] text-slate-500 dark:text-slate-400">
+            Accepting a coach invitation link as a client?{' '}
+            <button
+              type="button"
+              onClick={() => handleSelectPortal('individual')}
+              className="font-semibold text-[#4E6800] dark:text-[#C8FF00] hover:underline"
+            >
+              Switch to Personal Account
+            </button>
+          </p>
+        )}
       </div>
 
       <p className="text-center text-xs text-slate-500 dark:text-slate-500">

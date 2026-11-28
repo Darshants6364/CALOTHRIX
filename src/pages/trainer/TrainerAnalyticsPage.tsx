@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Calendar, CheckCircle2, Flame } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Calendar, CalendarClock, CheckCircle2, Flame } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -11,7 +11,10 @@ import {
   YAxis,
 } from 'recharts';
 import { useMacroLogStore } from '../../hooks/useMacroLogStore';
-import { useTrainerDashboard } from '../../hooks/useTrainerDashboard';
+import {
+  computeClientCoachingSummary,
+  useTrainerDashboard,
+} from '../../hooks/useTrainerDashboard';
 import { addDaysToDateKey, getTodayDateKey } from '../../utils/dateUtils';
 
 type RangePreset = '7d' | '30d' | '90d' | 'custom';
@@ -121,9 +124,14 @@ export const TrainerAnalyticsPage: React.FC = () => {
           ? Math.round((weights[weights.length - 1].weightKg - weights[0].weightKg) * 100) / 100
           : null;
 
+      const summary = computeClientCoachingSummary(snap);
+
       // Coaching alert flags
       const alerts: string[] = [];
       if (snap.relationship.canViewNutrition) {
+        if (summary.dueStatus.isDue) {
+          alerts.push('14d cycle review ready');
+        }
         if (daysSinceLastLog === null) {
           alerts.push('No food logs recorded yet');
         } else if (daysSinceLastLog >= 2) {
@@ -137,6 +145,8 @@ export const TrainerAnalyticsPage: React.FC = () => {
         }
       }
 
+      const proteinPer1000 = avgCalories > 0 ? Math.round((avgProtein / avgCalories) * 1000) : 0;
+
       return {
         clientId: snap.relationship.clientId,
         name: snap.profile?.name || 'Authorized Client',
@@ -146,10 +156,14 @@ export const TrainerAnalyticsPage: React.FC = () => {
         loggingPct,
         avgCalories,
         avgProtein,
+        proteinPer1000,
         hasProteinGoal: proGoal > 0,
         proteinHitPct,
         goalCompletionPct,
-        streakDays,
+        streakDays: summary.streakDays,
+        cycleDay: Math.min(summary.dueStatus.cycleDays, summary.dueStatus.daysCompleted + 1),
+        cycleDays: summary.dueStatus.cycleDays,
+        cycleReady: summary.dueStatus.isDue,
         daysSinceLastLog,
         weightDeltaKg,
         alerts,
@@ -390,6 +404,7 @@ export const TrainerAnalyticsPage: React.FC = () => {
                     <th className="py-3.5 px-4 font-semibold">Avg Calories</th>
                     <th className="py-3.5 px-4 font-semibold">Avg Protein</th>
                     <th className="py-3.5 px-4 font-semibold">Protein Hit</th>
+                    <th className="py-3.5 px-4 font-semibold">14d Cycle</th>
                     <th className="py-3.5 px-4 font-semibold">Streak</th>
                     <th className="py-3.5 px-4 font-semibold">Weight Delta</th>
                     <th className="py-3.5 px-4 font-semibold">On-Target</th>
@@ -412,10 +427,35 @@ export const TrainerAnalyticsPage: React.FC = () => {
                         {m.canViewNutrition ? `${m.avgCalories.toLocaleString()} kcal` : '—'}
                       </td>
                       <td className="py-3.5 px-4 font-mono-nums">
-                        {m.canViewNutrition ? `${m.avgProtein} g` : '—'}
+                        {m.canViewNutrition ? (
+                          <span>
+                            {m.avgProtein} g
+                            {m.proteinPer1000 > 0 && (
+                              <span className="text-[10px] text-slate-400 ml-1">
+                                ({m.proteinPer1000}/1k)
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="py-3.5 px-4 font-mono-nums">
                         {m.canViewNutrition && m.hasProteinGoal ? `${m.proteinHitPct}%` : '—'}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono-nums">
+                        {m.canViewNutrition ? (
+                          m.cycleReady ? (
+                            <span className="inline-flex items-center gap-1 text-[#4E6800] dark:text-[#C8FF00] font-semibold">
+                              <CalendarClock className="w-3 h-3" />
+                              Ready
+                            </span>
+                          ) : (
+                            <span>Day {m.cycleDay}/{m.cycleDays}</span>
+                          )
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="py-3.5 px-4 font-mono-nums">
                         {m.canViewNutrition ? (
