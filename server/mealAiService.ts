@@ -16,6 +16,14 @@ import {
   parseLooseJsonObject,
   transcribeAudioWithGroq,
 } from './groqClient.ts';
+import {
+  callOpenRouterChatJson,
+  getOpenRouterAudioFormat,
+  getOpenRouterAudioModels,
+  getOpenRouterTextModels,
+  getOpenRouterVisionModels,
+  isOpenRouterConfigured,
+} from './openRouterClient.ts';
 
 export type AnalyzeMealInputMode = 'photo' | 'voice' | 'text';
 export type MealPrepStyle = 'homemade_low_oil' | 'standard' | 'restaurant_rich';
@@ -171,9 +179,7 @@ export async function analyzeMealWithGemini(
   let parsed: Record<string, unknown> | null = null;
   let groqDetectedVoiceTranscript = '';
 
-  if (isGroqConfigured()) {
-    try {
-      const jsonContract = `Return ONLY a valid JSON object (no markdown, no explanation) with this exact structure:
+  const jsonContract = `Return ONLY a valid JSON object (no markdown, no explanation) with this exact structure:
 {
   "mealTitle": "Short clear title summarizing the whole meal",
   "detectedDescription": "1-sentence visual/text/spoken summary of the meal",
@@ -195,42 +201,57 @@ export async function analyzeMealWithGemini(
   ]
 }`;
 
+  const cleanPhotoBase64 =
+    req.mode === 'photo'
+      ? (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim()
+      : '';
+  const cleanAudioBase64 =
+    req.mode === 'voice'
+      ? (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim()
+      : '';
+
+  if (req.mode === 'photo' && !cleanPhotoBase64) {
+    const err = new Error('No meal photo data received.');
+    (err as Error & { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
+  if (req.mode === 'voice' && !cleanAudioBase64 && !contextNote) {
+    const err = new Error('No voice recording or spoken sentence received.');
+    (err as Error & { statusCode?: number }).statusCode = 400;
+    throw err;
+  }
+
+  const photoMimeType =
+    req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg';
+  const photoPromptText = `Analyze the meal photograph. Identify every visible dish, food item, and drink (Indian dishes like roti, dal, sambar, dosa, idli, paneer, rice, curd as well as international foods). Estimate realistic cooked weights in grams and calculate calories, protein (g), carbs (g), fat (g), and fibre (g). ${prepInstruction} ${contextNote ? `User note: "${contextNote}". ` : ''}${mealHintText}`;
+  const textPromptText = `Analyze this meal description: "${contextNote}". Set "detectedDescription" to a clean summary of what was described, and break down every food or drink mentioned with realistic serving weights in grams and macronutrient estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${mealHintText}`;
+
+  const hasBackupProvider = () => isOpenRouterConfigured() || hasGeminiApiKey();
+
+  // 1) Primary provider: Groq
+  if (isGroqConfigured()) {
+    try {
       if (req.mode === 'photo') {
-        const cleanBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
-        if (!cleanBase64) {
-          const err = new Error('No meal photo data received.');
-          (err as Error & { statusCode?: number }).statusCode = 400;
-          throw err;
-        }
-        const mimeType = req.mimeType && req.mimeType.startsWith('image/') ? req.mimeType : 'image/jpeg';
         const raw = await callGroqChatJson({
           models: GROQ_VISION_MODELS,
           systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
           userContent: [
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${cleanBase64}` } },
-            {
-              type: 'text',
-              text: `Analyze the meal photograph. Identify every visible dish, food item, and drink (Indian dishes like roti, dal, sambar, dosa, idli, paneer, rice, curd as well as international foods). Estimate realistic cooked weights in grams and calculate calories, protein (g), carbs (g), fat (g), and fibre (g). ${prepInstruction} ${contextNote ? `User note: "${contextNote}". ` : ''}${mealHintText}`,
-            },
+            { type: 'image_url', image_url: { url: `data:${photoMimeType};base64,${cleanPhotoBase64}` } },
+            { type: 'text', text: photoPromptText },
           ],
           timeoutMs: 25000,
         });
         parsed = parseLooseJsonObject(raw);
       } else if (req.mode === 'voice') {
-        const cleanBase64 = (req.mediaBase64 || '').replace(/^data:[^;]+;base64,/, '').trim();
         let spokenSentence = contextNote;
-        if (cleanBase64) {
+        if (cleanAudioBase64) {
           const transcript = await transcribeAudioWithGroq({
-            base64Audio: cleanBase64,
+            base64Audio: cleanAudioBase64,
             mimeType: req.mimeType,
             timeoutMs: 20000,
           });
           spokenSentence = [transcript, contextNote].filter(Boolean).join(' — ');
           groqDetectedVoiceTranscript = transcript;
-        } else if (!contextNote) {
-          const err = new Error('No voice recording or spoken sentence received.');
-          (err as Error & { statusCode?: number }).statusCode = 400;
-          throw err;
         }
 
         const raw = await callGroqChatJson({
@@ -244,19 +265,81 @@ export async function analyzeMealWithGemini(
         const raw = await callGroqChatJson({
           models: GROQ_TEXT_MODELS,
           systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
-          userContent: `Analyze this meal description: "${contextNote}". Set "detectedDescription" to a clean summary of what was described, and break down every food or drink mentioned with realistic serving weights in grams and macronutrient estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${mealHintText}`,
+          userContent: textPromptText,
           timeoutMs: 18000,
         });
         parsed = parseLooseJsonObject(raw);
       }
     } catch (groqErr) {
       const anyErr = groqErr as Error & { statusCode?: number };
-      const isBadInputOrAuth =
-        anyErr?.statusCode === 400 || anyErr?.statusCode === 401 || anyErr?.statusCode === 413;
-      if (isBadInputOrAuth || !hasGeminiApiKey()) {
+      if (!hasBackupProvider()) {
         throw groqErr;
       }
-      console.warn('[mealAi] Groq meal analysis failed, falling back to Gemini:', anyErr.message);
+      console.warn(
+        '[mealAi] Groq meal analysis failed, falling back to backup provider:',
+        anyErr.message
+      );
+    }
+  }
+
+  // 2) Backup provider: OpenRouter
+  if (!parsed && isOpenRouterConfigured()) {
+    try {
+      if (req.mode === 'photo') {
+        const raw = await callOpenRouterChatJson({
+          models: getOpenRouterVisionModels(),
+          systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
+          userContent: [
+            { type: 'image_url', image_url: { url: `data:${photoMimeType};base64,${cleanPhotoBase64}` } },
+            { type: 'text', text: photoPromptText },
+          ],
+          timeoutMs: 28000,
+        });
+        parsed = parseLooseJsonObject(raw);
+      } else if (req.mode === 'voice') {
+        if (cleanAudioBase64 && !groqDetectedVoiceTranscript) {
+          const audioFormat = getOpenRouterAudioFormat(req.mimeType);
+          const raw = await callOpenRouterChatJson({
+            models: getOpenRouterAudioModels(),
+            systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
+            userContent: [
+              { type: 'input_audio', input_audio: { data: cleanAudioBase64, format: audioFormat } },
+              {
+                type: 'text',
+                text: `Listen carefully to the user's spoken meal recording. Set "detectedDescription" to the exact meal described (preserving Indian food names and household measures like katori, bowl, roti, piece, glass, spoon), and break down every food or drink with realistic weights in grams and nutritional estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${contextNote ? `Extra text note: "${contextNote}". ` : ''}${mealHintText}`,
+              },
+            ],
+            timeoutMs: 28000,
+          });
+          parsed = parseLooseJsonObject(raw);
+        } else {
+          const spokenSentence = [groqDetectedVoiceTranscript, contextNote].filter(Boolean).join(' — ');
+          const raw = await callOpenRouterChatJson({
+            models: getOpenRouterTextModels(),
+            systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
+            userContent: `Analyze this spoken meal description: "${spokenSentence}". Set "detectedDescription" accurately preserving Indian food names and household measures (katori, bowl, roti, piece, glass, spoon), and break down every food or drink with realistic weights in grams and nutritional estimates (calories, protein, carbs, fat, fibre). ${prepInstruction} ${mealHintText}`,
+            timeoutMs: 20000,
+          });
+          parsed = parseLooseJsonObject(raw);
+        }
+      } else {
+        const raw = await callOpenRouterChatJson({
+          models: getOpenRouterTextModels(),
+          systemInstruction: `${systemInstruction}\n\n${jsonContract}`,
+          userContent: textPromptText,
+          timeoutMs: 20000,
+        });
+        parsed = parseLooseJsonObject(raw);
+      }
+    } catch (openRouterErr) {
+      const anyErr = openRouterErr as Error & { statusCode?: number };
+      if (!hasGeminiApiKey()) {
+        throw openRouterErr;
+      }
+      console.warn(
+        '[mealAi] OpenRouter backup meal analysis failed, falling back to Gemini:',
+        anyErr.message
+      );
     }
   }
 
@@ -537,8 +620,32 @@ export async function readBarcodeFromImageWithGemini(req: {
       const digits = String(parsed.barcode || '').replace(/\D/g, '').trim();
       return { barcode: /^\d{6,14}$/.test(digits) ? digits : null };
     } catch (groqErr) {
-      if (!hasGeminiApiKey()) throw groqErr;
-      console.warn('[mealAi] Groq barcode read failed, falling back to Gemini:', groqErr);
+      if (!isOpenRouterConfigured() && !hasGeminiApiKey()) throw groqErr;
+      console.warn('[mealAi] Groq barcode read failed, falling back to backup provider:', groqErr);
+    }
+  }
+
+  if (isOpenRouterConfigured()) {
+    try {
+      const raw = await callOpenRouterChatJson({
+        models: getOpenRouterVisionModels(),
+        systemInstruction:
+          'You read food product barcodes accurately. Return strictly valid JSON: {"barcode":"digits or empty string"}.',
+        userContent: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${rawBase64}` } },
+          {
+            type: 'text',
+            text: 'Read the numeric barcode printed on this food product package (EAN-13, EAN-8, UPC-A, or UPC-E — usually 8 to 14 digits printed directly underneath the vertical black bars). Return ONLY {"barcode":"<digits>"} with no spaces or dashes, or {"barcode":""} if unreadable.',
+          },
+        ],
+        timeoutMs: 18000,
+      });
+      const parsed = parseLooseJsonObject(raw) as { barcode?: string };
+      const digits = String(parsed.barcode || '').replace(/\D/g, '').trim();
+      return { barcode: /^\d{6,14}$/.test(digits) ? digits : null };
+    } catch (openRouterErr) {
+      if (!hasGeminiApiKey()) throw openRouterErr;
+      console.warn('[mealAi] OpenRouter barcode read failed, falling back to Gemini:', openRouterErr);
     }
   }
 
@@ -635,12 +742,34 @@ export async function parseNutritionLabelWithGemini(req: {
       parsed = parseLooseJsonObject(raw);
     } catch (groqErr) {
       const anyErr = groqErr as Error & { statusCode?: number };
-      const isBadInputOrAuth =
-        anyErr?.statusCode === 400 || anyErr?.statusCode === 401 || anyErr?.statusCode === 413;
-      if (isBadInputOrAuth || !hasGeminiApiKey()) {
+      if (!isOpenRouterConfigured() && !hasGeminiApiKey()) {
         throw groqErr;
       }
-      console.warn('[mealAi] Groq label OCR failed, falling back to Gemini:', anyErr.message);
+      console.warn('[mealAi] Groq label OCR failed, falling back to backup provider:', anyErr.message);
+    }
+  }
+
+  if (!parsed && isOpenRouterConfigured()) {
+    try {
+      const raw = await callOpenRouterChatJson({
+        models: getOpenRouterVisionModels(),
+        systemInstruction: `${labelSystemInstruction}\n\nReturn ONLY a valid JSON object: {"name":"string","brand":"string","servingName":"string","servingWeightGrams":number,"calories":number,"protein":number,"carbs":number,"fat":number,"fibre":number,"sugarG":number,"sodiumMg":number,"confidence":"high"|"moderate"|"low"}`,
+        userContent: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${rawBase64}` } },
+          {
+            type: 'text',
+            text: 'Extract the Nutrition Facts / Nutritional Information table accurately. Convert kJ to kcal (divide by 4.184) if only kJ is shown. Normalize values to match servingWeightGrams (prefer per-serving if clearly stated, otherwise 100g). Keep missing sugar or sodium as 0 if absent.',
+          },
+        ],
+        timeoutMs: 28000,
+      });
+      parsed = parseLooseJsonObject(raw);
+    } catch (openRouterErr) {
+      const anyErr = openRouterErr as Error & { statusCode?: number };
+      if (!hasGeminiApiKey()) {
+        throw openRouterErr;
+      }
+      console.warn('[mealAi] OpenRouter label OCR failed, falling back to Gemini:', anyErr.message);
     }
   }
 
@@ -895,42 +1024,63 @@ export async function coachChatWithGemini(req: {
   restrictions?: string[];
 }): Promise<CoachAdviceResult> {
   const groqActive = isGroqConfigured();
+  const openRouterActive = isOpenRouterConfigured();
   const hasGemini = hasGeminiApiKey();
-  if (!groqActive && !hasGemini) {
+  if (!groqActive && !openRouterActive && !hasGemini) {
     return buildDeterministicCoachAdvice(req);
   }
 
   const userPrompt = `User question: "${req.prompt}". Daily goals: ${req.goalCalories} kcal, ${req.goalProtein}g protein. Remaining today: ${Math.round(req.remainingCalories)} kcal, ${Math.round(req.remainingProtein)}g protein, ${Math.round(req.remainingCarbs)}g carbs, ${Math.round(req.remainingFat)}g fat. Diet: ${req.dietaryPreference || 'omnivore'}. Restrictions: ${(req.restrictions || []).join(', ') || 'none'}. Give direct, realistic Indian + global meal/snack suggestions with exact macro estimates that respect remaining budget.`;
+  const coachSystemPrompt =
+    'You are Calothrix Nutrition Coach. Give concise, actionable advice grounded in realistic portions and user dietary preferences. Suggest 2-3 loggable food ideas. Return strictly valid JSON: {"reply":"2-3 concise sentences","suggestions":[{"title":"string","calories":number,"protein":number,"carbs":number,"fat":number,"fibre":number,"reason":"string"}]}.';
+
+  const parseCoachPayload = (raw: string): CoachAdviceResult => {
+    const parsed = parseLooseJsonObject(raw);
+    const rawSugs = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
+    const suggestions: CoachSuggestionItem[] = rawSugs.map((s) => {
+      const row = (s || {}) as Record<string, unknown>;
+      return {
+        title: String(row.title || 'Balanced Snack').trim(),
+        calories: Math.round(normalizeNumber(row.calories, 0)),
+        protein: normalizeNumber(row.protein, 1),
+        carbs: normalizeNumber(row.carbs, 1),
+        fat: normalizeNumber(row.fat, 1),
+        fibre: normalizeNumber(row.fibre, 1),
+        reason: String(row.reason || '').trim(),
+      };
+    });
+
+    return {
+      provider: 'gemini',
+      reply: String(parsed.reply || '').trim() || buildDeterministicCoachAdvice(req).reply,
+      suggestions:
+        suggestions.length > 0 ? suggestions : buildDeterministicCoachAdvice(req).suggestions,
+    };
+  };
 
   if (groqActive) {
     try {
       const raw = await callGroqChatJson({
         models: GROQ_TEXT_MODELS,
-        systemInstruction:
-          'You are Calothrix Nutrition Coach. Give concise, actionable advice grounded in realistic portions and user dietary preferences. Suggest 2-3 loggable food ideas. Return strictly valid JSON: {"reply":"2-3 concise sentences","suggestions":[{"title":"string","calories":number,"protein":number,"carbs":number,"fat":number,"fibre":number,"reason":"string"}]}.',
+        systemInstruction: coachSystemPrompt,
         userContent: userPrompt,
         timeoutMs: 12000,
       });
-      const parsed = parseLooseJsonObject(raw);
-      const rawSugs = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
-      const suggestions: CoachSuggestionItem[] = rawSugs.map((s) => {
-        const row = (s || {}) as Record<string, unknown>;
-        return {
-          title: String(row.title || 'Balanced Snack').trim(),
-          calories: Math.round(normalizeNumber(row.calories, 0)),
-          protein: normalizeNumber(row.protein, 1),
-          carbs: normalizeNumber(row.carbs, 1),
-          fat: normalizeNumber(row.fat, 1),
-          fibre: normalizeNumber(row.fibre, 1),
-          reason: String(row.reason || '').trim(),
-        };
-      });
+      return parseCoachPayload(raw);
+    } catch {
+      if (!openRouterActive && !hasGemini) return buildDeterministicCoachAdvice(req);
+    }
+  }
 
-      return {
-        provider: 'gemini',
-        reply: String(parsed.reply || '').trim() || buildDeterministicCoachAdvice(req).reply,
-        suggestions: suggestions.length > 0 ? suggestions : buildDeterministicCoachAdvice(req).suggestions,
-      };
+  if (openRouterActive) {
+    try {
+      const raw = await callOpenRouterChatJson({
+        models: getOpenRouterTextModels(),
+        systemInstruction: coachSystemPrompt,
+        userContent: userPrompt,
+        timeoutMs: 15000,
+      });
+      return parseCoachPayload(raw);
     } catch {
       if (!hasGemini) return buildDeterministicCoachAdvice(req);
     }
@@ -1109,8 +1259,9 @@ export async function generateWeeklyAssessmentExplanation(params: {
   const fallback = assessment.fallbackAiSummary;
 
   const groqActive = isGroqConfigured();
+  const openRouterActive = isOpenRouterConfigured();
   const hasGemini = hasGeminiApiKey();
-  if (!groqActive && !hasGemini) {
+  if (!groqActive && !openRouterActive && !hasGemini) {
     return fallback;
   }
 
@@ -1168,14 +1319,32 @@ export async function generateWeeklyAssessmentExplanation(params: {
 DETERMINISTIC ASSESSMENT FACTS:
 ${JSON.stringify(facts)}`;
 
+  const reviewSystemPrompt =
+    'You are CALOTHRIX Nutrition Explainer. Return strictly valid JSON with keys: status, summary, reason, headline, bodyChangeAnalysis, calorieAdjustmentReason, actionableTips (array of 2-3 strings), confidenceExplanation. Never alter numeric targets.';
+
   if (groqActive) {
     try {
       const raw = await callGroqChatJson({
         models: GROQ_TEXT_MODELS,
-        systemInstruction:
-          'You are CALOTHRIX Nutrition Explainer. Return strictly valid JSON with keys: status, summary, reason, headline, bodyChangeAnalysis, calorieAdjustmentReason, actionableTips (array of 2-3 strings), confidenceExplanation. Never alter numeric targets.',
+        systemInstruction: reviewSystemPrompt,
         userContent: reviewPrompt,
         timeoutMs: 12000,
+      });
+      const parsed = parseLooseJsonObject(raw);
+      const validated = validateWeeklyAssessmentAiExplanation(parsed, fallback);
+      return validated.explanation;
+    } catch {
+      if (!openRouterActive && !hasGemini) return fallback;
+    }
+  }
+
+  if (openRouterActive) {
+    try {
+      const raw = await callOpenRouterChatJson({
+        models: getOpenRouterTextModels(),
+        systemInstruction: reviewSystemPrompt,
+        userContent: reviewPrompt,
+        timeoutMs: 15000,
       });
       const parsed = parseLooseJsonObject(raw);
       const validated = validateWeeklyAssessmentAiExplanation(parsed, fallback);

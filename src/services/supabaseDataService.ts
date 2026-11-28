@@ -947,7 +947,7 @@ export async function fetchUserRecipesFromSupabase(userId: string) {
 // WEEKLY ADAPTIVE ASSESSMENTS (Supabase CRUD with graceful fallback)
 // ============================================================================
 
-function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmentRecord {
+export function mapRowToWeeklyAssessment(row: Record<string, unknown>): WeeklyAssessmentRecord {
   const prevCals = Number(row.previous_recommended_calories || 0);
   const recCals = Number(row.recommended_calories || 0);
   const prevTrend = Number(row.previous_trend_weight_kg || row.previous_weight_kg || 0);
@@ -1157,6 +1157,33 @@ export async function updateWeeklyAssessmentStatusDb(
 // NUTRITION TARGET HISTORY (Versioned Target Changes with Fallback)
 // ============================================================================
 
+export function mapRowToTargetHistory(r: Record<string, unknown>): NutritionTargetHistoryRecord {
+  return {
+    id: String(r.id),
+    userId: String(r.user_id),
+    previousCalories: r.previous_calories != null ? Number(r.previous_calories) : null,
+    previousProtein: r.previous_protein != null ? Number(r.previous_protein) : null,
+    previousCarbs: r.previous_carbs != null ? Number(r.previous_carbs) : null,
+    previousFat: r.previous_fat != null ? Number(r.previous_fat) : null,
+    previousFibre: r.previous_fibre != null ? Number(r.previous_fibre) : null,
+    newCalories: Number(r.new_calories || 0),
+    newProtein: Number(r.new_protein || 0),
+    newCarbs: Number(r.new_carbs || 0),
+    newFat: Number(r.new_fat || 0),
+    newFibre: Number(r.new_fibre || 0),
+    targetWeightKg: r.target_weight_kg != null ? Number(r.target_weight_kg) : null,
+    effectiveDate: String(r.effective_date || ''),
+    adjustmentReason: String(r.adjustment_reason || ''),
+    assessmentId: r.assessment_id ? String(r.assessment_id) : null,
+    applied: Boolean(r.applied ?? true),
+    adjustmentType:
+      r.adjustment_type === 'manual' || r.adjustment_type === 'adaptive'
+        ? r.adjustment_type
+        : 'initial',
+    createdAt: String(r.created_at || new Date().toISOString()),
+  };
+}
+
 export async function fetchTargetHistoryDb(
   userId: string
 ): Promise<{ ok: boolean; items: NutritionTargetHistoryRecord[]; tableMissing?: boolean }> {
@@ -1175,33 +1202,9 @@ export async function fetchTargetHistoryDb(
     };
   }
 
-  const items: NutritionTargetHistoryRecord[] = (data || []).map((row) => {
-    const r = row as Record<string, unknown>;
-    return {
-      id: String(r.id),
-      userId: String(r.user_id),
-      previousCalories: r.previous_calories != null ? Number(r.previous_calories) : null,
-      previousProtein: r.previous_protein != null ? Number(r.previous_protein) : null,
-      previousCarbs: r.previous_carbs != null ? Number(r.previous_carbs) : null,
-      previousFat: r.previous_fat != null ? Number(r.previous_fat) : null,
-      previousFibre: r.previous_fibre != null ? Number(r.previous_fibre) : null,
-      newCalories: Number(r.new_calories || 0),
-      newProtein: Number(r.new_protein || 0),
-      newCarbs: Number(r.new_carbs || 0),
-      newFat: Number(r.new_fat || 0),
-      newFibre: Number(r.new_fibre || 0),
-      targetWeightKg: r.target_weight_kg != null ? Number(r.target_weight_kg) : null,
-      effectiveDate: String(r.effective_date || ''),
-      adjustmentReason: String(r.adjustment_reason || ''),
-      assessmentId: r.assessment_id ? String(r.assessment_id) : null,
-      applied: Boolean(r.applied ?? true),
-      adjustmentType:
-        r.adjustment_type === 'manual' || r.adjustment_type === 'adaptive'
-          ? r.adjustment_type
-          : 'initial',
-      createdAt: String(r.created_at || new Date().toISOString()),
-    };
-  });
+  const items: NutritionTargetHistoryRecord[] = (data || []).map((row) =>
+    mapRowToTargetHistory(row as Record<string, unknown>)
+  );
 
   return { ok: true, items };
 }

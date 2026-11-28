@@ -1,23 +1,34 @@
 import { supabase } from '../lib/supabaseClient';
 import {
+  ActivityLevel,
+  AiMealScanRecord,
+  AnalyzedMealItem,
+  BiologicalSex,
   ClientInvitation,
+  DietaryPreference,
   FitnessGoalType,
   FoodLogEntry,
+  FoodRestriction,
   FoodSourceType,
   GoalSpeed,
+  MacroFocusType,
+  MealCategory,
   MealGuidelineItem,
   NutritionGoals,
+  NutritionTargetHistoryRecord,
   TargetRecommendation,
-  TRAINER_SUBSCRIPTION_PLANS,
   TrainerClientPlan,
   TrainerClientRelationship,
   TrainerClientSnapshot,
   TrainerNote,
   TrainerProfile,
-  TrainerSubscriptionTier,
+  WeeklyAssessmentRecord,
   WeightEntry,
+  WeightGoal,
   WeeklyClientCheckin,
+  WorkoutIntensity,
 } from '../types';
+import { mapRowToTargetHistory, mapRowToWeeklyAssessment } from './supabaseDataService';
 
 export interface ServiceResult<T = void> {
   ok: boolean;
@@ -26,7 +37,6 @@ export interface ServiceResult<T = void> {
 }
 
 function mapTrainerProfile(row: Record<string, unknown>): TrainerProfile {
-  const tier = ((row.subscription_tier as string) || 'free') as TrainerSubscriptionTier;
   return {
     userId: String(row.user_id),
     displayName: String(row.display_name || 'Fitness Coach'),
@@ -34,8 +44,6 @@ function mapTrainerProfile(row: Record<string, unknown>): TrainerProfile {
     specialties: Array.isArray(row.specialties) ? (row.specialties as string[]) : [],
     certifications: Array.isArray(row.certifications) ? (row.certifications as string[]) : [],
     acceptingClients: Boolean(row.accepting_clients ?? true),
-    subscriptionTier: tier in TRAINER_SUBSCRIPTION_PLANS ? tier : 'free',
-    maxClients: Number(row.max_clients ?? 5),
     createdAt: String(row.created_at || new Date().toISOString()),
   };
 }
@@ -99,7 +107,7 @@ function mapRecommendation(row: Record<string, unknown>): TargetRecommendation {
   };
 }
 
-// ---------- Trainer Profile & Subscription ----------
+// ---------- Trainer Profile ----------
 
 export async function fetchTrainerProfile(
   userId: string
@@ -121,11 +129,7 @@ export async function upsertTrainerProfile(params: {
   specialties: string[];
   certifications: string[];
   acceptingClients: boolean;
-  subscriptionTier?: TrainerSubscriptionTier;
 }): Promise<ServiceResult<TrainerProfile>> {
-  const tier = params.subscriptionTier || 'free';
-  const maxClients = TRAINER_SUBSCRIPTION_PLANS[tier].maxClients ?? 9999;
-
   const { data, error } = await supabase
     .from('trainer_profiles')
     .upsert({
@@ -135,8 +139,8 @@ export async function upsertTrainerProfile(params: {
       specialties: params.specialties,
       certifications: params.certifications,
       accepting_clients: params.acceptingClients,
-      subscription_tier: tier,
-      max_clients: maxClients,
+      subscription_tier: 'free',
+      max_clients: 999999,
       updated_at: new Date().toISOString(),
     })
     .select('*')
@@ -168,29 +172,6 @@ export async function createClientInvitation(params: {
   message?: string;
 }): Promise<ServiceResult<ClientInvitation>> {
   const cleanEmail = (params.clientEmail || '').trim().toLowerCase();
-
-  // Check trainer capacity before creating new invite
-  const [{ data: tp }, { count: activeCount }] = await Promise.all([
-    supabase
-      .from('trainer_profiles')
-      .select('max_clients, subscription_tier')
-      .eq('user_id', params.trainerId)
-      .maybeSingle(),
-    supabase
-      .from('trainer_clients')
-      .select('id', { count: 'exact', head: true })
-      .eq('trainer_id', params.trainerId)
-      .eq('status', 'active')
-      .eq('is_archived', false),
-  ]);
-
-  const maxClients = Number(tp?.max_clients ?? 5);
-  if ((activeCount ?? 0) >= maxClients) {
-    return {
-      ok: false,
-      error: `Your current plan supports up to ${maxClients} active clients. Upgrade or archive inactive clients before inviting more.`,
-    };
-  }
 
   const { data, error } = await supabase
     .from('client_invitations')
@@ -360,16 +341,30 @@ export async function fetchTrainerClientsAndSnapshots(
         relationship,
         profile: null,
         goals: null,
+        weightGoal: null,
         foodEntries: [],
         weightEntries: [],
+        weeklyAssessments: [],
+        targetHistory: [],
+        recentMealScans: [],
       })),
     };
   }
 
   // Fetch authorized client tables (RLS strictly enforces client consent flags)
-  const [profilesRes, goalsRes, foodRes, weightRes] = await Promise.all([
+  const [
+    profilesRes,
+    goalsRes,
+    weightGoalRes,
+    foodRes,
+    weightRes,
+    assessmentsRes,
+    targetHistoryRes,
+    mealScansRes,
+  ] = await Promise.all([
     supabase.from('profiles').select('*').in('user_id', activeClientIds),
     supabase.from('nutrition_goals').select('*').in('user_id', activeClientIds),
+    supabase.from('weight_goals').select('*').in('user_id', activeClientIds),
     supabase
       .from('food_entries')
       .select('*')
@@ -382,10 +377,31 @@ export async function fetchTrainerClientsAndSnapshots(
       .in('user_id', activeClientIds)
       .order('date', { ascending: false })
       .limit(1000),
+    supabase
+      .from('weekly_assessments')
+      .select('*')
+      .in('user_id', activeClientIds)
+      .order('week_end_date', { ascending: false })
+      .limit(200),
+    supabase
+      .from('nutrition_target_history')
+      .select('*')
+      .in('user_id', activeClientIds)
+      .order('created_at', { ascending: false })
+      .limit(200),
+    supabase
+      .from('ai_meal_scans')
+      .select('*')
+      .in('user_id', activeClientIds)
+      .order('created_at', { ascending: false })
+      .limit(100),
   ]);
 
   const profileMap = new Map((profilesRes.data || []).map((p) => [String(p.user_id), p]));
   const goalMap = new Map((goalsRes.data || []).map((g) => [String(g.user_id), g]));
+  const weightGoalMap = new Map(
+    (!weightGoalRes.error ? weightGoalRes.data || [] : []).map((wg) => [String(wg.user_id), wg])
+  );
 
   const foodByClient = new Map<string, FoodLogEntry[]>();
   for (const row of foodRes.data || []) {
@@ -430,9 +446,63 @@ export async function fetchTrainerClientsAndSnapshots(
     weightByClient.set(uid, list);
   }
 
+  const assessmentsByClient = new Map<string, WeeklyAssessmentRecord[]>();
+  if (!assessmentsRes.error) {
+    for (const row of assessmentsRes.data || []) {
+      const mapped = mapRowToWeeklyAssessment(row as Record<string, unknown>);
+      const list = assessmentsByClient.get(mapped.userId) || [];
+      list.push(mapped);
+      assessmentsByClient.set(mapped.userId, list);
+    }
+  }
+
+  const targetHistoryByClient = new Map<string, NutritionTargetHistoryRecord[]>();
+  if (!targetHistoryRes.error) {
+    for (const row of targetHistoryRes.data || []) {
+      const mapped = mapRowToTargetHistory(row as Record<string, unknown>);
+      const list = targetHistoryByClient.get(mapped.userId) || [];
+      list.push(mapped);
+      targetHistoryByClient.set(mapped.userId, list);
+    }
+  }
+
+  const mealScansByClient = new Map<string, AiMealScanRecord[]>();
+  if (!mealScansRes.error) {
+    for (const row of mealScansRes.data || []) {
+      const r = row as Record<string, unknown>;
+      const uid = String(r.user_id);
+      const list = mealScansByClient.get(uid) || [];
+      list.push({
+        id: String(r.id),
+        userId: uid,
+        inputMode:
+          r.input_mode === 'voice' || r.input_mode === 'text' ? r.input_mode : 'photo',
+        mealType: (r.meal_type as MealCategory) || 'lunch',
+        mealTitle: String(r.meal_title || 'AI Scanned Meal'),
+        transcriptOrNotes: r.transcript_or_notes ? String(r.transcript_or_notes) : undefined,
+        detectedItems: Array.isArray(r.detected_items)
+          ? (r.detected_items as AnalyzedMealItem[])
+          : [],
+        totalCalories: Number(r.total_calories || 0),
+        totalProtein: Number(r.total_protein || 0),
+        totalCarbs: Number(r.total_carbs || 0),
+        totalFat: Number(r.total_fat || 0),
+        totalFibre: Number(r.total_fibre || 0),
+        confidence:
+          r.confidence === 'high' || r.confidence === 'moderate' ? r.confidence : 'low',
+        nutritionTip: r.nutrition_tip ? String(r.nutrition_tip) : undefined,
+        imageStoragePath: r.image_storage_path ? String(r.image_storage_path) : undefined,
+        loggedToDiary: Boolean(r.logged_to_diary),
+        createdAt: String(r.created_at || new Date().toISOString()),
+      });
+      mealScansByClient.set(uid, list);
+    }
+  }
+
   const snapshots: TrainerClientSnapshot[] = relationships.map((relationship) => {
     const p = relationship.canViewProfile ? profileMap.get(relationship.clientId) : undefined;
     const g = relationship.canViewGoals ? goalMap.get(relationship.clientId) : undefined;
+    const wg = relationship.canViewGoals ? weightGoalMap.get(relationship.clientId) : undefined;
 
     return {
       relationship,
@@ -443,11 +513,34 @@ export async function fetchTrainerClientsAndSnapshots(
             email: p.email ? String(p.email) : undefined,
             avatarUrl: p.avatar_url ? String(p.avatar_url) : undefined,
             age: Number(p.age ?? 0),
+            biologicalSex: (p.biological_sex as BiologicalSex) || 'male',
             heightCm: Number(p.height_cm ?? 0),
             currentWeightKg: Number(p.current_weight_kg ?? 0),
             targetWeightKg: Number(p.target_weight_kg ?? 0),
+            dailyAverageSteps:
+              p.daily_average_steps != null ? Number(p.daily_average_steps) : undefined,
+            activityLevel: (p.activity_level as ActivityLevel) || 'moderate',
+            workoutFrequencyPerWeek:
+              p.workout_frequency != null ? Number(p.workout_frequency) : undefined,
+            workoutIntensity: (p.workout_intensity as WorkoutIntensity) || undefined,
             fitnessGoal: (p.fitness_goal as FitnessGoalType) || 'maintenance',
             goalSpeed: (p.goal_speed as GoalSpeed) || 'moderate',
+            dietaryPreference: (p.dietary_preference as DietaryPreference) || undefined,
+            foodRestrictions: Array.isArray(p.food_restrictions)
+              ? (p.food_restrictions as FoodRestriction[])
+              : [],
+            macroFocus: (p.macro_focus as MacroFocusType) || undefined,
+            adaptiveTdeeKcal:
+              p.adaptive_tdee_kcal != null ? Number(p.adaptive_tdee_kcal) : null,
+            lastWeeklyAssessmentAt: p.last_weekly_assessment_at
+              ? String(p.last_weekly_assessment_at)
+              : null,
+            bodyFatPct: p.body_fat_pct != null ? Number(p.body_fat_pct) : null,
+            adaptivePaused: Boolean(p.adaptive_paused),
+            manualOverrideActive: Boolean(p.manual_override_active),
+            cycleAnchorDate: p.cycle_anchor_date ? String(p.cycle_anchor_date) : null,
+            isPregnantOrBreastfeeding: Boolean(p.is_pregnant_or_breastfeeding),
+            weightUnit: p.weight_unit === 'lbs' ? 'lbs' : 'kg',
           }
         : null,
       goals: g
@@ -463,18 +556,52 @@ export async function fetchTrainerClientsAndSnapshots(
               g.target_weight_kg != null && Number(g.target_weight_kg) > 0
                 ? Number(g.target_weight_kg)
                 : undefined,
+            macroFocus: (g.macro_focus as MacroFocusType) || undefined,
             estimatedBmr: g.estimated_bmr != null ? Number(g.estimated_bmr) : undefined,
             estimatedTdee: g.estimated_tdee != null ? Number(g.estimated_tdee) : undefined,
+            adaptiveTdeeKcal:
+              g.adaptive_tdee_kcal != null ? Number(g.adaptive_tdee_kcal) : undefined,
+            assessmentWeekNumber:
+              g.assessment_week_number != null ? Number(g.assessment_week_number) : undefined,
+            initialCalculatedAt: g.initial_calculated_at
+              ? String(g.initial_calculated_at)
+              : undefined,
+            manualOverrideActive: Boolean(g.manual_override_active),
+            hydrationGoalMl:
+              g.hydration_goal_ml != null ? Number(g.hydration_goal_ml) : undefined,
             bmi: g.bmi != null ? Number(g.bmi) : undefined,
             goalSpeed: (g.goal_speed as GoalSpeed) || undefined,
+            estimatedWeeks:
+              g.estimated_weeks != null ? Number(g.estimated_weeks) : undefined,
             updatedAt: String(g.updated_at || new Date().toISOString()),
           } satisfies NutritionGoals)
+        : null,
+      weightGoal: wg
+        ? ({
+            userId: String(wg.user_id),
+            startingWeightKg: Number(wg.starting_weight_kg ?? 0),
+            targetWeightKg: Number(wg.target_weight_kg ?? 0),
+            goalDirection:
+              wg.goal_direction === 'loss' || wg.goal_direction === 'gain'
+                ? wg.goal_direction
+                : 'maintain',
+            updatedAt: String(wg.updated_at || new Date().toISOString()),
+          } satisfies WeightGoal)
         : null,
       foodEntries: relationship.canViewNutrition
         ? foodByClient.get(relationship.clientId) || []
         : [],
       weightEntries: relationship.canViewWeight
         ? weightByClient.get(relationship.clientId) || []
+        : [],
+      weeklyAssessments: relationship.canViewNutrition
+        ? assessmentsByClient.get(relationship.clientId) || []
+        : [],
+      targetHistory: relationship.canViewGoals
+        ? targetHistoryByClient.get(relationship.clientId) || []
+        : [],
+      recentMealScans: relationship.canViewNutrition
+        ? mealScansByClient.get(relationship.clientId) || []
         : [],
     };
   });

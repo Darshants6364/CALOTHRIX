@@ -2,8 +2,10 @@ import React, { useMemo } from 'react';
 import {
   AlertCircle,
   ArrowRight,
+  CalendarClock,
   CheckCircle2,
   Clock,
+  Flame,
   RefreshCw,
   Target,
   UserPlus,
@@ -20,10 +22,10 @@ import {
 } from 'recharts';
 import { useMacroLogStore } from '../../hooks/useMacroLogStore';
 import {
+  computeClientCoachingSummary,
   computeTodayStatsForClient,
   useTrainerDashboard,
 } from '../../hooks/useTrainerDashboard';
-import { TRAINER_SUBSCRIPTION_PLANS } from '../../types';
 import { addDaysToDateKey, getTodayDateKey } from '../../utils/dateUtils';
 
 export const TrainerOverviewPage: React.FC = () => {
@@ -66,14 +68,23 @@ export const TrainerOverviewPage: React.FC = () => {
       activeClients.map((snap) => ({
         snap,
         todayStats: computeTodayStatsForClient(snap),
+        progress: computeClientCoachingSummary(snap),
       })),
     [activeClients]
+  );
+
+  const archivedCount = useMemo(
+    () => clients.filter((c) => c.relationship.status === 'active' && c.relationship.isArchived).length,
+    [clients]
   );
 
   const meetingCaloriesCount = clientStatuses.filter((c) => c.todayStats.meetingCalories).length;
   const meetingProteinCount = clientStatuses.filter((c) => c.todayStats.meetingProtein).length;
   const notLoggedToday = clientStatuses.filter(
     (c) => c.snap.relationship.canViewNutrition && !c.todayStats.loggedToday
+  );
+  const assessmentDueClients = clientStatuses.filter(
+    (c) => c.snap.relationship.canViewNutrition && c.progress.dueStatus.isDue
   );
 
   const cohortChartData = useMemo(() => {
@@ -99,8 +110,6 @@ export const TrainerOverviewPage: React.FC = () => {
   }, [activeClients, sevenDaysAgo, today]);
 
   const unreviewedCheckins = checkins.filter((c) => c.status === 'submitted');
-  const tier = trainerProfile?.subscriptionTier || 'free';
-  const planMeta = TRAINER_SUBSCRIPTION_PLANS[tier];
 
   return (
     <div className="space-y-6">
@@ -108,7 +117,7 @@ export const TrainerOverviewPage: React.FC = () => {
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Welcome back, {trainerProfile?.displayName || 'Coach'} · {planMeta.name}
+            Welcome back, {trainerProfile?.displayName || 'Coach'} · Client Coaching Hub
           </p>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             Trainer Overview
@@ -156,7 +165,7 @@ export const TrainerOverviewPage: React.FC = () => {
             {activeClients.length}
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono-nums">
-            Limit: {planMeta.maxClients ?? 'Unlimited'}
+            {archivedCount > 0 ? `${archivedCount} archived` : 'Authorized roster'}
           </div>
         </div>
 
@@ -295,12 +304,34 @@ export const TrainerOverviewPage: React.FC = () => {
               Daily Follow-Up Queue
             </h2>
 
-            {notLoggedToday.length === 0 && unreviewedCheckins.length === 0 ? (
+            {notLoggedToday.length === 0 &&
+            unreviewedCheckins.length === 0 &&
+            assessmentDueClients.length === 0 ? (
               <div className="rounded-xl bg-lime-50/70 dark:bg-lime-950/20 border border-lime-200 dark:border-lime-900/50 p-4 text-xs text-lime-800 dark:text-lime-300">
-                All authorized clients have logged meals today and no check-ins are awaiting review.
+                All authorized clients have logged meals today and no check-ins or 14-day cycles are awaiting review.
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {assessmentDueClients.map(({ snap, progress }) => (
+                  <button
+                    key={`cycle-${snap.relationship.id}`}
+                    type="button"
+                    onClick={() => openTrainerClientDetail(snap.relationship.clientId)}
+                    className="w-full text-left p-3 rounded-xl border border-[#4E6800]/30 dark:border-[#C8FF00]/30 bg-[#C8FF00]/10 hover:opacity-90 flex items-center justify-between gap-2"
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                        <CalendarClock className="w-3.5 h-3.5 text-[#4E6800] dark:text-[#C8FF00]" />
+                        <span>14-Day Cycle Ready · {snap.profile?.name || 'Client'}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                        {progress.dueStatus.foodLoggedDays}/14 food days · {progress.dueStatus.weightLoggedDays} weigh-ins
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00] shrink-0" />
+                  </button>
+                ))}
+
                 {unreviewedCheckins.map((chk) => {
                   const matched = activeClients.find((c) => c.relationship.clientId === chk.clientId);
                   return (
@@ -323,7 +354,7 @@ export const TrainerOverviewPage: React.FC = () => {
                   );
                 })}
 
-                {notLoggedToday.map(({ snap }) => (
+                {notLoggedToday.map(({ snap, progress }) => (
                   <button
                     key={snap.relationship.id}
                     type="button"
@@ -331,8 +362,14 @@ export const TrainerOverviewPage: React.FC = () => {
                     className="w-full text-left p-3 rounded-xl border border-black/10 dark:border-white/12 hover:bg-stone-50 dark:hover:bg-slate-900 flex items-center justify-between gap-2"
                   >
                     <div>
-                      <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                        {snap.profile?.name || 'Client'}
+                      <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <span>{snap.profile?.name || 'Client'}</span>
+                        {progress.streakDays > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-mono-nums text-amber-600 dark:text-amber-400">
+                            <Flame className="w-3 h-3" />
+                            {progress.streakDays}d
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-amber-600 dark:text-amber-400">
                         Has not logged food today

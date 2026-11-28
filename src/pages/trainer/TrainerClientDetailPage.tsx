@@ -1,18 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   ArrowLeft,
   Calculator,
   Calendar,
+  CalendarClock,
+  Camera,
   Check,
   CheckCircle2,
   ClipboardCheck,
   ClipboardList,
+  Droplets,
+  Flame,
   Lock,
   MessageSquarePlus,
+  Mic,
   Plus,
   Send,
   Sparkles,
   Trash2,
+  Utensils,
 } from 'lucide-react';
 import {
   Area,
@@ -20,6 +27,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   Line,
   ReferenceLine,
@@ -28,8 +36,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { CycleComparisonSection } from '../../components/goals/CycleComparisonSection';
+import { TargetHistorySection } from '../../components/goals/TargetHistorySection';
+import { WeeklyNutritionProgressCard } from '../../components/goals/WeeklyNutritionProgressCard';
+import { WeightProgressCard } from '../../components/goals/WeightProgressCard';
 import { useMacroLogStore } from '../../hooks/useMacroLogStore';
 import {
+  buildClientDashboardContext,
+  computeClientCoachingSummary,
   computeTodayStatsForClient,
   useTrainerDashboard,
 } from '../../hooks/useTrainerDashboard';
@@ -54,6 +68,12 @@ import {
   TrainerClientPlan,
   TrainerNote,
 } from '../../types';
+import {
+  build15DayCycleDashboardData,
+  buildFourWeekNutritionReports,
+  buildWeeklyNutritionReport,
+  buildWeeklyWeightProgress,
+} from '../../utils/cycleAnalytics';
 import { addDaysToDateKey, getTodayDateKey } from '../../utils/dateUtils';
 import { calculateSmartFitnessTargets } from '../../utils/fitnessCalculator';
 
@@ -88,8 +108,10 @@ const DEFAULT_MEAL_GUIDELINES: MealGuidelineItem[] = [
 ];
 
 export const TrainerClientDetailPage: React.FC = () => {
-  const { authUser, selectedTrainerClientId, setTrainerTab, notify } = useMacroLogStore();
+  const { authUser, resolvedTheme, selectedTrainerClientId, setTrainerTab, notify } =
+    useMacroLogStore();
   const { clients, checkins, refreshAll } = useTrainerDashboard();
+  const isDark = resolvedTheme === 'dark';
 
   const snapshot = useMemo(
     () => clients.find((c) => c.relationship.clientId === selectedTrainerClientId),
@@ -100,6 +122,9 @@ export const TrainerClientDetailPage: React.FC = () => {
   const [rangePreset, setRangePreset] = useState<DateRangePreset>('30d');
   const [customStart, setCustomStart] = useState(addDaysToDateKey(today, -29));
   const [customEnd, setCustomEnd] = useState(today);
+  const [nutritionWeekOffset, setNutritionWeekOffset] = useState(0);
+  const [weightWeekOffset, setWeightWeekOffset] = useState(0);
+  const [weightWindowWeeks, setWeightWindowWeeks] = useState<1 | 2 | 4>(2);
 
   const [notes, setNotes] = useState<TrainerNote[]>([]);
   const [noteCategory, setNoteCategory] = useState<TrainerNote['category']>('nutrition');
@@ -270,7 +295,55 @@ export const TrainerClientDetailPage: React.FC = () => {
     });
   }, [dailySeries.length, dateBounds.end, dateBounds.start, snapshot]);
 
-  if (!snapshot) {
+  const clientProgressAnalytics = useMemo(() => {
+    if (!snapshot) return null;
+    const ctx = buildClientDashboardContext(snapshot);
+    const summary = computeClientCoachingSummary(snapshot);
+    const cycleDashboard = build15DayCycleDashboardData({
+      profile: ctx.profile,
+      goals: ctx.goals,
+      weightGoal: ctx.weightGoal,
+      foodEntries: snapshot.foodEntries,
+      weightEntries: snapshot.weightEntries,
+      weeklyAssessments: snapshot.weeklyAssessments || [],
+      targetHistory: snapshot.targetHistory || [],
+      dueStatus: ctx.dueStatus,
+      todayDateKey: today,
+    });
+    const weeklyReport = buildWeeklyNutritionReport({
+      foodEntries: snapshot.foodEntries,
+      currentGoals: ctx.goals,
+      targetHistory: snapshot.targetHistory || [],
+      referenceDateKey: today,
+      weekOffset: nutritionWeekOffset,
+    });
+    const fourWeekReports = buildFourWeekNutritionReports({
+      foodEntries: snapshot.foodEntries,
+      currentGoals: ctx.goals,
+      targetHistory: snapshot.targetHistory || [],
+      referenceDateKey: today,
+      weekOffset: nutritionWeekOffset,
+    });
+    const weightProgress = buildWeeklyWeightProgress({
+      weightEntries: snapshot.weightEntries,
+      profile: ctx.profile,
+      goals: ctx.goals,
+      weightGoal: ctx.weightGoal,
+      referenceDateKey: today,
+      weekOffset: weightWeekOffset,
+      windowWeeks: weightWindowWeeks,
+    });
+    return {
+      ctx,
+      summary,
+      cycleDashboard,
+      weeklyReport,
+      fourWeekReports,
+      weightProgress,
+    };
+  }, [nutritionWeekOffset, snapshot, today, weightWeekOffset, weightWindowWeeks]);
+
+  if (!snapshot || !clientProgressAnalytics) {
     return (
       <div className="space-y-4">
         <button
@@ -338,12 +411,18 @@ export const TrainerClientDetailPage: React.FC = () => {
       parseFloat(recTargetWeight) || p?.targetWeightKg || goals?.targetWeightKg || latestWeight;
     const calc = calculateSmartFitnessTargets({
       age: p?.age && p.age >= 14 ? p.age : 28,
-      biologicalSex: 'male',
+      biologicalSex: p?.biologicalSex || 'male',
       heightCm: p?.heightCm && p.heightCm >= 120 ? p.heightCm : 172,
       currentWeightKg: latestWeight > 30 ? latestWeight : 72,
       targetWeightKg: targetW > 30 ? targetW : 68,
-      activityLevel: 'moderate',
-      workoutFrequencyPerWeek: 4,
+      activityLevel: p?.activityLevel || 'moderate',
+      workoutFrequencyPerWeek: p?.workoutFrequencyPerWeek ?? 4,
+      workoutIntensity: p?.workoutIntensity || 'moderate',
+      dailyAverageSteps: p?.dailyAverageSteps ?? 7000,
+      bodyFatPct: p?.bodyFatPct ?? undefined,
+      macroFocus: p?.macroFocus || goals?.macroFocus || 'balanced',
+      isPregnantOrBreastfeeding: Boolean(p?.isPregnantOrBreastfeeding),
+      adaptiveTdeeKcal: p?.adaptiveTdeeKcal ?? goals?.adaptiveTdeeKcal ?? undefined,
       fitnessGoal: recFitnessGoal,
       goalSpeed: recGoalSpeed,
     });
@@ -354,7 +433,7 @@ export const TrainerClientDetailPage: React.FC = () => {
     setRecFibre(String(calc.fibreGrams));
     setRecTargetWeight(String(calc.recommendedTargetWeightKg));
     setRecPreset(recFitnessGoal);
-    notify('Targets calculated from client body stats', 'info');
+    notify('Targets calculated from full client metabolic profile', 'info');
   };
 
   const handleApplyDirectGoals = async () => {
@@ -630,15 +709,315 @@ export const TrainerClientDetailPage: React.FC = () => {
         </div>
 
         <div className="col-span-2 lg:col-span-1 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400">Goal Completion</div>
-          <div className="mt-1 text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
-            {relationship.canViewNutrition ? `${goalCompletionPct}%` : '—'}
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">Streak &amp; Completion</div>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-xl font-bold font-mono-nums text-lime-700 dark:text-lime-400">
+              {relationship.canViewNutrition ? `${goalCompletionPct}%` : '—'}
+            </span>
+            {relationship.canViewNutrition && clientProgressAnalytics.summary.streakDays > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-xs font-bold font-mono-nums text-amber-600 dark:text-amber-400">
+                <Flame className="w-3.5 h-3.5" />
+                {clientProgressAnalytics.summary.streakDays}d
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
             {dailySeries.length} logged days in range
           </div>
         </div>
       </section>
+
+      {/* Client Metabolic, Dietary & Lifestyle Profile */}
+      {(relationship.canViewProfile || relationship.canViewGoals) && (
+        <section className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-700 dark:text-slate-200">
+              <Activity className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+              <span>Metabolic, Dietary &amp; Adaptive Status</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              {profile?.adaptivePaused && (
+                <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 font-semibold">
+                  Adaptive AI Paused
+                </span>
+              )}
+              {(profile?.manualOverrideActive || goals?.manualOverrideActive) && (
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 font-semibold">
+                  Manual Targets Locked
+                </span>
+              )}
+              {relationship.canViewNutrition && (
+                <span
+                  className={`px-2 py-0.5 rounded-md font-semibold ${
+                    clientProgressAnalytics.ctx.dueStatus.isDue
+                      ? 'bg-[#C8FF00]/20 text-[#3D5200] dark:text-[#C8FF00]'
+                      : 'bg-stone-100 dark:bg-white/8 text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  {clientProgressAnalytics.ctx.dueStatus.statusLabel}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+            <div className="rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/6 dark:border-white/8 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">Diet &amp; Restrictions</div>
+              <div className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100 capitalize truncate">
+                {profile?.dietaryPreference || 'Omnivore'}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                {profile?.foodRestrictions && profile.foodRestrictions.length > 0
+                  ? profile.foodRestrictions.map((r) => r.replace(/_/g, ' ')).join(', ')
+                  : 'No restrictions'}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/6 dark:border-white/8 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">Activity &amp; Steps</div>
+              <div className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100 capitalize">
+                {profile?.activityLevel || 'Moderate'}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums">
+                {(profile?.dailyAverageSteps ?? 7000).toLocaleString()} steps · {profile?.workoutFrequencyPerWeek ?? 3}x/wk
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/6 dark:border-white/8 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">BMR / Est. TDEE</div>
+              <div className="mt-0.5 font-semibold font-mono-nums text-slate-900 dark:text-slate-100">
+                {goals?.estimatedBmr ? `${goals.estimatedBmr} kcal` : '—'}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums">
+                TDEE {goals?.estimatedTdee ? `${goals.estimatedTdee} kcal` : '—'}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/6 dark:border-white/8 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">Adaptive TDEE</div>
+              <div className="mt-0.5 font-semibold font-mono-nums text-[#4E6800] dark:text-[#C8FF00]">
+                {profile?.adaptiveTdeeKcal || goals?.adaptiveTdeeKcal
+                  ? `${profile?.adaptiveTdeeKcal || goals?.adaptiveTdeeKcal} kcal`
+                  : 'Calibrating'}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
+                Focus: {(profile?.macroFocus || goals?.macroFocus || 'balanced').replace(/_/g, ' ')}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/6 dark:border-white/8 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                <Droplets className="w-3 h-3 text-sky-500" />
+                Hydration Goal
+              </div>
+              <div className="mt-0.5 font-semibold font-mono-nums text-slate-900 dark:text-slate-100">
+                {goals?.hydrationGoalMl
+                  ? `${(goals.hydrationGoalMl / 1000).toFixed(2)} L`
+                  : clientPlan?.dailyWaterGoalMl
+                  ? `${(clientPlan.dailyWaterGoalMl / 1000).toFixed(2)} L`
+                  : '2.50 L'}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums">
+                {goals?.bmi ? `BMI ${goals.bmi.toFixed(1)}` : 'Daily target'}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-stone-50/70 dark:bg-[#090A0C]/70 border border-black/6 dark:border-white/8 p-3">
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">Protein Density</div>
+              <div className="mt-0.5 font-semibold font-mono-nums text-slate-900 dark:text-slate-100">
+                {relationship.canViewNutrition && clientProgressAnalytics.summary.proteinPer1000Kcal > 0
+                  ? `${clientProgressAnalytics.summary.proteinPer1000Kcal} g / 1k kcal`
+                  : '—'}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono-nums">
+                {profile?.bodyFatPct ? `Body Fat ${profile.bodyFatPct}%` : `Sex: ${profile?.biologicalSex || 'male'}`}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 14-Day Adaptive Cycle Progress & Comparison (Synced from User Dashboard) */}
+      {(relationship.canViewNutrition || relationship.canViewWeight) && (
+        <section className="space-y-4">
+          <div className="bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em] text-[#4E6800] dark:text-[#C8FF00]">
+                  <CalendarClock className="w-3.5 h-3.5" />
+                  <span>
+                    Cycle {clientProgressAnalytics.cycleDashboard.cycleNumber} · 14-Day Adaptive Progress
+                  </span>
+                </div>
+                <h2 className="mt-0.5 text-base font-bold text-slate-900 dark:text-white font-mono-nums">
+                  {clientProgressAnalytics.cycleDashboard.comparison.currentLabel} · Day{' '}
+                  {clientProgressAnalytics.cycleDashboard.daysCompleted} of{' '}
+                  {clientProgressAnalytics.ctx.dueStatus.cycleDays}
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {clientProgressAnalytics.ctx.dueStatus.readinessMessage}
+                </p>
+              </div>
+              <div className="text-xs font-mono-nums text-slate-500 dark:text-slate-400 shrink-0">
+                Food: <strong className="text-slate-900 dark:text-white">{clientProgressAnalytics.ctx.dueStatus.foodLoggedDays}/14d</strong> · Weigh-ins:{' '}
+                <strong className="text-slate-900 dark:text-white">{clientProgressAnalytics.ctx.dueStatus.weightLoggedDays}/14d</strong>
+              </div>
+            </div>
+
+            <div className="h-2 w-full rounded-full bg-stone-200 dark:bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-[#4E6800] dark:bg-[#C8FF00] transition-all"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.max(
+                      6,
+                      Math.round(
+                        (clientProgressAnalytics.cycleDashboard.daysCompleted /
+                          Math.max(1, clientProgressAnalytics.ctx.dueStatus.cycleDays)) *
+                          100
+                      )
+                    )
+                  )}%`,
+                }}
+              />
+            </div>
+
+            {relationship.canViewNutrition && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pt-1">
+                <div className="lg:col-span-7 h-44">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={clientProgressAnalytics.cycleDashboard.nutritionSeries}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,19,23,0.08)'}
+                        vertical={false}
+                      />
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#14161C',
+                          border: '1px solid rgba(255,255,255,0.14)',
+                          borderRadius: '10px',
+                          color: '#F4F3EF',
+                          fontSize: '12px',
+                        }}
+                      />
+                      {calGoal > 0 && (
+                        <ReferenceLine y={calGoal} stroke="#C8FF00" strokeDasharray="4 4" />
+                      )}
+                      <Bar dataKey="calories" name="Daily kcal" radius={[4, 4, 0, 0]}>
+                        {clientProgressAnalytics.cycleDashboard.nutritionSeries.map((pt, i) => (
+                          <Cell
+                            key={`${pt.date}-${i}`}
+                            fill={
+                              pt.status === 'within'
+                                ? isDark
+                                  ? '#C8FF00'
+                                  : '#4E6800'
+                                : pt.status === 'below'
+                                ? '#F59E0B'
+                                : pt.status === 'above'
+                                ? '#F43F5E'
+                                : isDark
+                                ? 'rgba(255,255,255,0.08)'
+                                : 'rgba(17,19,23,0.08)'
+                            }
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="lg:col-span-5 space-y-2.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    14-Day Avg Macros vs Target
+                  </div>
+                  {[
+                    {
+                      label: 'Protein',
+                      avg: clientProgressAnalytics.cycleDashboard.summary.avgDailyProtein,
+                      target: goals?.protein || 0,
+                      color: isDark ? 'bg-[#C8FF00]' : 'bg-[#4E6800]',
+                    },
+                    {
+                      label: 'Carbs',
+                      avg: clientProgressAnalytics.cycleDashboard.summary.avgDailyCarbs,
+                      target: goals?.carbs || 0,
+                      color: 'bg-sky-500',
+                    },
+                    {
+                      label: 'Fat',
+                      avg: clientProgressAnalytics.cycleDashboard.summary.avgDailyFat,
+                      target: goals?.fat || 0,
+                      color: 'bg-amber-500',
+                    },
+                    {
+                      label: 'Fibre',
+                      avg: clientProgressAnalytics.cycleDashboard.summary.avgDailyFibre,
+                      target: goals?.fibre || 0,
+                      color: 'bg-emerald-500',
+                    },
+                  ].map((m) => {
+                    const pct =
+                      m.avg !== null && m.target > 0
+                        ? Math.min(100, Math.round((m.avg / m.target) * 100))
+                        : 0;
+                    return (
+                      <div key={m.label} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs font-mono-nums">
+                          <span className="font-medium text-slate-700 dark:text-slate-200">{m.label}</span>
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {m.avg !== null ? `${Math.round(m.avg)}g` : '—'}
+                            {m.target > 0 ? ` / ${m.target}g` : ''}
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-white/10 overflow-hidden">
+                          <div className={`h-full rounded-full ${m.color}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Interactive Weekly Nutrition & Weight Progress (Read-Only Mirror of User Dashboard) */}
+          <div className="grid grid-cols-1 gap-4">
+            {relationship.canViewNutrition && (
+              <WeeklyNutritionProgressCard
+                report={clientProgressAnalytics.weeklyReport}
+                fourWeekReports={clientProgressAnalytics.fourWeekReports}
+                isDark={isDark}
+                onPrevWeek={() => setNutritionWeekOffset((prev) => prev - 1)}
+                onNextWeek={() => setNutritionWeekOffset((prev) => Math.min(0, prev + 1))}
+                onResetCurrentWeek={() => setNutritionWeekOffset(0)}
+                onSelectWeekOffset={(offset) => setNutritionWeekOffset(offset)}
+              />
+            )}
+
+            {relationship.canViewWeight && (
+              <WeightProgressCard
+                data={clientProgressAnalytics.weightProgress}
+                unit={profile?.weightUnit || 'kg'}
+                isDark={isDark}
+                windowWeeks={weightWindowWeeks}
+                onChangeWindowWeeks={setWeightWindowWeeks}
+                onPrevPeriod={() => setWeightWeekOffset((prev) => prev - weightWindowWeeks)}
+                onNextPeriod={() =>
+                  setWeightWeekOffset((prev) => Math.min(0, prev + weightWindowWeeks))
+                }
+                onResetCurrent={() => setWeightWeekOffset(0)}
+              />
+            )}
+          </div>
+
+          <CycleComparisonSection dashboard={clientProgressAnalytics.cycleDashboard} />
+        </section>
+      )}
 
       {/* Progress Analytics Charts */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -835,6 +1214,152 @@ export const TrainerClientDetailPage: React.FC = () => {
             </ResponsiveContainer>
           </div>
         </section>
+      )}
+
+      {/* Client Adaptive AI Reviews & Recent AI Meal Scans */}
+      {relationship.canViewNutrition && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* 14-Day Adaptive Assessments */}
+          <section className="lg:col-span-6 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+                Client 14-Day Adaptive Reviews
+              </h2>
+              <span className="text-[11px] text-slate-400 font-mono-nums">
+                {(snapshot.weeklyAssessments || []).length} recorded
+              </span>
+            </div>
+
+            {!snapshot.weeklyAssessments || snapshot.weeklyAssessments.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                No 14-day adaptive assessments generated by this client yet.
+              </p>
+            ) : (
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                {snapshot.weeklyAssessments.slice(0, 6).map((ass) => (
+                  <div
+                    key={ass.id}
+                    className="p-3.5 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/50 dark:bg-[#090A0C]/60 space-y-2 text-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-bold text-slate-900 dark:text-slate-100">
+                        Cycle #{ass.assessmentWeekNumber} · {ass.aiSummary?.headline || '14-Day Progress Review'}
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                          ass.status === 'applied'
+                            ? 'bg-lime-100 dark:bg-lime-500/15 text-lime-800 dark:text-lime-300'
+                            : ass.status === 'pending'
+                            ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                            : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {ass.status}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono-nums text-slate-500 dark:text-slate-400">
+                      <span>{ass.weekStartDate} → {ass.weekEndDate}</span>
+                      <span>Calibrated TDEE: {ass.calibratedTdeeKcal} kcal</span>
+                      <span>Adherence: {Math.round(ass.adherencePercentage)}%</span>
+                      <span className="capitalize">Confidence: {ass.confidenceLevel}</span>
+                    </div>
+
+                    <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {ass.aiSummary?.calorieAdjustmentReason || ass.adjustmentReason}
+                    </p>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <span className="font-mono-nums font-semibold text-slate-900 dark:text-white">
+                        Rec: {ass.recommendedCalories} kcal · P{ass.recommendedProtein} C{ass.recommendedCarbs} F{ass.recommendedFat}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecCalories(String(ass.recommendedCalories));
+                          setRecProtein(String(Math.round(ass.recommendedProtein)));
+                          setRecCarbs(String(Math.round(ass.recommendedCarbs)));
+                          setRecFat(String(Math.round(ass.recommendedFat)));
+                          setRecFibre(String(Math.round(ass.recommendedFibre)));
+                          setRecRationale(
+                            ass.adjustmentReason || `Loaded from client Cycle #${ass.assessmentWeekNumber} assessment`
+                          );
+                          notify(`Cycle #${ass.assessmentWeekNumber} targets loaded into Goal Studio`, 'info');
+                        }}
+                        className="min-h-[30px] px-2.5 rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-[#111317] text-[11px] font-semibold text-slate-700 dark:text-slate-200 hover:border-lime-500"
+                      >
+                        Load into Goal Studio
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Recent AI Meal Scans */}
+          <section className="lg:col-span-6 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Utensils className="w-4 h-4 text-[#4E6800] dark:text-[#C8FF00]" />
+                Recent AI Meal Scans
+              </h2>
+              <span className="text-[11px] text-slate-400 font-mono-nums">
+                {(snapshot.recentMealScans || []).length} scans
+              </span>
+            </div>
+
+            {!snapshot.recentMealScans || snapshot.recentMealScans.length === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                No AI photo, voice, or text meal scans recorded by this client yet.
+              </p>
+            ) : (
+              <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                {snapshot.recentMealScans.slice(0, 10).map((scan) => (
+                  <div
+                    key={scan.id}
+                    className="p-3 rounded-xl border border-black/10 dark:border-white/12 bg-stone-50/50 dark:bg-[#090A0C]/60 flex items-start justify-between gap-3 text-xs"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
+                        {scan.inputMode === 'photo' ? (
+                          <Camera className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        ) : scan.inputMode === 'voice' ? (
+                          <Mic className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        )}
+                        <span className="truncate">{scan.mealTitle}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
+                        {scan.mealType.replace('_', ' ')} · {new Date(scan.createdAt).toLocaleDateString()} · Confidence: {scan.confidence}
+                      </div>
+                      {scan.nutritionTip && (
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                          {scan.nutritionTip}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right font-mono-nums shrink-0">
+                      <div className="font-bold text-slate-900 dark:text-slate-100">
+                        {Math.round(scan.totalCalories)} kcal
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                        P{Math.round(scan.totalProtein)} C{Math.round(scan.totalCarbs)} F{Math.round(scan.totalFat)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* Versioned Target History (Synced from User Dashboard) */}
+      {relationship.canViewGoals && (
+        <TargetHistorySection targetHistory={snapshot.targetHistory || []} />
       )}
 
       {/* Read-Only Today's Food Log + Target Recommendation Composer */}

@@ -21,7 +21,7 @@ interface WeeklyNutritionProgressCardProps {
   onNextWeek: () => void;
   onResetCurrentWeek: () => void;
   onSelectWeekOffset: (weekOffset: number) => void;
-  onGoToFoodLog: () => void;
+  onGoToFoodLog?: () => void;
 }
 
 const STATUS_LABEL: Record<WeeklyNutritionReport['weekStatus'], string> = {
@@ -261,7 +261,7 @@ export const WeeklyNutritionProgressCard: React.FC<WeeklyNutritionProgressCardPr
               your 4-week view.
             </p>
           </div>
-          {report.isCurrentWeek && (
+          {report.isCurrentWeek && onGoToFoodLog && (
             <button
               type="button"
               onClick={onGoToFoodLog}
@@ -283,7 +283,7 @@ export const WeeklyNutritionProgressCard: React.FC<WeeklyNutritionProgressCardPr
                 <p className="text-xs text-[#52555E] dark:text-[#9A9CA3]">
                   Select any prior week on the 4-week chart or log meals today.
                 </p>
-                {report.isCurrentWeek && (
+                {report.isCurrentWeek && onGoToFoodLog && (
                   <button
                     type="button"
                     onClick={onGoToFoodLog}

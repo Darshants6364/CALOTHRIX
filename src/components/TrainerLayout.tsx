@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useMacroLogStore } from '../hooks/useMacroLogStore';
 import { useTrainerDashboard } from '../hooks/useTrainerDashboard';
-import { TRAINER_SUBSCRIPTION_PLANS, TrainerNavTab } from '../types';
+import { TrainerNavTab } from '../types';
 import { CalothrixLogo } from './CalothrixLogo';
 import { SchemaSetupBanner } from './SchemaSetupBanner';
 
@@ -27,7 +27,7 @@ const TRAINER_NAV_ITEMS: TrainerNavItem[] = [
   { id: 'overview', label: 'Trainer Overview', mobileLabel: 'Overview', icon: LayoutDashboard },
   { id: 'clients', label: 'Clients & Invites', mobileLabel: 'Clients', icon: Users },
   { id: 'analytics', label: 'Progress Analytics', mobileLabel: 'Analytics', icon: BarChart3 },
-  { id: 'settings', label: 'Coach Profile & Plan', mobileLabel: 'Settings', icon: Settings },
+  { id: 'settings', label: 'Coach Profile & Settings', mobileLabel: 'Settings', icon: Settings },
 ];
 
 export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -50,8 +50,6 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
   const activeClientsCount = clients.filter(
     (c) => c.relationship.status === 'active' && !c.relationship.isArchived
   ).length;
-  const tier = trainerProfile?.subscriptionTier || 'free';
-  const planMeta = TRAINER_SUBSCRIPTION_PLANS[tier];
 
   const initials = displayName
     .split(' ')
@@ -96,7 +94,7 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
               Trainer Workspace
             </span>
             <span className="font-mono-nums text-slate-500 dark:text-slate-400">
-              {activeClientsCount} / {planMeta.maxClients ?? '∞'} clients
+              {activeClientsCount} active {activeClientsCount === 1 ? 'client' : 'clients'}
             </span>
           </div>
 
@@ -142,13 +140,6 @@ export const TrainerLayout: React.FC<{ children: React.ReactNode }> = ({ childre
         </nav>
 
         <div className="p-3.5 border-t border-black/8 dark:border-white/10 space-y-2">
-          <div className="px-2.5 py-1.5 rounded-lg bg-[#F4F3EF]/80 dark:bg-[#090A0C] border border-black/10 dark:border-white/12 text-[11px] flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400">Plan Tier</span>
-            <span className="font-semibold text-[#111317] dark:text-white capitalize">
-              {tier}
-            </span>
-          </div>
-
           <button
             type="button"
             onClick={() => setTrainerTab('settings')}

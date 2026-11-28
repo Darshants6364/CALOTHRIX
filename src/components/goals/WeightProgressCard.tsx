@@ -22,7 +22,7 @@ interface WeightProgressCardProps {
   onPrevPeriod: () => void;
   onNextPeriod: () => void;
   onResetCurrent: () => void;
-  onOpenWeightModal: () => void;
+  onOpenWeightModal?: () => void;
 }
 
 export const WeightProgressCard: React.FC<WeightProgressCardProps> = ({
@@ -150,14 +150,16 @@ export const WeightProgressCard: React.FC<WeightProgressCardProps> = ({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={onOpenWeightModal}
-            className="min-h-[44px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold hover:opacity-90 transition inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Log Weight</span>
-          </button>
+          {onOpenWeightModal && (
+            <button
+              type="button"
+              onClick={onOpenWeightModal}
+              className="min-h-[44px] px-3.5 rounded-xl bg-[#111317] dark:bg-[#C8FF00] text-white dark:text-black text-xs font-bold hover:opacity-90 transition inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Log Weight</span>
+            </button>
+          )}
         </div>
       </div>
 

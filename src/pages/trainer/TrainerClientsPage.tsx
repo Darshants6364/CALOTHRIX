@@ -3,8 +3,10 @@ import {
   Archive,
   ArchiveRestore,
   ArrowRight,
+  CalendarClock,
   Check,
   Copy,
+  Flame,
   Link2,
   Mail,
   Search,
@@ -14,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useMacroLogStore } from '../../hooks/useMacroLogStore';
 import {
+  computeClientCoachingSummary,
   computeTodayStatsForClient,
   useTrainerDashboard,
 } from '../../hooks/useTrainerDashboard';
@@ -22,7 +25,6 @@ import {
   deleteTrainerInvitation,
   manageTrainerClientConnection,
 } from '../../services/trainerService';
-import { TRAINER_SUBSCRIPTION_PLANS } from '../../types';
 
 export const TrainerClientsPage: React.FC = () => {
   const { authUser, openTrainerClientDetail, notify } = useMacroLogStore();
@@ -57,9 +59,6 @@ export const TrainerClientsPage: React.FC = () => {
     () => invitations.filter((i) => i.status === 'pending'),
     [invitations]
   );
-
-  const tier = trainerProfile?.subscriptionTier || 'free';
-  const maxClients = TRAINER_SUBSCRIPTION_PLANS[tier].maxClients;
 
   const filteredActive = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -143,7 +142,7 @@ export const TrainerClientsPage: React.FC = () => {
       <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Manage authorized clients, email invitations, and shareable invite links ({activeClients.length} / {maxClients ?? '∞'} slots used)
+            Manage authorized clients, email invitations, and shareable invite links ({activeClients.length} active)
           </p>
           <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
             Clients & Invitations
@@ -371,6 +370,7 @@ export const TrainerClientsPage: React.FC = () => {
           ) : (
             filteredActive.map((snap) => {
               const stats = computeTodayStatsForClient(snap);
+              const summary = computeClientCoachingSummary(snap);
               const clientName = snap.profile?.name || 'Authorized Client';
               const targetCal = snap.goals?.calories || 0;
               return (
@@ -388,28 +388,67 @@ export const TrainerClientsPage: React.FC = () => {
                           · {snap.profile.fitnessGoal.replace('_', ' ')}
                         </span>
                       )}
+                      {snap.profile?.dietaryPreference && (
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
+                          · {snap.profile.dietaryPreference}
+                        </span>
+                      )}
+                      {snap.relationship.canViewNutrition && summary.dueStatus.isDue && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#4E6800] dark:text-[#C8FF00]">
+                          <CalendarClock className="w-3.5 h-3.5" />
+                          14d Review Ready
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 tabular-nums">
                       {snap.relationship.canViewNutrition ? (
-                        <span>
-                          Today:{' '}
-                          <strong className="text-slate-800 dark:text-slate-200 font-mono-nums">
-                            {stats.calories.toLocaleString()}
-                          </strong>
-                          {targetCal > 0 ? ` / ${targetCal.toLocaleString()} kcal` : ' kcal'} · P{' '}
-                          {stats.protein}g
-                        </span>
+                        <>
+                          <span>
+                            Today:{' '}
+                            <strong className="text-slate-800 dark:text-slate-200 font-mono-nums">
+                              {stats.calories.toLocaleString()}
+                            </strong>
+                            {targetCal > 0 ? ` / ${targetCal.toLocaleString()} kcal` : ' kcal'} · P{' '}
+                            {stats.protein}g
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Flame className="w-3.5 h-3.5 text-amber-500" />
+                            <strong className="text-slate-800 dark:text-slate-200 font-mono-nums">
+                              {summary.streakDays}d
+                            </strong>{' '}
+                            streak
+                          </span>
+                          <span>
+                            14d On-Target:{' '}
+                            <strong className="text-slate-800 dark:text-slate-200 font-mono-nums">
+                              {summary.adherence14Pct}%
+                            </strong>{' '}
+                            ({summary.loggedDays14}/14d)
+                          </span>
+                          <span>
+                            Cycle Day{' '}
+                            <strong className="text-slate-800 dark:text-slate-200 font-mono-nums">
+                              {Math.min(summary.dueStatus.cycleDays, summary.dueStatus.daysCompleted + 1)}/{summary.dueStatus.cycleDays}
+                            </strong>
+                          </span>
+                        </>
                       ) : (
                         <span>Nutrition sharing paused by client</span>
                       )}
 
-                      {snap.relationship.canViewWeight && snap.weightEntries[0] && (
+                      {snap.relationship.canViewWeight && summary.latestWeightKg !== null && (
                         <span>
-                          Latest Weight:{' '}
+                          Weight:{' '}
                           <strong className="text-slate-800 dark:text-slate-200 font-mono-nums">
-                            {snap.weightEntries[0].weightKg} kg
+                            {summary.latestWeightKg} kg
                           </strong>
+                          {summary.weightDelta14Kg !== null && (
+                            <span className="ml-1 text-[11px] font-mono-nums">
+                              ({summary.weightDelta14Kg > 0 ? '+' : ''}
+                              {summary.weightDelta14Kg} kg / 14d)
+                            </span>
+                          )}
                         </span>
                       )}
                     </div>

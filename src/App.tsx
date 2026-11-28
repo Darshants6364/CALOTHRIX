@@ -7,12 +7,13 @@ import { InviteAcceptModal } from './components/InviteAcceptModal';
 import { Layout } from './components/Layout';
 import { RoleSelectionScreen } from './components/RoleSelectionScreen';
 import { ToastContainer } from './components/ToastContainer';
+import { TrainerOnboardingFlow } from './components/TrainerOnboardingFlow';
 import { WeightEntryModal } from './components/WeightEntryModal';
 import { MacroLogProvider, useMacroLogStore } from './hooks/useMacroLogStore';
 import { useMobileViewportSync } from './hooks/useMobileViewport';
 import { HomePage } from './pages/HomePage';
 import { LandingPage } from './pages/LandingPage';
-import { AccountRole, ENABLE_TRAINER_PORTAL } from './types';
+import { AccountRole, ENABLE_TRAINER_PORTAL, TrainerOnboardingInput } from './types';
 
 // Lazy-loaded pages & heavy modals for fast mobile initial load
 const FoodLogPage = lazy(() =>
@@ -160,7 +161,11 @@ const TrainerRouter: React.FC = () => {
 const AppShell: React.FC = () => {
   const {
     authMode,
+    authDetails,
     state,
+    needsTrainerOnboarding,
+    selectAccountRole,
+    signOut,
     enterGuestMode,
     mealScannerModal,
     barcodeScannerModal,
@@ -209,6 +214,49 @@ const AppShell: React.FC = () => {
   }
 
   if (ENABLE_TRAINER_PORTAL && state.profile.accountRole === 'trainer') {
+    if (needsTrainerOnboarding) {
+      return (
+        <>
+          <div className="min-h-[100dvh] bg-[#F4F3EF] dark:bg-[#090A0C] text-[#111317] dark:text-[#F3F4F6] flex flex-col justify-between px-4 py-6 sm:px-6 selection:bg-[#C8FF00] selection:text-black">
+            <div className="max-w-3xl w-full mx-auto flex items-center justify-between gap-3">
+              <CalothrixLogo size="md" />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void selectAccountRole('individual')}
+                  className="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-[#C8FF00] transition-colors"
+                >
+                  Use Personal Account
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-[#C8FF00] transition-colors"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </div>
+
+            <div className="w-full max-w-xl mx-auto my-8 bg-white dark:bg-[#111317] border border-black/10 dark:border-white/12 rounded-2xl p-6 sm:p-8 shadow-2xl">
+              <TrainerOnboardingFlow
+                mode="authenticated"
+                initialDisplayName={authDetails?.name || state.profile.name || ''}
+                onCompleteAuthenticated={async (onboarding: TrainerOnboardingInput) => {
+                  await selectAccountRole('trainer', onboarding);
+                }}
+              />
+            </div>
+
+            <p className="text-center text-xs text-slate-500 dark:text-slate-500">
+              CALOTHRIX · Eat Smart. Track Progress. Build Better.
+            </p>
+          </div>
+          <InviteAcceptModal />
+        </>
+      );
+    }
+
     return (
       <Suspense
         fallback={

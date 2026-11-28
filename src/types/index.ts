@@ -405,6 +405,7 @@ export interface NutritionGoals {
   goalSpeed?: GoalSpeed;
   estimatedWeeks?: number | null;
   manualOverrideActive?: boolean;
+  hydrationGoalMl?: number;
   updatedAt: string;
 }
 
@@ -565,60 +566,6 @@ export interface ToastMessage {
 // Trainer Portal Enabled
 export const ENABLE_TRAINER_PORTAL = true;
 
-export type TrainerSubscriptionTier = 'free' | 'pro' | 'premium';
-
-export const TRAINER_SUBSCRIPTION_PLANS: Record<
-  TrainerSubscriptionTier,
-  {
-    id: TrainerSubscriptionTier;
-    name: string;
-    maxClients: number | null; // null = unlimited
-    maxAnalyticsDays: number;
-    tagline: string;
-    features: string[];
-  }
-> = {
-  free: {
-    id: 'free',
-    name: 'Starter Coach (Free)',
-    maxClients: 5,
-    maxAnalyticsDays: 30,
-    tagline: 'Core client coaching & 30-day compliance tracking',
-    features: [
-      'Up to 5 active clients',
-      'Email & shareable invite links',
-      '7-day & 30-day client nutrition charts',
-      'Private coach notes & target proposals',
-    ],
-  },
-  pro: {
-    id: 'pro',
-    name: 'Pro Coach',
-    maxClients: 25,
-    maxAnalyticsDays: 90,
-    tagline: 'Extended 90-day analytics & structured weekly check-ins',
-    features: [
-      'Up to 25 active clients',
-      '90-day & custom date-range analytics',
-      'Weekly check-in feedback workflow',
-      'Multi-client compliance comparison',
-    ],
-  },
-  premium: {
-    id: 'premium',
-    name: 'Studio & Elite (Premium)',
-    maxClients: null,
-    maxAnalyticsDays: 365,
-    tagline: 'Unlimited coaching roster & full-year client telemetry',
-    features: [
-      'Unlimited active clients',
-      'Full historical & custom date-range analytics',
-      'Cohort adherence benchmarking',
-      'Ready for team & billing integrations',
-    ],
-  },
-};
-
 export interface TrainerProfile {
   userId: string;
   displayName: string;
@@ -626,9 +573,16 @@ export interface TrainerProfile {
   specialties: string[];
   certifications: string[];
   acceptingClients: boolean;
-  subscriptionTier: TrainerSubscriptionTier;
-  maxClients: number;
   createdAt: string;
+}
+
+export interface TrainerOnboardingInput {
+  displayName: string;
+  bio: string;
+  specialties: string[];
+  certifications: string[];
+  acceptingClients?: boolean;
+  coachingCadence?: string;
 }
 
 export interface TrainerClientRelationship {
@@ -779,15 +733,35 @@ export interface TrainerClientSnapshot {
     email?: string;
     avatarUrl?: string;
     age: number;
+    biologicalSex?: BiologicalSex;
     heightCm: number;
     currentWeightKg: number;
     targetWeightKg: number;
+    dailyAverageSteps?: number;
+    activityLevel?: ActivityLevel;
+    workoutFrequencyPerWeek?: number;
+    workoutIntensity?: WorkoutIntensity;
     fitnessGoal: FitnessGoalType;
     goalSpeed?: GoalSpeed;
+    dietaryPreference?: DietaryPreference;
+    foodRestrictions?: FoodRestriction[];
+    macroFocus?: MacroFocusType;
+    adaptiveTdeeKcal?: number | null;
+    lastWeeklyAssessmentAt?: string | null;
+    bodyFatPct?: number | null;
+    adaptivePaused?: boolean;
+    manualOverrideActive?: boolean;
+    cycleAnchorDate?: string | null;
+    isPregnantOrBreastfeeding?: boolean;
+    weightUnit?: 'kg' | 'lbs';
   } | null;
   goals: NutritionGoals | null;
+  weightGoal?: WeightGoal | null;
   foodEntries: FoodLogEntry[];
   weightEntries: WeightEntry[];
+  weeklyAssessments?: WeeklyAssessmentRecord[];
+  targetHistory?: NutritionTargetHistoryRecord[];
+  recentMealScans?: AiMealScanRecord[];
 }
 
 export interface WeeklySummaryResult {

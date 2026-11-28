@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Layers, Shield, UserCheck } from 'lucide-react';
+import { Check, Shield, UserCheck } from 'lucide-react';
 import { useMacroLogStore } from '../../hooks/useMacroLogStore';
 import { useTrainerDashboard } from '../../hooks/useTrainerDashboard';
 import { upsertTrainerProfile } from '../../services/trainerService';
-import { TRAINER_SUBSCRIPTION_PLANS, TrainerSubscriptionTier } from '../../types';
 
 export const TrainerSettingsPage: React.FC = () => {
   const { authUser, selectAccountRole, notify } = useMacroLogStore();
-  const { trainerProfile, clients, refreshAll } = useTrainerDashboard();
+  const { trainerProfile, refreshAll } = useTrainerDashboard();
 
   const [displayName, setDisplayName] = useState(trainerProfile?.displayName || '');
   const [bio, setBio] = useState(trainerProfile?.bio || '');
@@ -20,9 +19,6 @@ export const TrainerSettingsPage: React.FC = () => {
   const [acceptingClients, setAcceptingClients] = useState(
     trainerProfile?.acceptingClients ?? true
   );
-  const [selectedTier, setSelectedTier] = useState<TrainerSubscriptionTier>(
-    trainerProfile?.subscriptionTier || 'free'
-  );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -32,12 +28,7 @@ export const TrainerSettingsPage: React.FC = () => {
     setSpecialtiesStr(trainerProfile.specialties.join(', '));
     setCertificationsStr(trainerProfile.certifications.join(', '));
     setAcceptingClients(trainerProfile.acceptingClients);
-    setSelectedTier(trainerProfile.subscriptionTier);
   }, [trainerProfile]);
-
-  const activeClientsCount = clients.filter(
-    (c) => c.relationship.status === 'active' && !c.relationship.isArchived
-  ).length;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,14 +48,13 @@ export const TrainerSettingsPage: React.FC = () => {
           .map((s) => s.trim())
           .filter(Boolean),
         acceptingClients,
-        subscriptionTier: selectedTier,
       });
       if (!res.ok) {
         notify(res.error || 'Could not update trainer profile', 'error');
         return;
       }
       await refreshAll();
-      notify('Trainer profile & plan settings saved');
+      notify('Coach profile settings saved');
     } finally {
       setSaving(false);
     }
@@ -74,10 +64,10 @@ export const TrainerSettingsPage: React.FC = () => {
     <div className="space-y-6 max-w-4xl">
       <section>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Coach profile details, client capacity tiers, and workspace mode
+          Coach profile details, client invitation availability, and workspace mode
         </p>
         <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-          Coach Profile & Subscription Architecture
+          Coach Profile & Workspace Settings
         </h1>
       </section>
 
@@ -158,59 +148,7 @@ export const TrainerSettingsPage: React.FC = () => {
           </label>
         </div>
 
-        {/* Subscription Architecture (No payment processing yet) */}
-        <div className="pt-4 border-t border-stone-100 dark:border-white/12 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-lime-600 dark:text-lime-400" />
-                Trainer Subscription Tier Architecture
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Enforces client capacity ({activeClientsCount} active) and analytics history. Billing checkout is deferred for future release.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {(['free', 'pro', 'premium'] as TrainerSubscriptionTier[]).map((tierKey) => {
-              const plan = TRAINER_SUBSCRIPTION_PLANS[tierKey];
-              const active = selectedTier === tierKey;
-              return (
-                <button
-                  key={tierKey}
-                  type="button"
-                  onClick={() => setSelectedTier(tierKey)}
-                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-3 ${
-                    active
-                      ? 'border-lime-500 bg-lime-50/60 dark:bg-lime-950/20 ring-1 ring-lime-500'
-                      : 'border-black/10 dark:border-white/12 hover:border-stone-300 dark:hover:border-slate-700'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                        {plan.name}
-                      </span>
-                      {active && <Check className="w-4 h-4 text-lime-600 dark:text-lime-400" />}
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                      {plan.tagline}
-                    </p>
-                  </div>
-
-                  <ul className="space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
-                    {plan.features.map((feat, i) => (
-                      <li key={i}>• {feat}</li>
-                    ))}
-                  </ul>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-2">
           <button
             type="submit"
             disabled={saving}
